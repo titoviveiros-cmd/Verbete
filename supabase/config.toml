@@ -1,0 +1,7 @@
+project_id = "mvicfbqyjeypxikzrahb"
+[functions.bot-definitions]
+verify_jwt = false
+[functions.score-similarity]
+verify_jwt = false
+
+

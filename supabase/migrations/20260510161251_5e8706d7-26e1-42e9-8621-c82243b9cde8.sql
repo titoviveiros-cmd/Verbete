@@ -1,0 +1,94 @@
+-- Prefer short meanings (mais "humanos") na seleção de palavras
+CREATE OR REPLACE FUNCTION public.get_random_words(exclude_ids uuid[] DEFAULT ARRAY[]::uuid[], min_rarity integer DEFAULT 2, lim integer DEFAULT 3, p_categories text[] DEFAULT ARRAY[]::text[])
+ RETURNS SETOF words
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  WITH preferred AS (
+    SELECT * FROM public.words
+    WHERE rarity >= min_rarity
+      AND char_length(meaning) <= 90
+      AND (exclude_ids IS NULL OR NOT (id = ANY(exclude_ids)))
+      AND (
+        p_categories IS NULL
+        OR array_length(p_categories, 1) IS NULL
+        OR category = ANY(p_categories)
+      )
+    ORDER BY random()
+    LIMIT lim
+  ),
+  fallback AS (
+    SELECT * FROM public.words
+    WHERE (exclude_ids IS NULL OR NOT (id = ANY(exclude_ids)))
+    ORDER BY char_length(meaning) ASC, random()
+    LIMIT lim
+  )
+  SELECT * FROM preferred
+  UNION ALL
+  SELECT * FROM fallback
+  WHERE (SELECT count(*) FROM preferred) < lim
+  LIMIT lim;
+$function$;
+
+-- Limpa rótulos de dicionário no início do significado verdadeiro
+-- (s.m., s.f., adj., v.t.d., etc.) quando o servidor insere a verdade
+-- na expiração do timer de escrita.
+CREATE OR REPLACE FUNCTION public.advance_writing_to_voting(p_room_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_room public.rooms;
+  v_word public.words;
+  v_def_ids uuid[];
+  v_letters text := 'ABCDEFGHIJKLM';
+  v_id uuid;
+  v_idx int := 1;
+  v_truth text;
+BEGIN
+  SELECT * INTO v_room FROM public.rooms WHERE id = p_room_id FOR UPDATE;
+  IF v_room IS NULL OR v_room.status <> 'writing' THEN RETURN; END IF;
+  IF v_room.current_word_id IS NULL THEN RETURN; END IF;
+
+  SELECT * INTO v_word FROM public.words WHERE id = v_room.current_word_id;
+  IF v_word IS NULL THEN RETURN; END IF;
+
+  -- normaliza: minúsculas, sem acentos, remove rótulos abreviados iniciais
+  v_truth := lower(unaccent(v_word.meaning));
+  -- remove até 3 grupos de "abrev." ou "(rotulo)" no começo
+  v_truth := regexp_replace(v_truth, '^(\(?[a-z]{1,5}\.(\s*[a-z]{1,5}\.)?\)?|\([^)]{1,30}\))[\s:;,-]+', '', 'g');
+  v_truth := regexp_replace(v_truth, '^(\(?[a-z]{1,5}\.(\s*[a-z]{1,5}\.)?\)?|\([^)]{1,30}\))[\s:;,-]+', '', 'g');
+  -- corta na primeira acepção se houver ;
+  v_truth := split_part(v_truth, ';', 1);
+  v_truth := btrim(v_truth);
+  IF char_length(v_truth) > 90 THEN
+    v_truth := substring(v_truth from 1 for 90);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.definitions
+    WHERE room_id = p_room_id AND round = v_room.current_round AND is_truth = true
+  ) THEN
+    INSERT INTO public.definitions (room_id, round, player_id, text, is_truth)
+    VALUES (p_room_id, v_room.current_round, '__truth__', v_truth, true);
+  END IF;
+
+  SELECT array_agg(id ORDER BY random()) INTO v_def_ids
+  FROM public.definitions
+  WHERE room_id = p_room_id AND round = v_room.current_round;
+
+  FOREACH v_id IN ARRAY v_def_ids LOOP
+    UPDATE public.definitions SET letter = substr(v_letters, v_idx, 1) WHERE id = v_id;
+    v_idx := v_idx + 1;
+  END LOOP;
+
+  UPDATE public.rooms
+  SET status = 'voting',
+      round_phase_ends_at = now() + interval '30 seconds'
+  WHERE id = p_room_id;
+END;
+$function$;
+

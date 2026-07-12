@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.output/
+.vinxi/
+ios/
+android/
+.env
+.env.local
+*.log
+.DS_Store
