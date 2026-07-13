@@ -4,15 +4,15 @@ type Theme = "dark" | "light";
 const STORAGE_KEY = "verbete:theme";
 
 const listeners = new Set<() => void>();
-let currentTheme: Theme = "light";
+let currentTheme: Theme = "dark";
 
 function readInitial(): Theme {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return "dark";
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved === "light" || saved === "dark") return saved;
   } catch {}
-  return "light";
+  return "dark";
 }
 
 function applyTheme(t: Theme) {
@@ -44,7 +44,7 @@ function subscribe(cb: () => void) {
 }
 
 function getSnapshot(): Theme { return currentTheme; }
-function getServerSnapshot(): Theme { return "light"; }
+function getServerSnapshot(): Theme { return "dark"; }
 
 // Aplica imediatamente (antes do React montar) para evitar flash.
 if (typeof window !== "undefined") {
