@@ -117,6 +117,20 @@ Deno.serve(async (req) => {
       console.error("parse failed", e, content);
     }
 
+    // Aplica o bônus (near_truth=true + score+3) direto no banco via RPC
+    // SECURITY DEFINER, service-role only. Antes esse passo era feito pelo
+    // client depois de receber `matches` de volta — o que só cobria o
+    // caminho onde um navegador estava vivo pra aplicar a resposta. Agora
+    // é a própria edge function que persiste, então tanto uma chamada
+    // vinda do client quanto uma vinda do backstop server-side (pg_net
+    // dentro de advance_voting_to_reveal) resultam no bônus aplicado.
+    if (matches.length > 0) {
+      const { error: bonusError } = await admin.rpc("apply_similarity_bonus", {
+        p_definition_ids: matches,
+      });
+      if (bonusError) console.error("apply_similarity_bonus failed", bonusError);
+    }
+
     return new Response(JSON.stringify({ matches }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

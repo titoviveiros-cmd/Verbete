@@ -407,38 +407,12 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function stableRoundHash(value: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < value.length; i++) {
-    h ^= value.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function stableRoundShuffle<T extends { id: string }>(arr: T[], seed: string): T[] {
-  return [...arr].sort(
-    (a, b) => stableRoundHash(`${seed}:${a.id}`) - stableRoundHash(`${seed}:${b.id}`),
-  );
-}
-
-async function fetchRoundDefinitions(roomId: string, round: number): Promise<Definition[]> {
-  const { data } = await supabase
-    .from("definitions")
-    .select("id,room_id,round,player_id,text,letter")
-    .eq("room_id", roomId)
-    .eq("round", round);
-  return (data as Definition[]) ?? [];
-}
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export async function startGame(room: Room, players: Player[]) {
   const resetPlayers = players.map((p) => ({ ...p, score: 0, coordinator_count: 0 }));
   const next = pickNextCoordinator(resetPlayers, null);
   // Otimismo: já transita a sala para "choosing" localmente para a UI sair
-  // do lobby instantaneamente. Os resets de tabelas (players/defs/votes/rounds)
-  // rodam em paralelo em segundo plano.
+  // do lobby instantaneamente, enquanto a RPC (autoritativa) roda o reset
+  // completo (players/defs/votes/rounds) numa única transação no servidor.
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -454,23 +428,7 @@ export async function startGame(room: Room, players: Player[]) {
       }),
     );
   }
-  // Dispara resets em paralelo (fire-and-forget) e AGUARDA o update da sala —
-  // este é o evento canônico que destrava a transição para os demais clientes
-  // via realtime. Se ficar fire-and-forget e falhar (rede instável, RLS),
-  // só o host transita (pelo otimismo) e os outros ficam presos no lobby.
-  supabase.from("players").update({ score: 0, coordinator_count: 0, writing_extensions: 0, voting_extensions: 0 }).eq("room_id", room.id).then(() => {}, () => {});
-  supabase.from("definitions").delete().eq("room_id", room.id).then(() => {}, () => {});
-  supabase.from("votes").delete().eq("room_id", room.id).then(() => {}, () => {});
-  supabase.from("rounds").delete().eq("room_id", room.id).then(() => {}, () => {});
-  await supabase
-    .from("rooms")
-    .update({
-      status: "choosing",
-      current_round: 1,
-      current_coordinator: next.id,
-      current_word_id: null,
-    })
-    .eq("id", room.id);
+  await (supabase.rpc as any)("start_game", { p_room_id: room.id });
 }
 
 function pickNextCoordinator(players: Player[], lastCoord: string | null): Player {
@@ -484,18 +442,10 @@ function pickNextCoordinator(players: Player[], lastCoord: string | null): Playe
 
 export async function chooseWord(roomId: string, wordId: string, durationSec = 60) {
   const ends = new Date(Date.now() + durationSec * 1000).toISOString();
-  // Só permite escolher palavra enquanto a sala estiver na fase "choosing".
-  const { data: r } = await supabase
-    .from("rooms")
-    .select("used_word_ids,status,current_word_id")
-    .eq("id", roomId)
-    .maybeSingle();
-  if (!r || (r as any).status !== "choosing" || (r as any).current_word_id) return;
-  const used = ((r as any)?.used_word_ids as string[] | null) ?? [];
-  const nextUsed = used.includes(wordId) ? used : [...used, wordId];
   // Otimismo: transita para "writing" imediatamente para o coordenador e
-  // demais clientes que estiverem ouvindo o evento. O realtime ainda traz
-  // o estado canônico em seguida.
+  // demais clientes que estiverem ouvindo o evento. A RPC `choose_word` é
+  // quem decide de fato (guarda atômica: status='choosing' + current_word_id
+  // ainda nulo, sob lock de linha) — se perder a corrida, o realtime corrige.
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -506,23 +456,16 @@ export async function chooseWord(roomId: string, wordId: string, durationSec = 6
             current_word_id: wordId,
             round_phase_ends_at: ends,
             phase_started_at: new Date().toISOString(),
-            used_word_ids: nextUsed,
           },
         },
       }),
     );
   }
-  await supabase
-    .from("rooms")
-    .update({
-      status: "writing",
-      current_word_id: wordId,
-      round_phase_ends_at: ends,
-      phase_started_at: new Date().toISOString(),
-      used_word_ids: nextUsed,
-    })
-    .eq("id", roomId)
-    .eq("status", "choosing"); // guarda atômica contra corrida
+  await (supabase.rpc as any)("choose_word", {
+    p_room_id: roomId,
+    p_word_id: wordId,
+    p_duration_sec: durationSec,
+  });
 }
 
 export class DuplicateDefinitionError extends Error {
@@ -734,17 +677,11 @@ export async function generateAiDefinitionForPlayer(word: Word): Promise<string>
 }
 
 export async function startShuffling(roomId: string): Promise<boolean> {
-  // Guarda atômica: só promove se ainda estiver em "writing" e o banco aceitar
-  // a mudança. A UI otimista só roda DEPOIS do update real para não pular a
+  // Guarda atômica: a RPC só promove se ainda estiver em "writing". A UI
+  // otimista só roda DEPOIS do retorno real para não pular a
   // penalidade/prorrogação quando ainda há humano sem definição.
-  const { data, error } = await supabase
-    .from("rooms")
-    .update({ status: "shuffling" })
-    .eq("id", roomId)
-    .eq("status", "writing")
-    .select("id,status")
-    .maybeSingle();
-  if (error || data?.status !== "shuffling") return false;
+  const { data, error } = await (supabase.rpc as any)("start_shuffling", { p_room_id: roomId });
+  if (error || !(data as any)?.ok) return false;
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -755,72 +692,15 @@ export async function startShuffling(roomId: string): Promise<boolean> {
   return true;
 }
 
-export async function startVoting(roomId: string, round: number, word: Word, defs: Definition[]) {
-  const ends = new Date(Date.now() + 40 * 1000).toISOString();
-  const phaseStart = new Date().toISOString();
-  const [{ data: roomSnapshot }, { data: roomPlayers }] = await Promise.all([
-    supabase.from("rooms").select("status,current_round,current_coordinator").eq("id", roomId).maybeSingle(),
-    supabase.from("players").select("id, kicked_at").eq("room_id", roomId).is("kicked_at", null),
-  ]);
-  const currentRoom = roomSnapshot as { status?: RoomStatus; current_round?: number; current_coordinator?: string | null } | null;
-  if (!currentRoom || currentRoom.current_round !== round || !["shuffling", "voting"].includes(currentRoom.status ?? "")) return;
-  const expectedWriters = ((roomPlayers as { id: string }[] | null) ?? [])
-    .filter((p) => p.id !== currentRoom.current_coordinator)
-    .length;
-
-  // Fecha a janela entre o envio otimista e a linha real no banco. Sem isso,
-  // a votação podia abrir com a última definição sem letra e parecer travada.
-  for (let tries = 0; tries < 8; tries++) {
-    const realDefs = await fetchRoundDefinitions(roomId, round);
-    const realWriters = realDefs.filter((d) => !isTruthDef(d)).length;
-    if (expectedWriters === 0 || realWriters >= expectedWriters) break;
-    await wait(250);
-  }
-  let allDefs = defs.filter((d) => d.round === round);
-  if (!allDefs.some(isTruthDef)) {
-    const { data: truthRes, error: truthErr } = await (supabase.rpc as any)(
-      "insert_truth_definition",
-      { p_room_id: roomId, p_round: round, p_text: humanizeMeaning(word.meaning) },
-    );
-    if (!truthErr && truthRes && (truthRes as any).ok && (truthRes as any).id) {
-      // Recarrega após RPC para puxar a linha completa
-      const refreshed = await fetchRoundDefinitions(roomId, round);
-      allDefs = refreshed;
-    }
-  }
-
-  allDefs = await fetchRoundDefinitions(roomId, round);
-  const shuffled = stableRoundShuffle(allDefs, `${roomId}:${round}`);
-  const letters = "ABCDEFGHIJKLM";
-  await Promise.all(
-    shuffled.map((d, i) =>
-      supabase.from("definitions").update({ letter: letters[i] }).eq("id", d.id),
-    ),
-  );
-
-  const { data: updatedRoom } = await supabase
-    .from("rooms")
-    .update({ status: "voting", round_phase_ends_at: ends, phase_started_at: phaseStart })
-    .eq("id", roomId)
-    .eq("current_round", round)
-    .in("status", ["shuffling", "voting"])
-    .select("id,status")
-    .maybeSingle();
-  if (updatedRoom?.status !== "voting") return;
-
-  if (typeof window !== "undefined") {
-    const patchedDefinitions = shuffled.map((d, i) => ({ ...d, letter: letters[i] }));
-    window.dispatchEvent(
-      new CustomEvent("definitions:optimistic-replace-round", {
-        detail: { roomId, round, definitions: patchedDefinitions },
-      }),
-    );
-    window.dispatchEvent(
-      new CustomEvent("room:optimistic-update", {
-        detail: { roomId, patch: { status: "voting", round_phase_ends_at: ends, phase_started_at: phaseStart } },
-      }),
-    );
-  }
+export async function startVoting(roomId: string, _round: number, _word: Word, _defs: Definition[]) {
+  // `advance_writing_to_voting` é a única fonte de verdade: insere a
+  // definição verdadeira se faltar, embaralha as letras e abre a votação —
+  // tudo atomicamente sob lock de linha, e ela mesma re-checa se ainda
+  // falta algum humano sem definição (no-op silencioso nesse caso, o que
+  // substitui o polling de 8x250ms que existia aqui antes). Os parâmetros
+  // round/word/defs continuam na assinatura só para não obrigar os
+  // call-sites (Shuffling.tsx) a mudar; o estado real vem sempre do banco.
+  await (supabase.rpc as any)("advance_writing_to_voting", { p_room_id: roomId });
 }
 
 export async function castVote(roomId: string, round: number, voterId: string, definitionId: string) {
@@ -885,228 +765,44 @@ export async function botsVote(roomId: string, round: number, bots: Player[], de
 }
 
 export async function revealAndScore(
-  room: Room, players: Player[], defs: Definition[], votes: Vote[], coordinatorId: string,
+  room: Room, _players: Player[], _defs: Definition[], _votes: Vote[], _coordinatorId: string,
 ): Promise<boolean> {
-  // Guarda final contra clientes com estado local atrasado: antes de revelar,
-  // confirma no banco que não existe humano elegível sem voto. Se existir, a
-  // própria RPC de timeout aplica a prorrogação/remoção e esta chamada aborta.
-  if (room.status === "voting") {
-    const [{ data: liveRoom }, { data: livePlayers }, { data: liveVotes }] = await Promise.all([
-      supabase
-        .from("rooms")
-        .select("status,current_round,phase_started_at")
-        .eq("id", room.id)
-        .maybeSingle(),
-      supabase
-        .from("players")
-        .select("id,joined_at,is_bot,kicked_at")
-        .eq("room_id", room.id)
-        .is("kicked_at", null),
-      supabase
-        .from("votes")
-        .select("voter_id")
-        .eq("room_id", room.id)
-        .eq("round", room.current_round),
-    ]);
-    const current = liveRoom as Pick<Room, "status" | "current_round" | "phase_started_at"> | null;
-    if (current?.status !== "voting" || current.current_round !== room.current_round) return true;
-    const votedIds = new Set(((liveVotes as Pick<Vote, "voter_id">[] | null) ?? []).map((v) => v.voter_id));
-    const phaseStartMs = current.phase_started_at ? new Date(current.phase_started_at).getTime() : null;
-    const hasPendingHuman = ((livePlayers as Pick<Player, "id" | "joined_at" | "is_bot">[] | null) ?? []).some((p) => {
-      if (p.is_bot || votedIds.has(p.id)) return false;
-      if (phaseStartMs === null) return true;
-      return new Date(p.joined_at).getTime() <= phaseStartMs + 3000;
-    });
-    if (hasPendingHuman) {
-      await applyVotingTimeoutOrAdvance(room.id);
-      return false;
-    }
-  }
-
-  // Defensive guard: never insert a rounds row (and mark a round as scored)
-  // when there are zero votes but real definitions exist. The server cron has
-  // the same guard and will eventually score the round when votes arrive.
-  if (votes.length === 0) {
-    const { count: defsCount } = await supabase
-      .from("definitions")
-      .select("id", { count: "exact", head: true })
-      .eq("room_id", room.id)
-      .eq("round", room.current_round)
-      .neq("player_id", "__truth__");
-    if ((defsCount ?? 0) > 0) return false;
-  }
-
-  // Idempotency guard: insert into rounds with UNIQUE(room_id, round).
-  // If another client already scored this round, the insert fails and we exit.
-  const { error: roundsErr } = await supabase.from("rounds").insert({
-    room_id: room.id,
-    round: room.current_round,
-    coordinator_id: coordinatorId,
-    word_id: room.current_word_id,
-  });
-  if (roundsErr) {
-    // Already scored — just ensure status is reveal and return.
-    await supabase.from("rooms").update({ status: "reveal" }).eq("id", room.id);
-    return true;
-  }
-
-  // PERFORMANCE: muda o status para "reveal" IMEDIATAMENTE para que todos os
-  // clientes transitem para a tela de revelação sem esperar a edge function
-  // de similaridade (que chama um LLM e pode demorar vários segundos). A
-  // pontuação prossegue em background; a tela de revelação tem 30s antes
-  // de avançar para o placar, tempo suficiente para os updates de score
-  // chegarem via realtime.
-  await supabase.from("rooms").update({ status: "reveal" }).eq("id", room.id);
-
-  // Recarrega snapshots frescos do banco — o estado realtime do host pode
-  // estar atrasado em relação aos últimos votos/definições (inclusive o
-  // próprio voto do host disparado milissegundos antes), o que fazia
-  // pontos sumirem. Como já passamos pela guarda de idempotência acima,
-  // somos o único cliente pontuando esta rodada.
-  const [{ data: freshDefs }, { data: freshVotes }, { data: freshPlayers }] = await Promise.all([
-    supabase.from("definitions").select("*").eq("room_id", room.id).eq("round", room.current_round),
-    supabase.from("votes").select("*").eq("room_id", room.id).eq("round", room.current_round),
-    supabase.from("players").select("*").eq("room_id", room.id),
-  ]);
-  defs = (freshDefs as Definition[]) ?? defs;
-  votes = (freshVotes as Vote[]) ?? votes;
-  players = (freshPlayers as Player[]) ?? players;
-
-  // Score:
-  //  - voted truth: +3 to voter
-  //  - each vote on your fake def: +1 to def author
-  //  - your fake def é semanticamente ≥80% equivalente à verdadeira: +3 ao autor
-  //  - coordinator: +2 if nobody voted truth
-  const truthDef = defs.find(isTruthDef);
-  const truthVoters = votes.filter((v) => v.definition_id === truthDef?.id).map((v) => v.voter_id);
-
-  const updates = new Map<string, number>();
-  const add = (id: string, n: number) => updates.set(id, (updates.get(id) ?? 0) + n);
-
-  for (const voter of truthVoters) add(voter, 3);
-
-  for (const def of defs) {
-    if (isTruthDef(def)) continue;
-    const count = votes.filter((v) => v.definition_id === def.id).length;
-    if (count > 0) add(def.player_id, count);
-  }
-
-  // Bônus de equivalência semântica (≥80%) — chama edge function de IA.
-  // Falhas são silenciosas (apenas perde-se o bônus desta rodada).
-  const fakeDefs = defs.filter((d) => !isTruthDef(d));
-  if (truthDef && fakeDefs.length > 0 && room.current_word_id) {
-    try {
-      const { data: simData } = await supabase.functions.invoke("score-similarity", {
-        body: {
-          room_id: room.id,
-          round: room.current_round,
-          candidates: fakeDefs.map((d) => ({ id: d.id, text: d.text })),
-        },
-      });
-      const matches: string[] = Array.isArray((simData as any)?.matches) ? (simData as any).matches : [];
-      if (matches.length > 0) {
-        const matchSet = new Set(matches);
-        await supabase.from("definitions").update({ near_truth: true }).in("id", matches);
-        for (const d of fakeDefs) if (matchSet.has(d.id)) add(d.player_id, 3);
-      }
-    } catch (e) {
-      console.error("similarity check failed", e);
-    }
-  }
-
-  if (truthVoters.length === 0) add(coordinatorId, 2);
-
-  // NOTA: a penalidade de -1 por prorrogação NÃO é aplicada aqui —
-  // as RPCs `extend_writing_or_advance` / `extend_voting_or_advance`
-  // já debitam `score = GREATEST(score-1, 0)` no exato momento em que
-  // a prorrogação acontece. Aplicar de novo aqui causava dedução dupla
-  // (o breakdown do Scoreboard mostra a penalidade uma única vez, que
-  // é o valor real já debitado no banco).
-
-  // Coordinator count++
-  await supabase.from("players")
-    .update({ coordinator_count: (players.find((p) => p.id === coordinatorId)?.coordinator_count ?? 0) + 1 })
-    .eq("id", coordinatorId);
-
-  // Apply score updates
-  await Promise.all(
-    Array.from(updates.entries()).map(([pid, delta]) => {
-      const p = players.find((pp) => pp.id === pid);
-      if (!p) return Promise.resolve();
-      return supabase.from("players")
-        .update({ score: p.score + delta })
-        .eq("id", pid);
-    })
-  );
-
-  // status já foi setado para "reveal" no início da função (após o insert
-  // idempotente em rounds). Não repetimos aqui.
-  return true;
+  // `advance_voting_to_reveal` é a única fonte de verdade agora: reavalia do
+  // zero (sob lock de linha) se ainda falta humano sem voto — se faltar, é
+  // um no-op silencioso e devolvemos false para o call-site tentar de novo
+  // (mesmo contrato de antes). Se já foi pontuada por outro caminho (client
+  // ou cron), o guard de idempotência do UNIQUE(room_id, round) garante que
+  // não pontua duas vezes; ela só termina de mover o status pra "reveal".
+  // A pontuação-base E o bônus de similaridade semântica (IA) são aplicados
+  // atomicamente dentro da RPC — não há mais lógica de score aqui no client.
+  await (supabase.rpc as any)("advance_voting_to_reveal", { p_room_id: room.id });
+  const { data } = await supabase.from("rooms").select("status,current_round").eq("id", room.id).maybeSingle();
+  const current = data as { status?: RoomStatus; current_round?: number } | null;
+  return current?.current_round === room.current_round && current?.status === "reveal";
 }
 
 export async function goToScoreboard(roomId: string) {
-  await supabase.from("rooms").update({ status: "scoreboard" }).eq("id", roomId);
+  await (supabase.rpc as any)("finish_reveal", { p_room_id: roomId });
 }
 
-// Decide se vai pro placar da rodada ou direto pro fim de jogo
-// (quando alguém atingiu a pontuação alvo escolhida pelo criador da sala).
-export async function advanceAfterReveal(room: Room, players: Player[]) {
-  // Usa placar fresco do banco: o status "reveal" pode chegar por realtime
-  // antes das atualizações de pontos chegarem em todos os clientes.
-  const { data: freshPlayers } = await supabase
-    .from("players")
-    .select("id,score,team_id")
-    .eq("room_id", room.id);
-  const fresh = (freshPlayers ?? []) as { id: string; score: number; team_id: string | null }[];
-  const isTeams = room.mode === "teams" && (room.teams?.length ?? 0) > 0;
-  let maxScore: number;
-  if (isTeams) {
-    const totals = (room.teams ?? []).map((t) =>
-      fresh.filter((p) => p.team_id === t.id).reduce((s, p) => s + (p.score ?? 0), 0)
-    );
-    maxScore = Math.max(0, ...totals);
-  } else {
-    const scores = fresh.length ? fresh.map((p) => p.score ?? 0) : players.map((p) => p.score);
-    maxScore = Math.max(0, ...scores);
-  }
-  const reachedTarget =
-    room.win_condition === "score" && maxScore >= room.win_target;
-  const status: RoomStatus = reachedTarget ? "finished" : "scoreboard";
-  await supabase.from("rooms").update({ status }).eq("id", room.id);
+// Decide se vai pro placar da rodada ou direto pro fim de jogo (quando
+// alguém atingiu a pontuação alvo escolhida pelo criador da sala). A RPC
+// `finish_reveal` recalcula o placar (incl. modo equipes) direto no banco,
+// sob lock de linha — elimina a corrida entre "status reveal chegou via
+// realtime" e "os pontos ainda não chegaram" que existia na versão client.
+export async function advanceAfterReveal(room: Room, _players: Player[]) {
+  await (supabase.rpc as any)("finish_reveal", { p_room_id: room.id });
 }
 
-export async function nextRound(room: Room, players: Player[]) {
-  // Check win condition (em modo equipes, soma pontos por time).
-  const isTeams = room.mode === "teams" && (room.teams?.length ?? 0) > 0;
-  const maxScore = isTeams
-    ? Math.max(
-        0,
-        ...(room.teams ?? []).map((t) =>
-          players.filter((p) => p.team_id === t.id).reduce((s, p) => s + (p.score ?? 0), 0)
-        )
-      )
-    : Math.max(0, ...players.map((p) => p.score));
-  const everyoneCoordinatedTwice = players.every((p) => p.coordinator_count >= 2);
-
-  const won =
-    (room.win_condition === "score" && maxScore >= room.win_target) ||
-    (room.win_condition === "rounds" && everyoneCoordinatedTwice);
-
-  if (won) {
-    await supabase.from("rooms").update({ status: "finished" }).eq("id", room.id);
-    return;
-  }
-
-  const next = pickNextCoordinator(players, room.current_coordinator);
-  // writing_extensions acumula durante a partida inteira:
-  // 3 rodadas sem enviar definição = jogador removido.
-  await supabase.from("rooms").update({
-    status: "choosing",
-    current_round: room.current_round + 1,
-    current_coordinator: next.id,
-    current_word_id: null,
-    round_phase_ends_at: null,
-  }).eq("id", room.id);
+export async function nextRound(room: Room, _players: Player[]) {
+  // `advance_scoreboard_to_next_round_or_finished` reavalia a condição de
+  // vitória (pontos ou "todo mundo coordenou 2x") e escolhe o próximo
+  // coordenador atomicamente. p_force=true porque esta é uma chamada
+  // deliberada (host clicou "próxima rodada"), não o backstop do cron.
+  await (supabase.rpc as any)("advance_scoreboard_to_next_round_or_finished", {
+    p_room_id: room.id,
+    p_force: true,
+  });
 }
 
 export async function restartGame(roomId: string) {
