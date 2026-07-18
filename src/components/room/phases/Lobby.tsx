@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   addBot, kickPlayer, setWinCondition, startGame,
-  setRoomMode, setRoomTeams, assignPlayerToTeam, autoBalanceTeams, setCategories,
+  setRoomMode, setRoomTeams, assignPlayerToTeam, autoBalanceTeams, setCategories, setNivel,
   fetchRoomWords, addRoomWord, deleteRoomWord,
-  TEAM_PRESETS, type Player, type Room, type Team, type RoomMode, type RoomWord,
+  TEAM_PRESETS, type Player, type Room, type Team, type RoomMode, type RoomWord, type NivelFilter,
 } from "@/lib/room";
 import { AvatarBubble } from "@/components/AvatarBubble";
 import { Mascot } from "@/components/Mascot";
@@ -29,11 +29,25 @@ export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
   adjetivo:      { emoji: "🎨", label: "Adjetivos" },
   verbo:         { emoji: "🏃", label: "Verbos" },
   acao:          { emoji: "⚡", label: "Ações" },
+  historia:      { emoji: "🏛️", label: "História" },
+  direito:       { emoji: "⚖️", label: "Direito" },
+  medicina:      { emoji: "🩺", label: "Medicina" },
+  literatura:    { emoji: "📚", label: "Literatura" },
+  religiao:      { emoji: "⛪", label: "Religião" },
+  nautica:       { emoji: "⚓", label: "Náutica" },
 };
 
+export const NIVEL_META: Array<{ value: NivelFilter; emoji: string; label: string }> = [
+  { value: "aleatorio", emoji: "🎲", label: "Aleatório" },
+  { value: "facil",     emoji: "🟢", label: "Fácil" },
+  { value: "medio",     emoji: "🟡", label: "Médio" },
+  { value: "dificil",   emoji: "🟠", label: "Difícil" },
+  { value: "insano",    emoji: "🔴", label: "Insano" },
+];
+
 export function Lobby({
-  roomId, hostId, players, isHost, playerId, winCondition, winTarget, mode, teams, categories,
-}: { roomId: string; hostId: string; players: Player[]; isHost: boolean; playerId: string; winCondition: string; winTarget: number; mode: RoomMode; teams: Team[]; categories: string[]; }) {
+  roomId, hostId, players, isHost, playerId, winCondition, winTarget, mode, teams, categories, nivel = "aleatorio",
+}: { roomId: string; hostId: string; players: Player[]; isHost: boolean; playerId: string; winCondition: string; winTarget: number; mode: RoomMode; teams: Team[]; categories: string[]; nivel?: NivelFilter; }) {
   const slotsLeft = Math.max(0, 12 - players.length);
   const canStart = players.length >= 2;
   const humans = players.filter((p) => !p.is_bot).length;
@@ -209,6 +223,21 @@ export function Lobby({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="font-display text-[11px] uppercase text-muted-foreground tracking-wider text-center">
+              Nível das palavras
+            </p>
+            <div className="flex gap-1">
+              {NIVEL_META.map((n) => (
+                <button key={n.value} onClick={() => { void playUITap(); setNivel(roomId, playerId, n.value); }}
+                  className={"flex-1 py-1.5 rounded-lg text-[10px] font-display border leading-tight " + (nivel === n.value ? "bg-pink text-primary-foreground border-pink" : "bg-input border-white/10")}>
+                  <div>{n.emoji}</div>
+                  <div>{n.label}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <CategoriesPicker roomId={roomId} actorId={playerId} selected={categories} />

@@ -172,6 +172,8 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           </div>
         )}
 
+        {step >= 1 && <AboutWordCard word={word} />}
+
 
         {step >= 2 && (
           <div className="space-y-2">
@@ -252,6 +254,40 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
         )}
       </div>
 
+    </motion.div>
+  );
+}
+
+// Momento de aprendizado (spec): curiosidade, origem, pronúncia e exemplo
+// da palavra da rodada. Só renderiza os campos que existirem — palavras
+// antigas/customizadas sem os dados v2 simplesmente não mostram o card.
+function AboutWordCard({ word }: { word: Word }) {
+  const hasContent = !!(word.curiosidade || word.origem || word.pronuncia || word.exemplo || word.classe);
+  if (!hasContent) return null;
+  return (
+    <motion.div
+      initial={{ y: 16, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ delay: 0.6, duration: 0.4 }}
+      className="sticker bg-card/70 border border-white/10 space-y-2"
+    >
+      <p className="text-center text-xs uppercase tracking-wider font-display text-sun">
+        📖 sobre a palavra
+      </p>
+      <div className="flex items-baseline justify-center gap-2 flex-wrap">
+        <span className="font-display text-lg capitalize">{word.word}</span>
+        {word.pronuncia && <span className="text-sm text-muted-foreground font-body">[{word.pronuncia}]</span>}
+        {word.classe && <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display">{word.classe}</span>}
+      </div>
+      {word.curiosidade && (
+        <p className="text-sm leading-snug text-foreground/90">💡 {word.curiosidade}</p>
+      )}
+      {word.origem && (
+        <p className="text-xs text-muted-foreground">🌍 Origem: {word.origem}</p>
+      )}
+      {word.exemplo && (
+        <p className="text-xs text-muted-foreground italic">✏️ "{word.exemplo}"</p>
+      )}
     </motion.div>
   );
 }

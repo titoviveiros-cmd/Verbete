@@ -16,7 +16,7 @@ export function ChooseWord({ room, players, isCoordinator }: {
     if (phase !== "idle") return;
     setPhase("flipping");
     const [drawn] = await Promise.all([
-      fetchThreeWords(room.used_word_ids ?? [], room.categories ?? [], room.id),
+      fetchThreeWords(room.used_word_ids ?? [], room.categories ?? [], room.id, room.nivel ?? "aleatorio"),
       new Promise((r) => setTimeout(r, 1800)),
     ]);
     setWords(drawn);

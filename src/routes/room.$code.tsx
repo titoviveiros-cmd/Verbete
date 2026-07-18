@@ -259,7 +259,7 @@ function RoomPage() {
       if (botAutopickRef.current === key) return;
       botAutopickRef.current = key;
       try {
-        const options = await fetchThreeWords(room.used_word_ids ?? [], room.categories ?? [], room.id);
+        const options = await fetchThreeWords(room.used_word_ids ?? [], room.categories ?? [], room.id, room.nivel ?? "aleatorio");
         if (!options.length) { botAutopickRef.current = null; return; }
         const pick = options[Math.floor(Math.random() * options.length)];
         await chooseWord(room.id, pick.id, 60);
@@ -469,7 +469,7 @@ function RoomPage() {
               <Lobby roomId={room.id} hostId={room.host_id} players={players} isHost={isHost}
                 playerId={playerId} winCondition={room.win_condition} winTarget={room.win_target}
                 mode={(room.mode as RoomMode) ?? "individual"} teams={room.teams ?? []}
-                categories={room.categories ?? []} />
+                categories={room.categories ?? []} nivel={room.nivel ?? "aleatorio"} />
             )}
             {room.status === "choosing" && (
               <ChooseWord room={room} players={players} isCoordinator={room.current_coordinator === playerId} />

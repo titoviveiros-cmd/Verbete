@@ -33,6 +33,7 @@ export interface Room {
   created_at: string;
   mode?: RoomMode;
   teams?: Team[];
+  nivel?: NivelFilter;
 }
 
 export interface Player {
@@ -75,7 +76,17 @@ export interface Word {
   meaning: string;
   category: string | null;
   rarity: number;
+  // Campos v2 (podem ser nulos em palavras antigas/customizadas)
+  classe?: string | null;
+  origem?: string | null;
+  curiosidade?: string | null;
+  pronuncia?: string | null;
+  exemplo?: string | null;
+  sinonimos?: string[] | null;
+  nivel?: string | null;
 }
+
+export type NivelFilter = "facil" | "medio" | "dificil" | "insano" | "aleatorio";
 
 export interface Definition {
   id: string;
@@ -294,6 +305,7 @@ export async function fetchThreeWords(
   excludeIds: string[] = [],
   categories: string[] = [],
   roomId?: string,
+  nivel: NivelFilter = "aleatorio",
 ): Promise<Word[]> {
   // 1) Coleta palavras customizadas da sala (se houver) ainda não usadas
   let customPool: Word[] = [];
@@ -324,10 +336,11 @@ export async function fetchThreeWords(
       min_rarity: 2,
       lim: needed,
       p_categories: categories,
+      p_nivel: nivel,
     });
     if (!error && data && data.length >= needed) {
       globalPool = data as Word[];
-    } else if (categories.length > 0) {
+    } else if (categories.length > 0 || nivel !== "aleatorio") {
       const { data: any3 } = await (supabase.rpc as any)("get_random_words", {
         exclude_ids: excludeIds, min_rarity: 2, lim: needed,
       });
@@ -381,6 +394,21 @@ export async function addRoomWord(roomId: string, playerId: string, word: string
 
 export async function deleteRoomWord(id: string) {
   await supabase.from("room_words").delete().eq("id", id);
+}
+
+export async function setNivel(roomId: string, actorId: string, nivel: NivelFilter) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("room:optimistic-update", {
+        detail: { roomId, patch: { nivel } },
+      }),
+    );
+  }
+  void (supabase.rpc as any)("host_update_room_config", {
+    p_room_id: roomId,
+    p_actor_id: actorId,
+    p_patch: { nivel },
+  });
 }
 
 export async function setCategories(roomId: string, actorId: string, categories: string[]) {
