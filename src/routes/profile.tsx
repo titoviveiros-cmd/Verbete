@@ -26,7 +26,15 @@ type Stats = {
   games_played: number; games_won: number; total_score: number;
   best_match_score: number; rounds_coordinated: number;
   current_streak: number; best_streak: number;
+  xp?: number; level?: number;
+  total_truth_hits?: number; total_fooled?: number;
 };
+
+// Espelho de public.xp_to_level: level = floor(sqrt(xp/100)) + 1.
+// XP necessário para o nível N: 100 * (N-1)^2.
+function xpForLevel(level: number): number {
+  return 100 * Math.pow(level - 1, 2);
+}
 type Match = { id: string; room_code: string; final_score: number; position: number; players_count: number; played_at: string };
 type Profile = { display_name: string; avatar: string; color: string };
 
@@ -211,13 +219,32 @@ function ProfilePage() {
           ♻️
         </button>
       </div>
+      {(() => {
+        const xp = stats?.xp ?? 0;
+        const level = stats?.level ?? 1;
+        const base = xpForLevel(level);
+        const next = xpForLevel(level + 1);
+        const pct = next > base ? Math.min(100, Math.round(((xp - base) / (next - base)) * 100)) : 0;
+        return (
+          <div className="sticker bg-gradient-to-r from-grape/25 to-pink/20 py-3 px-4 space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <span className="font-display text-lg">⚡ Nível {level}</span>
+              <span className="text-[11px] text-muted-foreground font-display tabular-nums">{xp} / {next} XP</span>
+            </div>
+            <div className="h-2 rounded-full bg-black/25 overflow-hidden border border-white/10">
+              <div className="h-full rounded-full bg-gradient-fun transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Partidas" value={stats?.games_played ?? 0} />
         <Stat label="Vitórias" value={stats?.games_won ?? 0} />
         <Stat label="Taxa de vitória" value={`${winRate}%`} />
         <Stat label="Pontos totais" value={stats?.total_score ?? 0} />
-        <Stat label="Melhor partida" value={stats?.best_match_score ?? 0} />
-        <Stat label="Rodadas coord." value={stats?.rounds_coordinated ?? 0} />
+        <Stat label="Acertos da verdade" value={stats?.total_truth_hits ?? 0} />
+        <Stat label="Jogadores enganados" value={stats?.total_fooled ?? 0} />
       </div>
 
 

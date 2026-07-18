@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
-import { restartGame, computeTeamScores, type Player, type Room } from "@/lib/room";
+import { restartGame, computeTeamScores, isTruthDef, type Definition, type Player, type Room, type Vote } from "@/lib/room";
 import { Mascot } from "@/components/Mascot";
 import { Confetti } from "@/components/Confetti";
 import { Scoreboard } from "@/components/room/phases/Scoreboard";
 import { useAuth } from "@/hooks/use-auth";
+import { pushAchievement } from "@/components/AchievementToaster";
 
 export function Finished({ room, players, isHost, roomId, roomCode, playerId, onLeave }: {
   room: Room; players: Player[]; isHost: boolean; roomId: string; roomCode: string; playerId: string; onLeave: () => void;
@@ -18,9 +19,25 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
   const { user, loading: authLoading } = useAuth();
   const isGuest = !authLoading && !user;
   const myFinalScore = sorted.find((p) => p.id === playerId)?.score ?? 0;
+
+  // Histórico da partida (defs + votos) — alimenta o registro de XP e as
+  // estatísticas divertidas do pódio.
+  const [history, setHistory] = useState<{ defs: Definition[]; votes: Vote[] } | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const [{ data: defs }, { data: votes }] = await Promise.all([
+        supabase.from("definitions").select("id,room_id,round,player_id,text,letter").eq("room_id", roomId),
+        supabase.from("votes").select("*").eq("room_id", roomId),
+      ]);
+      setHistory({ defs: (defs ?? []) as Definition[], votes: (votes ?? []) as Vote[] });
+    })().catch((e) => console.error("finished history fetch failed", e));
+  }, [roomId]);
+
+  const [xpResult, setXpResult] = useState<{ xpGained: number; level: number } | null>(null);
   const recordedRef = useRef(false);
   useEffect(() => {
-    if (recordedRef.current) return;
+    if (recordedRef.current || !history) return;
     recordedRef.current = true;
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -29,16 +46,38 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
       const me = sorted.find((p) => p.id === playerId);
       if (!me) return;
       const position = sorted.findIndex((p) => p.id === playerId) + 1;
-      await (supabase.rpc as any)("record_match_result", {
+
+      // Conta acertos da verdade e jogadores enganados a partir do histórico
+      const truthIds = new Set(history.defs.filter(isTruthDef).map((d) => d.id));
+      const myDefIds = new Set(history.defs.filter((d) => d.player_id === playerId).map((d) => d.id));
+      const truthHits = history.votes.filter((v) => v.voter_id === playerId && truthIds.has(v.definition_id)).length;
+      const fooledCount = history.votes.filter((v) => myDefIds.has(v.definition_id)).length;
+
+      const { data } = await (supabase.rpc as any)("record_match_result", {
         p_user_id: user.id,
         p_room_code: roomCode,
         p_final_score: me.score,
         p_position: position,
         p_players_count: sorted.length,
         p_rounds_coordinated: me.coordinator_count ?? 0,
+        p_truth_hits: truthHits,
+        p_fooled_count: fooledCount,
       });
+      const res = data as { xp_gained?: number; level?: number; unlocked?: string[]; deduped?: boolean } | null;
+      if (res && !res.deduped && (res.xp_gained ?? 0) > 0) {
+        setXpResult({ xpGained: res.xp_gained ?? 0, level: res.level ?? 1 });
+      }
+      const codes = res?.unlocked ?? [];
+      if (codes.length > 0) {
+        const { fetchAllAchievements } = await import("@/lib/daily");
+        const catalog = await fetchAllAchievements();
+        for (const code of codes) {
+          const a = catalog.find((c) => c.code === code);
+          if (a) pushAchievement(a);
+        }
+      }
     })().catch((e) => console.error("record_match_result failed", e));
-  }, []);
+  }, [history]);
   const winner = sorted[0];
   const second = sorted[1];
   const third = sorted[Math.min(2, sorted.length - 1)];
@@ -285,6 +324,19 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
           })}
         </div>
 
+        {xpResult && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 240 }}
+            className="sticker bg-gradient-sun text-secondary-foreground text-center py-2"
+          >
+            <span className="font-display text-lg">⚡ +{xpResult.xpGained} XP</span>
+            <span className="font-display text-xs ml-2 opacity-80">Nível {xpResult.level}</span>
+          </motion.div>
+        )}
+
+        <FunStats players={players} history={history} />
 
       </div>
 
@@ -304,6 +356,119 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
       </div>
 
     </motion.div>
+  );
+}
+
+// Estatísticas divertidas do fim de partida (spec): maior enganador,
+// maior enganado, resposta mais votada e maior sequência de acertos.
+function FunStats({ players, history }: { players: Player[]; history: { defs: Definition[]; votes: Vote[] } | null }) {
+  const stats = useMemo(() => {
+    if (!history || history.votes.length === 0) return [];
+    const byId = new Map(players.map((p) => [p.id, p]));
+    const truthIds = new Set(history.defs.filter(isTruthDef).map((d) => d.id));
+    const defById = new Map(history.defs.map((d) => [d.id, d]));
+
+    // Maior enganador: mais votos recebidos nas próprias definições falsas
+    const fooledBy = new Map<string, number>();
+    // Maior enganado: mais votos dados em definições falsas
+    const fooledCount = new Map<string, number>();
+    // Resposta mais votada (qualquer definição)
+    const votesByDef = new Map<string, number>();
+    // Sequência de acertos por jogador (rodadas consecutivas votando na verdade)
+    const votesByPlayerRound = new Map<string, Map<number, boolean>>();
+
+    for (const v of history.votes) {
+      votesByDef.set(v.definition_id, (votesByDef.get(v.definition_id) ?? 0) + 1);
+      const def = defById.get(v.definition_id);
+      if (!def) continue;
+      if (truthIds.has(def.id)) {
+        let m = votesByPlayerRound.get(v.voter_id);
+        if (!m) { m = new Map(); votesByPlayerRound.set(v.voter_id, m); }
+        m.set(v.round, true);
+      } else {
+        fooledCount.set(v.voter_id, (fooledCount.get(v.voter_id) ?? 0) + 1);
+        if (def.player_id !== v.voter_id) {
+          fooledBy.set(def.player_id, (fooledBy.get(def.player_id) ?? 0) + 1);
+        }
+        let m = votesByPlayerRound.get(v.voter_id);
+        if (!m) { m = new Map(); votesByPlayerRound.set(v.voter_id, m); }
+        m.set(v.round, false);
+      }
+    }
+
+    const top = (m: Map<string, number>) => {
+      let best: { id: string; n: number } | null = null;
+      for (const [id, n] of m) if (!best || n > best.n) best = { id, n };
+      return best && best.n > 0 ? best : null;
+    };
+
+    // Maior sequência de acertos consecutivos entre todos os jogadores
+    let bestStreak: { id: string; n: number } | null = null;
+    const rounds = Array.from(new Set(history.defs.map((d) => d.round))).sort((a, b) => a - b);
+    for (const [pid, m] of votesByPlayerRound) {
+      let cur = 0, max = 0;
+      for (const r of rounds) {
+        if (m.get(r) === true) { cur++; max = Math.max(max, cur); }
+        else if (m.has(r)) cur = 0;
+      }
+      if (max >= 2 && (!bestStreak || max > bestStreak.n)) bestStreak = { id: pid, n: max };
+    }
+
+    let topVotedDef: { def: Definition; n: number } | null = null;
+    for (const [defId, n] of votesByDef) {
+      const def = defById.get(defId);
+      if (!def || truthIds.has(defId)) continue;
+      if (!topVotedDef || n > topVotedDef.n) topVotedDef = { def, n };
+    }
+
+    const out: Array<{ emoji: string; label: string; value: string }> = [];
+    const enganador = top(fooledBy);
+    if (enganador) {
+      const p = byId.get(enganador.id);
+      if (p) out.push({ emoji: "🦊", label: "Maior enganador", value: `${p.avatar} ${p.nickname} — enganou ${enganador.n}×` });
+    }
+    const enganado = top(fooledCount);
+    if (enganado) {
+      const p = byId.get(enganado.id);
+      if (p) out.push({ emoji: "🎣", label: "Maior enganado", value: `${p.avatar} ${p.nickname} — caiu ${enganado.n}×` });
+    }
+    if (bestStreak) {
+      const p = byId.get(bestStreak.id);
+      if (p) out.push({ emoji: "🎯", label: "Sequência de acertos", value: `${p.avatar} ${p.nickname} — ${bestStreak.n} seguidos` });
+    }
+    if (topVotedDef && topVotedDef.n >= 2) {
+      const author = byId.get(topVotedDef.def.player_id);
+      out.push({
+        emoji: "🗳️",
+        label: "Blefe mais votado",
+        value: `"${topVotedDef.def.text.slice(0, 60)}${topVotedDef.def.text.length > 60 ? "…" : ""}"${author ? ` — ${author.nickname}` : ""}`,
+      });
+    }
+    return out;
+  }, [players, history]);
+
+  if (stats.length === 0) return null;
+  return (
+    <div className="sticker py-2 space-y-1.5">
+      <p className="font-display text-[10px] uppercase tracking-widest text-center opacity-80">
+        😜 Destaques da partida
+      </p>
+      {stats.map((s, i) => (
+        <motion.div
+          key={s.label}
+          initial={{ x: -12, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ delay: 0.5 + i * 0.12 }}
+          className="flex items-start gap-2 px-2"
+        >
+          <span className="text-base shrink-0">{s.emoji}</span>
+          <div className="min-w-0">
+            <p className="font-display text-[10px] uppercase tracking-wider text-muted-foreground leading-none">{s.label}</p>
+            <p className="text-xs leading-snug break-words">{s.value}</p>
+          </div>
+        </motion.div>
+      ))}
+    </div>
   );
 }
 
