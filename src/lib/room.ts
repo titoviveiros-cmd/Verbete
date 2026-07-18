@@ -885,8 +885,10 @@ export async function sendRoomMessage(roomId: string, playerId: string, text: st
 }
 
 export async function fetchRoomMessages(roomId: string, limit = 50): Promise<RoomMessage[]> {
-  const { data } = await supabase
-    .from("room_messages")
+  // Cast: room_messages ainda não existe nos tipos gerados do Supabase
+  // (src/integrations/supabase/types.ts é do schema antigo). Regenerar os
+  // tipos após aplicar as migrations remove a necessidade do cast.
+  const { data } = await (supabase.from as any)("room_messages")
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })

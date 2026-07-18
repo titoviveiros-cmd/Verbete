@@ -17,7 +17,6 @@ export default defineConfig({
     // em dev o servidor do próprio Start responde.
     ...(process.env.NODE_ENV === "production" ? [cloudflare({ viteEnvironment: { name: "ssr" } })] : []),
     tanstackStart({
-      customViteReactPlugin: true,
       // Entry SSR customizado (src/server.ts embrulha o handler com captura de erros)
       server: { entry: "server" },
     }),
