@@ -66,6 +66,16 @@ function DownloadPage() {
           >
             Jogar agora no navegador
           </Link>
+          {/* TODO: quando as listagens existirem, trocar por links reais
+              da Play Store / App Store (guardar as URLs em app-url.ts). */}
+          <button
+            type="button"
+            disabled
+            className="rounded-full border border-border bg-card text-muted-foreground font-medium py-3 cursor-not-allowed"
+            aria-label="Em breve no Google Play"
+          >
+            ▶ Em breve no Google Play
+          </button>
           <button
             type="button"
             disabled

@@ -2,9 +2,18 @@ node_modules/
 dist/
 .output/
 .vinxi/
+.wrangler/
 ios/
-android/
 .env
 .env.local
 *.log
 .DS_Store
+
+# Android: o projeto nativo É versionado (convenção Capacitor);
+# só os artefatos de build ficam de fora.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/capacitor-cordova-android-plugins/

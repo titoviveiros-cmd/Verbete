@@ -10,12 +10,13 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "cap:sync": "vite build && cap sync",
+    "cap:sync": "vite build --mode capacitor && cap sync",
     "cap:icons": "capacitor-assets generate --assetPath resources",
-    "cap:ios": "vite build && cap sync ios && cap open ios",
-    "cap:android": "vite build && cap sync android && cap open android"
+    "cap:ios": "vite build --mode capacitor && cap sync ios && cap open ios",
+    "cap:android": "vite build --mode capacitor && cap sync android && cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.2",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/ios": "^8.3.4",
@@ -99,5 +100,3 @@
     "vite": "^7.3.1"
   }
 }
-
-
