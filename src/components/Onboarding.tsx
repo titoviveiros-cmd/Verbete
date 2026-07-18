@@ -58,7 +58,7 @@ const STEPS: Step[] = [
     emoji: "🏆",
     title: "Pontue enganando",
     body:
-      "+3 se você acertar a verdadeira.\n+3 se seu significado for ao menos 80% equivalente ao verdadeiro.\n+2 pro Coordenador se ninguém descobrir a verdade.\n+1 pra cada voto que SUA definição receber.",
+      "+100 se você acertar a verdadeira.\n+50 se seu significado for ao menos 80% equivalente ao verdadeiro.\n+50 pro Coordenador se ninguém descobrir a verdade.\n+50 pra cada voto que SUA definição receber.",
     joke: "Tradução: enganar amigos = lucro. Ser enganado = aprendizado emocional.",
     mood: "excited",
   },
@@ -134,7 +134,7 @@ function DemoStepView({
             className="mt-3 text-xs text-pink/90 italic leading-snug"
           >
             {correct
-              ? "🎉 Boa! Você teria ganhado +3 pontos. Agora imagina enganar os amigos com uma definição falsa…"
+              ? "🎉 Boa! Você teria ganhado +100 pontos. Agora imagina enganar os amigos com uma definição falsa…"
               : "😅 Tranquilo, é exatamente isso que acontece numa partida real. Agora você sabe."}
           </motion.div>
         )}

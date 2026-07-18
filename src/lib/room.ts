@@ -923,8 +923,8 @@ export function computeTeamScores(players: Player[], teams: Team[]) {
 // Chamado pelo host quando o timer da fase writing zera.
 // Regras:
 //   - Para cada humano não-coordenador SEM definição na rodada:
-//       * se writing_extensions < 2 → score -1, writing_extensions++, dá +20s pra TODA a sala
-//       * se writing_extensions == 2 → score -1, REMOVE o jogador da partida
+//       * se writing_extensions < 2 → score -25, writing_extensions++, dá +20s pra TODA a sala
+//       * se writing_extensions == 2 → score -25, REMOVE o jogador da partida
 //   - Se ninguém precisou de prorrogação, retorna { extended: false } e o
 //     chamador deve seguir o fluxo normal (startShuffling).
 // ============================================================
@@ -949,8 +949,8 @@ export async function applyWritingTimeoutOrAdvance(
 // Prorrogação da fase de votação (voting)
 // Mesma dinâmica de writing, porém com tempo proporcionalmente menor (15s).
 //   - Para cada humano conectado SEM voto na rodada:
-//       * se voting_extensions < 2 → score -1, voting_extensions++, +15s pra sala
-//       * se voting_extensions == 2 → score -1, REMOVE o jogador
+//       * se voting_extensions < 2 → score -25, voting_extensions++, +15s pra sala
+//       * se voting_extensions == 2 → score -25, REMOVE o jogador
 //   - Se ninguém precisou de prorrogação, retorna { extended: false } e o
 //     chamador deve seguir o fluxo normal (revealAndScore).
 // ============================================================

@@ -24,7 +24,7 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  const REVEAL_HOLD = 30;
+  const REVEAL_HOLD = 15;
   const TRANSITION_MS = PHASE_ANNOUNCER_TOTAL_MS;
   const [transitionDone, setTransitionDone] = useState(false);
   const latestPlayersRef = useRef(players);

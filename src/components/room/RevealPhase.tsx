@@ -25,7 +25,7 @@ export default function RevealPhase({ room, players, word, definitions, votes, i
     if (step === 2) sideCannons();
   }, [step]);
 
-  const REVEAL_HOLD = 30;
+  const REVEAL_HOLD = 15;
   const [revealCountdown, setRevealCountdown] = useState(REVEAL_HOLD);
   useEffect(() => {
     if (step < 2) return;

@@ -8,7 +8,7 @@ const TIPS: Tip[] = [
   { phase: "lobby", title: "Bem-vindo!", body: "Convide amigos com o código da sala. Quando todos chegarem, o host clica em 'Começar'." },
   { phase: "choosing", title: "Escolhendo a palavra", body: "Quem coordena escolhe uma palavra rara. Os outros vão tentar enganar a galera com definições inventadas ou até mesmo com o significado verdadeiro." },
   { phase: "writing", title: "Hora de blefar", body: "Invente uma definição que pareça real! O objetivo é convencer os outros de que sua versão é a verdadeira." },
-  { phase: "voting", title: "Escolha a verdade", body: "Vote na definição que você acredita ser a real. +2 pontos por acertar e +1 para cada pessoa que cair no seu blefe." },
+  { phase: "voting", title: "Escolha a verdade", body: "Vote na definição que você acredita ser a real. +100 pontos por acertar e +50 para cada pessoa que cair no seu blefe." },
   { phase: "reveal", title: "A verdade aparece", body: "A definição real é revelada e os pontos são distribuídos. Boa rodada!" },
 ];
 

@@ -173,10 +173,10 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
         <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
         {extensionAlerts.map(({ player: p, attempt }) => {
           const seconds = attempt >= 2 ? 15 : 20;
-          const pointsLost = attempt;
+          const pointsLost = attempt * 25;
           return (
             <div key={p.id} className={"rounded-xl px-3 py-2 text-center font-display text-xs border " + (attempt >= 2 ? "bg-destructive/15 border-destructive text-destructive" : "bg-sun/15 border-sun text-sun")}>
-              ⏰ {p.avatar} <b>{p.nickname}</b> perdeu <b>{pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}</b>. {attempt >= 2 ? `Última prorrogação: ${seconds}s para enviar ou será eliminado(a) da partida.` : `Nova oportunidade: +${seconds}s para enviar. Se perder novamente na próxima prorrogação, será eliminado(a) da partida.`}
+              ⏰ {p.avatar} <b>{p.nickname}</b> perdeu <b>{pointsLost} pontos</b>. {attempt >= 2 ? `Última prorrogação: ${seconds}s para enviar ou será eliminado(a) da partida.` : `Nova oportunidade: +${seconds}s para enviar. Se perder novamente na próxima prorrogação, será eliminado(a) da partida.`}
             </div>
           );
         })}
@@ -192,7 +192,7 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
         const seconds = attempt >= 2 ? 15 : 20;
         const isSelf = p.id === me?.id;
         const finalChance = attempt >= 2;
-        const pointsLost = attempt;
+        const pointsLost = attempt * 25;
         return (
           <div
             key={p.id}
@@ -205,7 +205,7 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
                 : "bg-sun/15 border-sun text-sun")
             }
           >
-            ⏰ {isSelf ? "Você" : <>{p.avatar} <b>{p.nickname}</b></>} perdeu <b>{pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}</b>.{" "}
+            ⏰ {isSelf ? "Você" : <>{p.avatar} <b>{p.nickname}</b></>} perdeu <b>{pointsLost} pontos</b>.{" "}
             {finalChance
               ? `Última prorrogação: ${seconds}s para enviar${isSelf ? " ou você será eliminado(a) da partida" : " ou será eliminado(a) da partida"}.`
               : `Nova oportunidade: +${seconds}s para enviar. Se ${isSelf ? "você perder" : "perder"} novamente na próxima prorrogação, será eliminado(a) da partida.`}

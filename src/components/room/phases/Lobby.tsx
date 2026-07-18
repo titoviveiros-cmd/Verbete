@@ -35,7 +35,7 @@ export function Lobby({
   roomId, hostId, players, isHost, playerId, winCondition, winTarget, mode, teams, categories,
 }: { roomId: string; hostId: string; players: Player[]; isHost: boolean; playerId: string; winCondition: string; winTarget: number; mode: RoomMode; teams: Team[]; categories: string[]; }) {
   const slotsLeft = Math.max(0, 12 - players.length);
-  const canStart = players.length >= 4;
+  const canStart = players.length >= 2;
   const humans = players.filter((p) => !p.is_bot).length;
   const botsNeeded = Math.max(0, 4 - players.length);
   const [copied, setCopied] = useState(false);
@@ -176,26 +176,32 @@ export function Lobby({
               Como termina a partida?
             </p>
             <div className="flex gap-1.5">
-              <button onClick={() => setWinCondition(roomId, playerId, "rounds", 1)}
-                className={"flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " + (winCondition === "rounds" && winTarget === 1 ? "bg-pink text-primary-foreground border-pink" : "bg-input border-white/10")}>
-                <div>Coordenar 1×</div>
-                <div className="text-[9px] opacity-80 normal-case">rápida (ideal 5+ jog)</div>
+              <button onClick={() => setWinCondition(roomId, playerId, "rounds", winCondition === "rounds" ? winTarget : 10)}
+                className={"flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " + (winCondition === "rounds" ? "bg-pink text-primary-foreground border-pink" : "bg-input border-white/10")}>
+                <div>{winCondition === "rounds" ? `${winTarget} rodadas` : "Rodadas"}</div>
+                <div className="text-[9px] opacity-80 normal-case">número fixo</div>
               </button>
-              <button onClick={() => setWinCondition(roomId, playerId, "rounds", 2)}
-                className={"flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " + (winCondition === "rounds" && winTarget === 2 ? "bg-pink text-primary-foreground border-pink" : "bg-input border-white/10")}>
-                <div>Coordenar 2×</div>
-                <div className="text-[9px] opacity-80 normal-case">padrão (3-4 jog)</div>
-              </button>
-              <button onClick={() => setWinCondition(roomId, playerId, "score", winCondition === "score" ? winTarget : 15)}
+              <button onClick={() => setWinCondition(roomId, playerId, "score", winCondition === "score" ? winTarget : 500)}
                 className={"flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " + (winCondition === "score" ? "bg-pink text-primary-foreground border-pink" : "bg-input border-white/10")}>
                 <div>{winCondition === "score" ? `${winTarget} pts` : "Pontuação"}</div>
                 <div className="text-[9px] opacity-80 normal-case">quem chegar 1º</div>
               </button>
             </div>
 
+            {winCondition === "rounds" && (
+              <div className="flex gap-1.5 pt-0.5">
+                {[5, 10, 15, 20].map((n) => (
+                  <button key={n} onClick={() => setWinCondition(roomId, playerId, "rounds", n)}
+                    className={"flex-1 py-1 rounded-md text-[10px] font-display border " + (winTarget === n ? "bg-primary text-primary-foreground border-primary" : "bg-input border-white/10")}>
+                    {n} rod.
+                  </button>
+                ))}
+              </div>
+            )}
+
             {winCondition === "score" && (
               <div className="flex gap-1.5 pt-0.5">
-                {[15, 20, 30, 50].map((n) => (
+                {[500, 1000, 1500, 2000].map((n) => (
                   <button key={n} onClick={() => setWinCondition(roomId, playerId, "score", n)}
                     className={"flex-1 py-1 rounded-md text-[10px] font-display border " + (winTarget === n ? "bg-primary text-primary-foreground border-primary" : "bg-input border-white/10")}>
                     {n} pts
@@ -394,7 +400,7 @@ function StartButton({ canStart, playersCount, roomId, players, mode, teams }: {
   const label = starting
     ? "Iniciando…"
     : !canStart
-        ? `Mín. 3 jogadores (${playersCount}/3)`
+        ? `Mín. 2 jogadores (${playersCount}/2)`
         : !teamsOK
           ? "⚠️ Atribua todos a um time"
           : "🚀 Começar!";
