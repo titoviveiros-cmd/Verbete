@@ -858,6 +858,64 @@ export async function restartGame(roomId: string) {
   }).eq("id", roomId);
 }
 
+// ============================================================
+// Chat de sala (spec: lobby livre, rodada desativado, pós-resultado ativado —
+// a regra de fase é validada server-side pela RPC send_room_message)
+// ============================================================
+export interface RoomMessage {
+  id: string;
+  room_id: string;
+  player_id: string;
+  text: string;
+  created_at: string;
+}
+
+export const CHAT_ENABLED_STATUSES: RoomStatus[] = ["lobby", "reveal", "scoreboard", "finished"];
+
+export async function sendRoomMessage(roomId: string, playerId: string, text: string): Promise<{ ok: boolean; reason?: string }> {
+  const clean = sanitizeDefinition(text, 200);
+  if (!clean) return { ok: false, reason: "empty" };
+  const { data, error } = await (supabase.rpc as any)("send_room_message", {
+    p_room_id: roomId,
+    p_player_id: playerId,
+    p_text: clean,
+  });
+  if (error) return { ok: false, reason: error.message };
+  return (data as { ok: boolean; reason?: string }) ?? { ok: false };
+}
+
+export async function fetchRoomMessages(roomId: string, limit = 50): Promise<RoomMessage[]> {
+  const { data } = await supabase
+    .from("room_messages")
+    .select("*")
+    .eq("room_id", roomId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data as RoomMessage[]) ?? []).reverse();
+}
+
+// ============================================================
+// Partida rápida (salas públicas): entra num lobby público com vaga
+// ou cria um novo, tornando o chamador host. Tudo server-side.
+// ============================================================
+export async function joinPublicRoom(playerId: string, nickname: string, avatar: string, color: string): Promise<Room> {
+  const cleanNick = sanitizeNickname(nickname);
+  const { data, error } = await (supabase.rpc as any)("join_public_room", {
+    p_player_id: playerId,
+    p_nickname: cleanNick,
+    p_avatar: avatar,
+    p_color: color,
+  });
+  if (error) {
+    if (String(error.message ?? "").includes("player_banned")) {
+      throw new Error("Esta conta ou dispositivo foi banido por violar as regras da comunidade.");
+    }
+    throw error;
+  }
+  if (!data) throw new Error("Não foi possível encontrar uma sala pública.");
+  return data as Room;
+}
+
 export async function sendReaction(roomId: string, playerId: string, emoji: string) {
   // RPC com rate-limit servidor-side (800ms por jogador) e validação de pertencimento à sala.
   await (supabase.rpc as any)("send_reaction", {

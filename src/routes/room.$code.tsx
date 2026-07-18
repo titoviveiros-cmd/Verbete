@@ -10,6 +10,7 @@ import {
 import { randomAvatar, randomColor } from "@/lib/avatars";
 import { Mascot } from "@/components/Mascot";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
+import { RoomChat } from "@/components/room/RoomChat";
 import { PhaseAnnouncer, PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import { playAlert, primeAudio, playCorrectReveal, playGameWin, playPointMagnitude, playVoteReceived, playRevealStinger, playWhooshUp, playRevealBuildUp, playCrowdReactionFooled, playCrowdReactionNoOne, playStreak } from "@/lib/sound";
 import { setMusicMood, stopMusic } from "@/lib/music";
@@ -504,6 +505,7 @@ function RoomPage() {
 
       <PhaseAnnouncer status={room.status} />
       <ReactionsLayer roomId={room.id} playerId={playerId} />
+      <RoomChat roomId={room.id} status={room.status} playerId={playerId} players={players} />
     </div>
   );
 }

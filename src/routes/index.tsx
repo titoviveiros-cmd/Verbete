@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AVATARS, COLORS, randomAvatar, randomColor } from "@/lib/avatars";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
-import { createRoom, joinRoom } from "@/lib/room";
+import { createRoom, joinRoom, joinPublicRoom } from "@/lib/room";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SoundToggle } from "@/components/SoundToggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -37,7 +37,7 @@ function HomePage() {
   const { theme } = useTheme();
   const isLight = theme === "light";
   const handleSignOut = async () => { await supabase.auth.signOut(); };
-  const [mode, setMode] = useState<"home" | "host" | "join">("home");
+  const [mode, setMode] = useState<"home" | "host" | "join" | "quick">("home");
   const [nick, setNick] = useState<string>(() => getStored("nick", ""));
   const [avatar, setAvatar] = useState<string>(() => getStored("avatar", randomAvatar()));
   const [color, setColor] = useState<string>(() => getStored("color", randomColor()));
@@ -93,6 +93,22 @@ function HomePage() {
     try {
       persist();
       const room = await joinRoom(code, playerId, cleanNick, avatar, color);
+      nav({ to: "/room/$code", params: { code: room.code } });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally { setBusy(false); }
+  };
+
+  const handleQuick = async () => {
+    setError(null);
+    const cleanNick = sanitizeNickname(nick);
+    if (!cleanNick || cleanNick === "Anônimo") { setError("Escolha um apelido"); return; }
+    setBusy(true);
+    try {
+      persist();
+      const room = await joinPublicRoom(playerId, cleanNick, avatar, color);
+      // Se a RPC criou uma sala nova, o chamador é o host dela.
+      if (room.host_id === playerId) setStored("hosted:" + room.code, playerId);
       nav({ to: "/room/$code", params: { code: room.code } });
     } catch (e) {
       setError((e as Error).message);
@@ -369,6 +385,21 @@ function HomePage() {
               🔑 Entrar com código
             </motion.button>
 
+            {/* CTA terciário — partida rápida em sala pública */}
+            <motion.button
+              whileTap={{ scale: 0.97, y: 4 }}
+              onClick={() => setMode("quick")}
+              className="relative w-full py-4 rounded-[26px] font-display font-black text-xl tracking-wide uppercase text-white"
+              style={{
+                background: "linear-gradient(180deg, #ff5fc4 0%, #e0189e 100%)",
+                border: "3px solid #ffffff",
+                boxShadow:
+                  "inset 0 3px 0 rgba(255,255,255,0.45), 0 8px 0 #8f0a63, 0 16px 26px -6px rgba(224,24,158,0.5)",
+              }}
+            >
+              🎲 Partida rápida
+            </motion.button>
+
             {/* Trio de ações — glass card */}
             <div className="grid grid-cols-3 gap-3 mt-1">
               {[
@@ -554,11 +585,11 @@ function HomePage() {
                   ← Voltar
                 </button>
                 <button
-                  onClick={mode === "host" ? handleHost : handleJoin}
+                  onClick={mode === "host" ? handleHost : mode === "quick" ? handleQuick : handleJoin}
                   disabled={busy}
                   className="btn-pop bg-gradient-fun text-white flex-[2] text-xl py-3 disabled:opacity-50"
                 >
-                  {busy ? "..." : mode === "host" ? "Criar! 🚀" : "Entrar"}
+                  {busy ? "..." : mode === "host" ? "Criar! 🚀" : mode === "quick" ? "Jogar! 🎲" : "Entrar"}
                 </button>
               </div>
             </motion.div>
