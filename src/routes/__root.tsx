@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/app-url";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -93,14 +94,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       
       { name: "twitter:title", content: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
       { name: "twitter:description", content: "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português." },
-      { property: "og:image", content: "https://verbete.lovable.app/__l5e/assets-v1/a653c123-7b6e-463b-be2b-e0fe2b79be17/og-verbete-final.jpg" },
-      { property: "og:image:secure_url", content: "https://verbete.lovable.app/__l5e/assets-v1/a653c123-7b6e-463b-be2b-e0fe2b79be17/og-verbete-final.jpg" },
+      { property: "og:image", content: `${APP_URL}/og-verbete.jpg` },
+      { property: "og:image:secure_url", content: `${APP_URL}/og-verbete.jpg` },
       { property: "og:image:type", content: "image/jpeg" },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
       { property: "og:image:alt", content: "Verbete — jogo multiplayer de blefe com palavras raras do português" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:image", content: "https://verbete.lovable.app/__l5e/assets-v1/a653c123-7b6e-463b-be2b-e0fe2b79be17/og-verbete-final.jpg" },
+      { name: "twitter:image", content: `${APP_URL}/og-verbete.jpg` },
       { name: "twitter:image:alt", content: "Verbete — jogo multiplayer de blefe com palavras raras do português" },
       { property: "og:site_name", content: "Verbete" },
       { property: "og:locale", content: "pt_BR" },
@@ -132,7 +133,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "@context": "https://schema.org",
           "@type": "WebSite",
           name: "Verbete",
-          url: "https://verbete.lovable.app",
+          url: `${APP_URL}`,
           description: "Jogo multiplayer em tempo real de blefe com palavras raras do português.",
           inLanguage: "pt-BR",
         }),
@@ -143,7 +144,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "@context": "https://schema.org",
           "@type": "Game",
           name: "Verbete",
-          url: "https://verbete.lovable.app",
+          url: `${APP_URL}`,
           genre: "Party / Word game",
           numberOfPlayers: "4-12",
           inLanguage: "pt-BR",

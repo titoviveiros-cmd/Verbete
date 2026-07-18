@@ -1,5 +1,5 @@
 // Edge function: avalia se cada definição "falsa" do jogador é semanticamente
-// equivalente (>= 80%) à definição verdadeira. Usa Gemini Flash via Lovable AI.
+// equivalente (>= 80%) à definição verdadeira. Usa Gemini Flash (Google AI).
 // Recebe { room_id, round, candidates: [{id, text}] } e devolve { matches: [id, ...] }.
 // IMPORTANTE: palavra e verdade são buscadas AQUI (service role); o cliente nunca
 // envia a resposta, evitando que ela seja interceptada / usada para cheating.
@@ -76,8 +76,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
 
     const list = candidates
       .map((c: { id: string; text: string }, i: number) => `${i + 1}. [id=${c.id}] "${c.text}"`)
@@ -86,11 +86,11 @@ Deno.serve(async (req) => {
     const system = `Você avalia proximidade semântica entre definições do jogo "Verbete". Seja GENEROSO: aceite a candidata quando ela aponta para a MESMA ideia geral da verdadeira, ainda que com palavras diferentes, sinônimos coloquiais, conotação aproximada, paráfrase mais ampla ou mais estreita, ou foco parcial em um dos sentidos. Considere equivalentes definições que um falante comum interpretaria como "praticamente a mesma coisa" no contexto da palavra. Ignore estilo, ordem, formalidade e completude. Só rejeite quando o sentido for claramente diferente, não relacionado, ou se referir a outro conceito. Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdown.`;
     const user = `Palavra: ${word}\nDefinição verdadeira: ${truth}\n\nCandidatas:\n${list}\n\nRetorne os ids semanticamente próximos (seja generoso com sinônimos e paráfrases).`;
 
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

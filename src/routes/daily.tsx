@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
@@ -23,9 +24,9 @@ export const Route = createFileRoute("/daily")({
       { name: "description", content: "Uma nova palavra rara a cada dia. Acerte o significado, mantenha sua streak e suba no ranking." },
       { property: "og:title", content: "Desafio Diário — Verbete" },
       { property: "og:description", content: "Uma palavra rara por dia. Mantenha sua streak 🔥" },
-      { property: "og:url", content: "https://verbete.lovable.app/daily" },
+      { property: "og:url", content: `${APP_URL}/daily` },
     ],
-    links: [{ rel: "canonical", href: "https://verbete.lovable.app/daily" }],
+    links: [{ rel: "canonical", href: `${APP_URL}/daily` }],
   }),
   component: DailyPage,
 });

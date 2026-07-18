@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { APP_HOST } from "@/lib/app-url";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({
@@ -33,7 +34,7 @@ function PrivacyPage() {
           <h2 className="font-display text-lg mb-1">Quem somos</h2>
           <p>
             Verbete é um jogo multiplayer de palavras. Esta política descreve como tratamos os
-            dados de quem joga em <strong>verbete.lovable.app</strong>.
+            dados de quem joga em <strong>{APP_HOST}</strong>.
           </p>
         </section>
 

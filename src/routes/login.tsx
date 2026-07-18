@@ -1,7 +1,7 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/use-auth";
 import { Mascot } from "@/components/Mascot";
 import { motion } from "framer-motion";
@@ -13,10 +13,10 @@ export const Route = createFileRoute("/login")({
       { name: "description", content: "Entre na sua conta Verbete para acompanhar seu ranking e histórico de partidas." },
       { property: "og:title", content: "Entrar — Verbete" },
       { property: "og:description", content: "Acesse sua conta Verbete." },
-      { property: "og:url", content: "https://verbete.lovable.app/login" },
+      { property: "og:url", content: `${APP_URL}/login` },
       { name: "robots", content: "noindex,follow" },
     ],
-    links: [{ rel: "canonical", href: "https://verbete.lovable.app/login" }],
+    links: [{ rel: "canonical", href: `${APP_URL}/login` }],
   }),
   component: LoginPage,
 });
@@ -57,10 +57,15 @@ function LoginPage() {
     } finally { setBusy(false); }
   };
 
+  // Supabase Auth nativo. Requer o provider habilitado no painel do Supabase
+  // (Authentication > Providers) com as credenciais OAuth do Google/Apple.
   const handleOAuth = async (provider: "google" | "apple") => {
     setError(null);
-    const result = await lovable.auth.signInWithOAuth(provider, { redirect_uri: window.location.origin });
-    if (result.error) setError(result.error.message);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) setError(error.message);
   };
 
   return (

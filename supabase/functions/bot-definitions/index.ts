@@ -1,4 +1,4 @@
-// Edge function: gera definições falsas plausíveis para bots usando Lovable AI (Gemini Flash).
+// Edge function: gera definições falsas plausíveis para bots usando Gemini Flash (Google AI).
 // Recebe { word_id, count, personas? } e devolve { definitions: string[] }.
 // IMPORTANTE: o significado da palavra é buscado AQUI (service role), nunca aceito
 // do cliente — assim ele não trafega no navegador e não pode ser usado para cheating.
@@ -92,8 +92,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
 
     // Garante uma persona por definição (rotaciona se faltar)
     const chosen: string[] = Array.from({ length: count }, (_, i) => {
@@ -135,11 +135,13 @@ Deno.serve(async (req) => {
     const system = `Você é um lexicógrafo escrevendo verbetes de dicionário para o jogo "Verbete" (Balderdash em português). Para cada palavra rara, escreva ${count} definições FALSAS, plausíveis, em ESTILO DE DICIONÁRIO: enxutas, neutras, sem exemplos, sem "que serve para", sem rodeios. Idealmente 5 a 11 palavras, NUNCA mais que 13. Cada definição usa um ESTILO diferente (estrutura/registro variados) para parecer escrita por verbetistas distintos — VARIE as construções iniciais: evite começar todas com "que..." ou "aquele que...". NUNCA repita a verdadeira nem a parafraseie diretamente. Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v., bot., med.) nem parênteses iniciais de área. NUNCA use a própria palavra dentro da definição. TODAS as definições DEVEM respeitar o tipo gramatical da palavra (verbo→ação, substantivo→coisa, adjetivo→qualidade, etc.). Devolva APENAS JSON: {"definitions":["...","...","..."]} na MESMA ORDEM dos estilos abaixo, sem markdown.`;
     const user = `Palavra: ${word}\nDefinição verdadeira (não copie nem parafraseie diretamente): ${meaning}${categoryRule}\n\nEstilos a usar (na ordem):\n${personaInstructions}\n\nGere ${count} definições falsas convincentes, uma por estilo, TODAS coerentes com o tipo gramatical indicado.`;
 
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Endpoint OpenAI-compatível do Google AI — mesmo formato de mensagens
+    // que o gateway anterior, só muda URL/credencial/nome do modelo.
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

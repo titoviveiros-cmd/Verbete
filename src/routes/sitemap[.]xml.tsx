@@ -1,9 +1,10 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute } from "@tanstack/react-router";
 
 const URLS = [
-  { loc: "https://verbete.lovable.app/", priority: "1.0", changefreq: "weekly" },
-  { loc: "https://verbete.lovable.app/daily", priority: "0.9", changefreq: "daily" },
-  { loc: "https://verbete.lovable.app/ranking", priority: "0.7", changefreq: "daily" },
+  { loc: `${APP_URL}/`, priority: "1.0", changefreq: "weekly" },
+  { loc: `${APP_URL}/daily`, priority: "0.9", changefreq: "daily" },
+  { loc: `${APP_URL}/ranking`, priority: "0.7", changefreq: "daily" },
 ];
 
 export const Route = createFileRoute("/sitemap.xml")({

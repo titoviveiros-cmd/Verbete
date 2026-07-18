@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -14,10 +15,10 @@ export const Route = createFileRoute("/profile")({
     meta: [
       { title: "Meu perfil — Verbete" },
       { name: "description", content: "Acompanhe suas estatísticas, conquistas e histórico de partidas no Verbete." },
-      { property: "og:url", content: "https://verbete.lovable.app/profile" },
+      { property: "og:url", content: `${APP_URL}/profile` },
       { name: "robots", content: "noindex,follow" },
     ],
-    links: [{ rel: "canonical", href: "https://verbete.lovable.app/profile" }],
+    links: [{ rel: "canonical", href: `${APP_URL}/profile` }],
   }),
   component: ProfilePage,
 });

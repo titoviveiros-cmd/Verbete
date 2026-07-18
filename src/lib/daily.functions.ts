@@ -20,17 +20,17 @@ function hourBucketIso(): string {
 }
 
 async function scoreSemanticSimilarity(word: string, truth: string, guess: string): Promise<number> {
-  const apiKey = process.env.LOVABLE_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return 0;
   const system =
     'Você avalia equivalência semântica entre duas definições curtas (PT-BR) de uma palavra. Retorne APENAS JSON {"score": <inteiro 0-100>} representando o quanto a definição do jogador transmite o mesmo significado essencial da verdadeira. 100 = idêntico em significado (sinônimos / paráfrases contam). 80+ = essencialmente correto. 0 = sem relação. Ignore estilo, acentos, ordem, pontuação.';
   const user = `Palavra: ${word}\nDefinição verdadeira: "${truth}"\nDefinição do jogador: "${guess}"\n\nResponda só o JSON.`;
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

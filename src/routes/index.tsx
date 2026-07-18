@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,9 +25,9 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Verbete: conhecimento nunca foi tão divertido. Multiplayer em tempo real para até 12 amigos blefarem com palavras raras." },
       { property: "og:title", content: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
       { property: "og:description", content: "Multiplayer em tempo real para até 12 amigos. Blefa, vota e ri muito." },
-      { property: "og:url", content: "https://verbete.lovable.app/" },
+      { property: "og:url", content: `${APP_URL}/` },
     ],
-    links: [{ rel: "canonical", href: "https://verbete.lovable.app/" }],
+    links: [{ rel: "canonical", href: `${APP_URL}/` }],
   }),
   component: HomePage,
 });

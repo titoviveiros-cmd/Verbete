@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -66,7 +67,7 @@ export const Route = createFileRoute("/room/$code")({
       { name: "description", content: `Entre na sala ${params.code} do Verbete e jogue agora com seus amigos.` },
       { property: "og:title", content: `Sala ${params.code} — Verbete` },
       { property: "og:description", content: "Junte-se à partida em tempo real." },
-      { property: "og:url", content: `https://verbete.lovable.app/room/${params.code}` },
+      { property: "og:url", content: `${APP_URL}/room/${params.code}` },
       { name: "robots", content: "noindex,follow" },
     ],
   }),

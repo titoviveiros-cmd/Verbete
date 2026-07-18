@@ -1,3 +1,4 @@
+import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,9 +12,9 @@ export const Route = createFileRoute("/ranking")({
       { name: "description", content: "Veja os melhores jogadores do Verbete: pontuação total, partidas jogadas e vitórias." },
       { property: "og:title", content: "Ranking — Verbete" },
       { property: "og:description", content: "Os melhores blefadores e adivinhadores do Verbete." },
-      { property: "og:url", content: "https://verbete.lovable.app/ranking" },
+      { property: "og:url", content: `${APP_URL}/ranking` },
     ],
-    links: [{ rel: "canonical", href: "https://verbete.lovable.app/ranking" }],
+    links: [{ rel: "canonical", href: `${APP_URL}/ranking` }],
   }),
   component: RankingPage,
 });

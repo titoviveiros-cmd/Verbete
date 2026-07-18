@@ -1,6 +1,7 @@
 // Geração e compartilhamento de "card de replay" da rodada do Verbete.
 // Renderiza um PNG quadrado (1080x1350, formato story) com a palavra,
 // a verdade, e quem caiu em qual blefe. Usa Web Share API com File quando
+import { APP_HOST } from "@/lib/app-url";
 // disponível (mobile, ideal para Stories/WhatsApp/TikTok); fallback faz download.
 
 export interface ReplayCardData {
@@ -119,7 +120,7 @@ export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
   // Footer
   ctx.fillStyle = "#ffffff88";
   ctx.font = "24px system-ui, sans-serif";
-  ctx.fillText("jogue em verbete.lovable.app", 60, H - 60);
+  ctx.fillText(`jogue em ${APP_HOST}`, 60, H - 60);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png", 0.95);
@@ -130,7 +131,7 @@ export async function shareReplayCard(data: ReplayCardData): Promise<"shared" | 
   try {
     const blob = await generateReplayCard(data);
     const file = new File([blob], `verbete-replay-${data.roomCode}.png`, { type: "image/png" });
-    const text = `Olha esse blefe no Verbete 🤥 a palavra era "${data.word}". Joga comigo: verbete.lovable.app`;
+    const text = `Olha esse blefe no Verbete 🤥 a palavra era "${data.word}". Joga comigo: ${APP_HOST}`;
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
     if (nav.canShare && nav.canShare({ files: [file] })) {
       await navigator.share({ files: [file], text, title: "Verbete" });
