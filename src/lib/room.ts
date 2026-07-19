@@ -612,7 +612,9 @@ export async function botSubmitDefinitions(
   roomId: string, round: number, bots: Player[], word?: Word | null,
 ) {
   if (bots.length === 0) return;
-  const delay = 1500 + Math.random() * 2500;
+  // Delay curto: a chamada de IA acima já leva 1-3s; somado a um atraso
+  // longo os bots pareciam travados na fase de escrita (feedback de playtest).
+  const delay = 400 + Math.random() * 800;
 
   // Tenta usar IA (Gemini Flash) para definições falsas plausíveis;
   // se falhar (sem chave, timeout, etc.) cai no fallback local.
@@ -803,7 +805,7 @@ export async function castVote(roomId: string, round: number, voterId: string, d
 
 export async function botsVote(roomId: string, round: number, bots: Player[], defs: Definition[]) {
   if (bots.length === 0) return;
-  const delay = 2000 + Math.random() * 3000;
+  const delay = 900 + Math.random() * 1400;
   setTimeout(() => {
     const rows = bots
       .map((bot) => {
