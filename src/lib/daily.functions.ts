@@ -30,7 +30,7 @@ async function scoreSemanticSimilarity(word: string, truth: string, guess: strin
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gemini-2.5-flash",
+        model: "gemini-flash-latest",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
