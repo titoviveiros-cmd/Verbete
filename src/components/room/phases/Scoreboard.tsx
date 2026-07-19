@@ -92,13 +92,13 @@ function ScoreboardImpl({ room, players, isHost }: {
     for (const p of players) {
       const reasons: string[] = [];
       const truthHits = truthHitsByVoter.get(p.id) ?? 0;
-      if (truthHits > 0) reasons.push(`🎯 Acertou a verdade ${truthHits}× → +${truthHits * 100} pts`);
+      if (truthHits > 0) reasons.push(`🎯 Acertou a verdade ${truthHits}× → +${truthHits * 3} pts`);
       const myFakeDefs = history.defs.filter((d) => d.player_id === p.id && !(d.player_id === "__truth__"));
       let foolsCount = 0;
       for (const d of myFakeDefs) foolsCount += votesByDefId.get(d.id) ?? 0;
-      if (foolsCount > 0) reasons.push(`🤥 Enganou jogadores ${foolsCount}× → +${foolsCount * 50} pts`);
+      if (foolsCount > 0) reasons.push(`🤥 Enganou jogadores ${foolsCount}× → +${foolsCount} pts`);
       const nearHits = myFakeDefs.filter((d) => history.nearTruthIds.has(d.id)).length;
-      if (nearHits > 0) reasons.push(`🧠 Chegou perto da verdade ${nearHits}× → +${nearHits * 50} pts`);
+      if (nearHits > 0) reasons.push(`🧠 Chegou perto da verdade ${nearHits}× → +${nearHits * 3} pts`);
       let coordWins = 0;
       for (const r of allRounds) {
         const truthDef = history.defs.find((d) => d.round === r && (d.player_id === "__truth__"));
@@ -115,9 +115,9 @@ function ScoreboardImpl({ room, players, isHost }: {
         }
         if (isCoordOfR && !someoneHit) coordWins++;
       }
-      if (coordWins > 0) reasons.push(`👑 Coordenou e ninguém acertou ${coordWins}× → +${coordWins * 50} pts`);
+      if (coordWins > 0) reasons.push(`👑 Coordenou e ninguém acertou ${coordWins}× → +${coordWins * 2} pts`);
       const penalties = history.extensions.filter((e) => e.player_id === p.id).length;
-      if (penalties > 0) reasons.push(`⏰ Estourou o tempo ${penalties}× → -${penalties * 25} pts`);
+      if (penalties > 0) reasons.push(`⏰ Estourou o tempo ${penalties}× → -${penalties} pts`);
       if (reasons.length === 0) reasons.push("Ainda sem pontos — bora pra próxima! 💪");
       out.set(p.id, reasons);
     }

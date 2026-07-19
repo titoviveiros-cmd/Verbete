@@ -195,7 +195,7 @@ export function Lobby({
                 <div>{winCondition === "rounds" ? `${winTarget} rodadas` : "Rodadas"}</div>
                 <div className="text-[9px] opacity-80 normal-case">número fixo</div>
               </button>
-              <button onClick={() => setWinCondition(roomId, playerId, "score", winCondition === "score" ? winTarget : 500)}
+              <button onClick={() => setWinCondition(roomId, playerId, "score", winCondition === "score" ? winTarget : 15)}
                 className={"flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " + (winCondition === "score" ? "bg-pink text-primary-foreground border-pink" : "bg-input border-white/10")}>
                 <div>{winCondition === "score" ? `${winTarget} pts` : "Pontuação"}</div>
                 <div className="text-[9px] opacity-80 normal-case">quem chegar 1º</div>
@@ -215,7 +215,7 @@ export function Lobby({
 
             {winCondition === "score" && (
               <div className="flex gap-1.5 pt-0.5">
-                {[500, 1000, 1500, 2000].map((n) => (
+                {[15, 20, 30, 50].map((n) => (
                   <button key={n} onClick={() => setWinCondition(roomId, playerId, "score", n)}
                     className={"flex-1 py-1 rounded-md text-[10px] font-display border " + (winTarget === n ? "bg-primary text-primary-foreground border-primary" : "bg-input border-white/10")}>
                     {n} pts

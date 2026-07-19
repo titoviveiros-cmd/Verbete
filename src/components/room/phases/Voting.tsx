@@ -228,8 +228,8 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
       </div>
       {showExtBanner && (
         <div className={"shrink-0 rounded-xl px-3 py-2 text-center font-display text-xs border " + (myExt >= 2 ? "bg-destructive/15 border-destructive text-destructive" : "bg-pink/15 border-pink text-pink")}>
-          {myExt === 1 && <>⏰ Tempo esgotado! Você perdeu <b>25 pontos</b>. Mais 20s pra votar — se faltar de novo, perde mais 25. Na 3ª falha, é eliminado.</>}
-          {myExt >= 2 && <>⚠️ Última chance! Vote agora ou será <b>eliminado da partida</b> (já perdeu {myExt * 25} pts no total).</>}
+          {myExt === 1 && <>⏰ Tempo esgotado! Você perdeu <b>1 ponto</b>. Mais 20s pra votar — se faltar de novo, perde outro ponto. Na 3ª falha, é eliminado.</>}
+          {myExt >= 2 && <>⚠️ Última chance! Vote agora ou será <b>eliminado da partida</b> (já perdeu {myExt} pts no total).</>}
         </div>
       )}
 

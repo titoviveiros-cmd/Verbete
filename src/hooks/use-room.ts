@@ -194,15 +194,15 @@ export function useRoom(code: string | undefined, playerId?: string) {
           const verbo = isMe ? "perdeu" : "perdeu";
           const eliminated = ext.attempt >= 3;
           if (eliminated) {
-            toast.error(`${name} ${verbo} 25 pontos e foi eliminado(a) da partida ⛔`, { duration: 5000 });
+            toast.error(`${name} ${verbo} 1 ponto e foi eliminado(a) da partida ⛔`, { duration: 5000 });
           } else if (currentRoom?.status === "writing" && currentRoom.current_round === ext.round) {
             const seconds = ext.attempt === 1 ? 20 : 15;
-            toast(`⏰ ${name} ${verbo} 25 pontos. ${ext.attempt === 1 ? `Nova oportunidade: +${seconds}s para enviar.` : `Última chance: +${seconds}s para enviar.`}`, {
+            toast(`⏰ ${name} ${verbo} 1 ponto. ${ext.attempt === 1 ? `Nova oportunidade: +${seconds}s para enviar.` : `Última chance: +${seconds}s para enviar.`}`, {
               duration: 5500,
             });
           } else {
             const restantes = 3 - ext.attempt;
-            toast(`⏰ ${name} ${verbo} 25 pontos por estourar o tempo. ${restantes === 1 ? "Última chance!" : `Faltam ${restantes} chances.`}`, {
+            toast(`⏰ ${name} ${verbo} 1 ponto por estourar o tempo. ${restantes === 1 ? "Última chance!" : `Faltam ${restantes} chances.`}`, {
               duration: 4500,
             });
           }
