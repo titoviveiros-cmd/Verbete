@@ -401,8 +401,10 @@ export function useRoom(code: string | undefined, playerId?: string) {
     const wid = room?.current_word_id;
     if (!wid) { setWord(null); return; }
     (async () => {
-      const { data } = await supabase.from("words").select("*").eq("id", wid).maybeSingle();
-      if (data) { setWord(data as Word); return; }
+      // Colunas seguras apenas — meaning/curiosidade são bloqueadas por grants
+      // e chegam via get_word_reveal() somente após a revelação.
+      const { data } = await supabase.from("words").select("id,word,category,rarity,nivel,classe,pronuncia").eq("id", wid).maybeSingle();
+      if (data) { setWord(data as unknown as Word); return; }
       const { data: cw } = await supabase
         .from("room_words")
         .select("id,word,meaning,category")

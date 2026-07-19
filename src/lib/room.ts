@@ -73,7 +73,10 @@ export const TEAM_PRESETS: Record<string, Team[]> = {
 export interface Word {
   id: string;
   word: string;
-  meaning: string;
+  // Fase 1 (segurança): meaning NÃO chega mais ao client durante a rodada —
+  // as colunas reveladoras de words são bloqueadas por grants. O conteúdo
+  // completo vem via get_word_reveal() apenas em reveal/scoreboard/finished.
+  meaning?: string;
   category: string | null;
   rarity: number;
   // Campos v2 (podem ser nulos em palavras antigas/customizadas)
@@ -334,7 +337,8 @@ export async function fetchThreeWords(
   const needed = Math.max(0, 3 - Math.min(customPool.length, 3));
   let globalPool: Word[] = [];
   if (needed > 0) {
-    const { data, error } = await (supabase.rpc as any)("get_random_words", {
+    // RPC segura: devolve apenas colunas não-reveladoras (sem meaning).
+    const { data, error } = await (supabase.rpc as any)("get_random_word_prompts", {
       exclude_ids: excludeIds,
       min_rarity: 2,
       lim: needed,
@@ -344,17 +348,17 @@ export async function fetchThreeWords(
     if (!error && data && data.length >= needed) {
       globalPool = data as Word[];
     } else if (categories.length > 0 || nivel !== "aleatorio") {
-      const { data: any3 } = await (supabase.rpc as any)("get_random_words", {
+      const { data: any3 } = await (supabase.rpc as any)("get_random_word_prompts", {
         exclude_ids: excludeIds, min_rarity: 2, lim: needed,
       });
       if (any3) globalPool = any3 as Word[];
     }
     if (globalPool.length < needed) {
-      let q = supabase.from("words").select("*").limit(120);
+      let q = supabase.from("words").select("id,word,category,rarity,nivel,classe,pronuncia").limit(120);
       if (excludeIds.length) q = q.not("id", "in", `(${excludeIds.join(",")})`);
       if (categories.length) q = q.in("category", categories);
       const { data: anyN } = await q;
-      globalPool = shuffle(anyN ?? []).slice(0, needed) as Word[];
+      globalPool = shuffle(anyN ?? []).slice(0, needed) as unknown as Word[];
     }
   }
 

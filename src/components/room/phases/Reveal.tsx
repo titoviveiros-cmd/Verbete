@@ -172,7 +172,7 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           </div>
         )}
 
-        {step >= 1 && <AboutWordCard word={word} />}
+        {step >= 1 && <AboutWordCard roomId={room.id} word={word} />}
 
 
         {step >= 2 && (
@@ -259,9 +259,22 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
 }
 
 // Momento de aprendizado (spec): curiosidade, origem, pronúncia e exemplo
-// da palavra da rodada. Só renderiza os campos que existirem — palavras
-// antigas/customizadas sem os dados v2 simplesmente não mostram o card.
-function AboutWordCard({ word }: { word: Word }) {
+// da palavra da rodada. Fase 1 (segurança): esses campos não trafegam mais
+// durante a rodada — são buscados aqui via get_word_reveal(), que o servidor
+// só responde quando a sala está em reveal/scoreboard/finished.
+function AboutWordCard({ roomId, word: promptWord }: { roomId: string; word: Word }) {
+  const [full, setFull] = useState<Word | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data } = await (supabase.rpc as any)("get_word_reveal", { p_room_id: roomId });
+      if (alive && data) setFull(data as Word);
+    })().catch(() => {});
+    return () => { alive = false; };
+  }, [roomId]);
+
+  const word = full ?? promptWord;
   const hasContent = !!(word.curiosidade || word.origem || word.pronuncia || word.exemplo || word.classe);
   if (!hasContent) return null;
   return (
@@ -325,7 +338,7 @@ function ShareReplayButton({ room, word, definitions, votes, players }: {
 
     const result = await shareReplayCard({
       word: word.word,
-      truth: truth?.text ?? humanizeMeaning(word.meaning),
+      truth: truth?.text ?? humanizeMeaning(word.meaning ?? ""),
       fooled,
       truthHits,
       roomCode: room.code,
