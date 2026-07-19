@@ -107,6 +107,6 @@ Os 18 itens da spec. Verificação: `npm run check` (lint+typecheck+unit), suít
 - [x] Ajuste fundamental: pontuação revertida à regra original (+3/+1/+3/+2/-1) — migration aplicada e verificada em produção (`scripts/verify-scoring.mjs`)
 - [x] Fase 1 · parte 1: words blindada (grants por coluna + get_random_word_prompts + get_word_reveal), RPCs get_ballot/get_room_definitions criadas, bugfix da verdade em palavras customizadas — verificada por sonda REST (`scripts/probe-security.mjs`)
 - [ ] Fase 1 · parte 2: cutover do ballot no client (use-room/Voting/Reveal → get_ballot/get_room_definitions) e então REVOKE de SELECT em definitions
-- [ ] Fase 1 · parte 3: record_match_result server-side (players.user_id + cálculo pelas tabelas oficiais)
+- [x] Fase 1 · parte 3: record_match_result server-side — client informa só o código da sala; score/posição/acertos/blefes/XP/conquistas derivados das tabelas oficiais via `players.user_id` + `claim_player_identity`. Verificada por sonda de ataque (`scripts/probe-stats.mjs`: assinatura forjada 404, sem sessão Unauthorized)
 - [ ] Fase 1 · parte 4: identidade anônima (auth.uid) nas RPCs de ação + auditoria SECURITY DEFINER (docs/security-audit.md)
 - [ ] Fases 2–10 (pendentes)
