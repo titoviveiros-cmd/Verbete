@@ -292,11 +292,14 @@ export async function setWinCondition(
       }),
     );
   }
-  void (supabase.rpc as any)("host_update_room_config", {
+  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
+  (supabase.rpc as any)("host_update_room_config", {
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { win_condition: condition, win_target: target },
-  });
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error("host_update_room_config" + " failed", error);
+  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
 }
 
 // ---------- Game flow (driven by host browser) ----------
@@ -404,11 +407,14 @@ export async function setNivel(roomId: string, actorId: string, nivel: NivelFilt
       }),
     );
   }
-  void (supabase.rpc as any)("host_update_room_config", {
+  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
+  (supabase.rpc as any)("host_update_room_config", {
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { nivel },
-  });
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error("host_update_room_config" + " failed", error);
+  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
 }
 
 export async function setCategories(roomId: string, actorId: string, categories: string[]) {
@@ -419,11 +425,14 @@ export async function setCategories(roomId: string, actorId: string, categories:
       }),
     );
   }
-  void (supabase.rpc as any)("host_update_room_config", {
+  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
+  (supabase.rpc as any)("host_update_room_config", {
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { categories },
-  });
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error("host_update_room_config" + " failed", error);
+  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -945,11 +954,14 @@ export async function setRoomMode(roomId: string, actorId: string, mode: RoomMod
     }
   }
   // RPC já zera team_id de todos quando mode='individual'.
-  void (supabase.rpc as any)("host_update_room_config", {
+  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
+  (supabase.rpc as any)("host_update_room_config", {
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { mode, teams: nextTeams },
-  });
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error("host_update_room_config" + " failed", error);
+  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
 }
 
 export async function setRoomTeams(roomId: string, actorId: string, teams: Team[]) {
@@ -960,11 +972,14 @@ export async function setRoomTeams(roomId: string, actorId: string, teams: Team[
       }),
     );
   }
-  void (supabase.rpc as any)("host_update_room_config", {
+  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
+  (supabase.rpc as any)("host_update_room_config", {
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { teams },
-  });
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error("host_update_room_config" + " failed", error);
+  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
 }
 
 export async function assignPlayerToTeam(
@@ -980,12 +995,15 @@ export async function assignPlayerToTeam(
       }),
     );
   }
-  void (supabase.rpc as any)("assign_player_team", {
+  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
+  (supabase.rpc as any)("assign_player_team", {
     p_room_id: roomId,
     p_actor_id: actorId,
     p_player_id: playerId,
     p_team_id: teamId ?? "",
-  });
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error("assign_player_team" + " failed", error);
+  }, (e: unknown) => console.error("assign_player_team" + " failed", e));
 }
 
 export async function autoBalanceTeams(roomId: string, actorId: string, players: Player[], teams: Team[]) {
