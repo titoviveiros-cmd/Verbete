@@ -18,6 +18,26 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
   const [text, setText] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+
+  // Frases prontas (3 sugestões por rodada). Com a chave de IA ativa vêm do
+  // gerador; sem ela, do pool local — sempre distintas entre si.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    if (isCoordinator) return;
+    let alive = true;
+    setSuggestions([]);
+    (async () => {
+      const out: string[] = [];
+      for (let i = 0; i < 3 && alive; i++) {
+        try {
+          const s = await generateAiDefinitionForPlayer(word, room.id, room.current_round);
+          if (s && !out.includes(s)) out.push(s);
+        } catch { /* segue com as que tiver */ }
+        if (alive) setSuggestions([...out]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [room.id, room.current_round, isCoordinator, word.id]);
   const myDef = useMemo(() => definitions.find((d) => d.player_id === me?.id), [definitions, me?.id]);
   const writers = useMemo(
     () => players.filter((p) => p.id !== room.current_coordinator && !p.kicked_at),
@@ -241,6 +261,23 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
               <span className={text.length > 120 ? "text-pink" : text.length > 90 ? "text-sun" : ""}>{text.length}/140</span>
               <span>{submittedCount}/{writers.length} enviaram</span>
             </div>
+
+            {/* Frases prontas: um toque preenche o campo (pedido de playtest —
+                dá opção a quem não quer digitar; ainda dá pra editar antes de enviar). */}
+            {suggestions.length > 0 && !submitted && (
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => { void playUITap(); setText(s.slice(0, 140)); }}
+                    className="text-left text-[12px] leading-snug px-2.5 py-1.5 rounded-xl bg-card/70 border border-white/15 hover:border-pink/50 active:scale-[0.98] transition"
+                  >
+                    💡 {s}
+                  </button>
+                ))}
+              </div>
+            )}
             {pending.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">faltam:</span>

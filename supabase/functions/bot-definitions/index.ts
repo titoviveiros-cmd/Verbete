@@ -38,25 +38,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Auth: exige um JWT de usuário autenticado.
-  // A anon key não é mais aceita — qualquer chamada externa sem sessão é rejeitada.
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  const { data: userRes, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userRes?.user) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
+  // Gate por CONTEXTO DE JOGO em vez de login: convidados são o público
+  // principal e a exigência de JWT fazia TODA geração cair no fallback de
+  // templates (causa das definições repetidas do playtest). Abuso é contido
+  // adiante: a palavra pedida precisa ser a palavra CORRENTE de uma sala em
+  // fase de escrita — fora disso, 403.
   try {
     const body = await req.json();
     const wordId = typeof body?.word_id === "string" ? body.word_id : "";
@@ -70,6 +56,21 @@ Deno.serve(async (req) => {
 
     // Busca palavra + significado server-side (service role), tentando words depois room_words.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Validação de contexto: só gera para a palavra corrente de uma sala
+    // em fase de escrita/embaralhamento (substitui o gate de login).
+    const { data: activeRoom } = await admin
+      .from("rooms")
+      .select("id")
+      .eq("current_word_id", wordId)
+      .in("status", ["writing", "shuffling"])
+      .limit(1)
+      .maybeSingle();
+    if (!activeRoom) {
+      return new Response(JSON.stringify({ error: "no_active_round_for_word", definitions: [] }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     let word = "";
     let meaning = "";
     let category = "";

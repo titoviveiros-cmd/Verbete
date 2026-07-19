@@ -172,7 +172,7 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           </div>
         )}
 
-        {step >= 1 && <AboutWordCard roomId={room.id} word={word} />}
+        {/* Card "Sobre a palavra" removido a pedido do usuário (2026-07-19). */}
 
 
         {step >= 2 && (
@@ -254,53 +254,6 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
         )}
       </div>
 
-    </motion.div>
-  );
-}
-
-// Momento de aprendizado (spec): curiosidade, origem, pronúncia e exemplo
-// da palavra da rodada. Fase 1 (segurança): esses campos não trafegam mais
-// durante a rodada — são buscados aqui via get_word_reveal(), que o servidor
-// só responde quando a sala está em reveal/scoreboard/finished.
-function AboutWordCard({ roomId, word: promptWord }: { roomId: string; word: Word }) {
-  const [full, setFull] = useState<Word | null>(null);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { data } = await (supabase.rpc as any)("get_word_reveal", { p_room_id: roomId });
-      if (alive && data) setFull(data as Word);
-    })().catch(() => {});
-    return () => { alive = false; };
-  }, [roomId]);
-
-  const word = full ?? promptWord;
-  const hasContent = !!(word.curiosidade || word.origem || word.pronuncia || word.exemplo || word.classe);
-  if (!hasContent) return null;
-  return (
-    <motion.div
-      initial={{ y: 16, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ delay: 0.6, duration: 0.4 }}
-      className="sticker bg-card/70 border border-white/10 space-y-2"
-    >
-      <p className="text-center text-xs uppercase tracking-wider font-display text-sun">
-        📖 sobre a palavra
-      </p>
-      <div className="flex items-baseline justify-center gap-2 flex-wrap">
-        <span className="font-display text-lg capitalize">{word.word}</span>
-        {word.pronuncia && <span className="text-sm text-muted-foreground font-body">[{word.pronuncia}]</span>}
-        {word.classe && <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display">{word.classe}</span>}
-      </div>
-      {word.curiosidade && (
-        <p className="text-sm leading-snug text-foreground/90">💡 {word.curiosidade}</p>
-      )}
-      {word.origem && (
-        <p className="text-xs text-muted-foreground">🌍 Origem: {word.origem}</p>
-      )}
-      {word.exemplo && (
-        <p className="text-xs text-muted-foreground italic">✏️ "{word.exemplo}"</p>
-      )}
     </motion.div>
   );
 }

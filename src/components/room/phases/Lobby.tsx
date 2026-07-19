@@ -11,29 +11,26 @@ import { Mascot } from "@/components/Mascot";
 import { playJoin, playBotJoin, playKick, playUITap } from "@/lib/sound";
 
 export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
+  // Categorias enxutas (pedido do usuário 2026-07-19: natureza, história,
+  // cotidiano, comportamento, ações e religião saíram do filtro — as
+  // palavras continuam entrando pelo "Todas").
   infantil:      { emoji: "🧒", label: "Infantil" },
   gastronomia:   { emoji: "🍲", label: "Gastronomia" },
   ciencia:       { emoji: "🔬", label: "Ciência" },
-  natureza:      { emoji: "🌿", label: "Natureza" },
   planta:        { emoji: "🌱", label: "Plantas" },
   animal:        { emoji: "🐾", label: "Animais" },
   corpo:         { emoji: "🫀", label: "Corpo" },
   objeto:        { emoji: "🧰", label: "Objetos" },
-  comportamento: { emoji: "🎭", label: "Comportamento" },
   sentimento:    { emoji: "💗", label: "Sentimentos" },
   regional:      { emoji: "🗺️", label: "Regional" },
-  cotidiano:     { emoji: "☕", label: "Cotidiano" },
   pessoa:        { emoji: "🧑", label: "Pessoas" },
   lugar:         { emoji: "📍", label: "Lugares" },
   qualidade:     { emoji: "✨", label: "Qualidades" },
   adjetivo:      { emoji: "🎨", label: "Adjetivos" },
   verbo:         { emoji: "🏃", label: "Verbos" },
-  acao:          { emoji: "⚡", label: "Ações" },
-  historia:      { emoji: "🏛️", label: "História" },
   direito:       { emoji: "⚖️", label: "Direito" },
   medicina:      { emoji: "🩺", label: "Medicina" },
   literatura:    { emoji: "📚", label: "Literatura" },
-  religiao:      { emoji: "⛪", label: "Religião" },
   nautica:       { emoji: "⚓", label: "Náutica" },
 };
 
