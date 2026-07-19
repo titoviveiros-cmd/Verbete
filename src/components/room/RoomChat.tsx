@@ -115,19 +115,30 @@ export function RoomChat({ roomId, status, playerId, players }: {
               {messages.map((m) => {
                 const p = playerFor(m.player_id);
                 const mine = m.player_id === playerId;
+                const avatar = (
+                  <span
+                    className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-base border border-white/20"
+                    style={{ background: p?.color ? `${p.color}33` : "rgba(255,255,255,0.08)" }}
+                    title={p?.nickname}
+                  >
+                    {p?.avatar ?? "👤"}
+                  </span>
+                );
                 return (
-                  <div key={m.id} className={"flex " + (mine ? "justify-end" : "justify-start")}>
+                  <div key={m.id} className={"flex items-end gap-1.5 " + (mine ? "justify-end" : "justify-start")}>
+                    {!mine && avatar}
                     <div className={
-                      "max-w-[85%] rounded-2xl px-2.5 py-1.5 text-sm leading-snug " +
+                      "max-w-[78%] rounded-2xl px-2.5 py-1.5 text-sm leading-snug " +
                       (mine ? "bg-pink/25 border border-pink/30" : "bg-white/8 border border-white/10")
                     }>
                       {!mine && (
                         <span className="block text-[10px] font-display text-sun leading-none mb-0.5">
-                          {p ? `${p.avatar} ${p.nickname}` : "Jogador"}
+                          {p?.nickname ?? "Jogador"}
                         </span>
                       )}
                       <span className="break-words">{m.text}</span>
                     </div>
+                    {mine && avatar}
                   </div>
                 );
               })}

@@ -19,22 +19,39 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
   const [submitted, setSubmitted] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
-  // Frases prontas (3 sugestões por rodada). Com a chave de IA ativa vêm do
-  // gerador; sem ela, do pool local — sempre distintas entre si.
+  // Frases prontas (3 sugestões por rodada) em UMA chamada de IA com
+  // personas distintas — mais variedade e menos latência que 3 chamadas.
+  // Sem IA disponível, cai no pool local (sempre distintas entre si).
   const [suggestions, setSuggestions] = useState<string[]>([]);
   useEffect(() => {
     if (isCoordinator) return;
     let alive = true;
     setSuggestions([]);
     (async () => {
-      const out: string[] = [];
-      for (let i = 0; i < 3 && alive; i++) {
-        try {
-          const s = await generateAiDefinitionForPlayer(word, room.id, room.current_round);
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { sanitizeDefinition } = await import("@/lib/text-filter");
+      const { BOT_FAKE_DEFINITIONS_TEMPLATES } = await import("@/lib/bot-names");
+      let out: string[] = [];
+      try {
+        const { data } = await supabase.functions.invoke("bot-definitions", {
+          body: { word_id: word.id, count: 3, personas: ["conciso", "contextual", "comparativo"] },
+        });
+        const arr = (data as { definitions?: unknown[] } | null)?.definitions ?? [];
+        out = arr
+          .filter((s): s is string => typeof s === "string" && s.length > 5)
+          .map((s) => sanitizeDefinition(s, 140, word.word))
+          .filter((s, i, a) => s.length > 0 && a.indexOf(s) === i)
+          .slice(0, 3);
+      } catch { /* fallback abaixo */ }
+      if (out.length < 3) {
+        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(() => Math.random() - 0.5);
+        for (const fb of pool) {
+          if (out.length >= 3) break;
+          const s = sanitizeDefinition(fb, 140, word.word);
           if (s && !out.includes(s)) out.push(s);
-        } catch { /* segue com as que tiver */ }
-        if (alive) setSuggestions([...out]);
+        }
       }
+      if (alive) setSuggestions(out);
     })();
     return () => { alive = false; };
   }, [room.id, room.current_round, isCoordinator, word.id]);
