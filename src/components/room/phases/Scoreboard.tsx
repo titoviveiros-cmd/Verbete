@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   nextRound, computeTeamScores,
@@ -32,16 +32,9 @@ function ScoreboardImpl({ room, players, isHost }: {
     return () => clearInterval(iv);
   }, [room.current_round, scoreTransitionDone]);
 
-  // Avanço automático (spec: ranking 8s -> nova rodada). Só o host dispara;
-  // a RPC é idempotente e o cron cobre o caso de host ausente. O botão
-  // manual continua como fallback caso esta chamada falhe.
-  const autoAdvancedRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!isHost || holdLeft > 0 || !scoreTransitionDone) return;
-    if (autoAdvancedRef.current === room.current_round) return;
-    autoAdvancedRef.current = room.current_round;
-    void nextRound(room, players);
-  }, [holdLeft, isHost, scoreTransitionDone, room.current_round]);
+  // Sem auto-avanço no client (feedback de playtest: tirava a serventia
+  // do botão). O host decide quando seguir; se estiver ausente, o cron
+  // server-side avança sozinho após o hold — backstop já existente.
 
   useEffect(() => {
     (async () => {
@@ -236,16 +229,10 @@ function ScoreboardImpl({ room, players, isHost }: {
         })}
       </div>
       {isHost ? (
-        holdLeft > 0 ? (
-          <div className="btn-pop bg-card text-center text-lg py-3 font-display opacity-80 cursor-not-allowed shrink-0">
-            ⏳ Próxima rodada em <span className="text-sun text-2xl">{holdLeft}</span>s
-          </div>
-        ) : (
-          <button onClick={() => nextRound(room, players)}
-            className="btn-pop bg-gradient-fun text-white text-2xl py-3 shrink-0">
-            ▶ Próxima rodada
-          </button>
-        )
+        <button onClick={() => nextRound(room, players)}
+          className="btn-pop bg-gradient-fun text-white text-2xl py-3 shrink-0">
+          ▶ Próxima rodada{holdLeft > 0 ? <span className="text-sm opacity-80"> · {holdLeft}s</span> : null}
+        </button>
       ) : (
         <p className="text-center text-muted-foreground italic shrink-0">
           {holdLeft > 0

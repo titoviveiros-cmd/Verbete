@@ -70,8 +70,10 @@ export function RoomChat({ roomId, status, playerId, players }: {
         aria-label={open ? "Fechar chat" : "Abrir chat"}
         className="fixed z-[60] w-12 h-12 rounded-full bg-gradient-fun text-white text-xl shadow-pop border-2 border-white/25 flex items-center justify-center"
         style={{
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)",
-          right: "calc(env(safe-area-inset-right, 0px) + 12px)",
+          // Acima da barra de reações e dos CTAs de rodapé (playtest:
+          // sobrepunha "Próxima rodada"/reações em telas menores).
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 168px)",
+          right: "calc(env(safe-area-inset-right, 0px) + 10px)",
         }}
       >
         💬
