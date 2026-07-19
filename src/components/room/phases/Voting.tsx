@@ -55,10 +55,15 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
     if (!isHost) return;
     if (botsVotedRef.current) return;
     const bots = players.filter((p) => p.is_bot);
-    if (bots.length) {
-      botsVotedRef.current = true;
-      botsVote(room.id, room.current_round, bots, definitions);
-    }
+    if (!bots.length) return;
+    // Só dispara quando o BALLOT real chegou (cédulas com letra) — no
+    // mount a lista ainda pode ser o shape da fase de escrita (sem
+    // letras) ou estar vazia; disparar cedo fazia bots "não votarem" e a
+    // rodada esperar o timer inteiro.
+    const ballot = definitions.filter((d) => d.letter && d.round === room.current_round);
+    if (!ballot.length) return;
+    botsVotedRef.current = true;
+    botsVote(room.id, room.current_round, bots, ballot);
   }, [isHost, players, room.id, room.current_round, definitions]);
 
   const revealFiredRef = useRef<number | null>(null);
