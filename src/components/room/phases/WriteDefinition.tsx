@@ -151,7 +151,7 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
     if (!word || aiLoading || submitted || myDef) return;
     setAiLoading(true);
     try {
-      const generated = await generateAiDefinitionForPlayer(word);
+      const generated = await generateAiDefinitionForPlayer(word, room.id, room.current_round);
       setText(generated.slice(0, 140));
     } catch (e) {
       console.error("generateAiDefinitionForPlayer failed", e);

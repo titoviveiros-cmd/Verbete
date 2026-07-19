@@ -700,21 +700,44 @@ export async function botSubmitDefinitions(
 // Gera UMA definição falsa no mesmo estilo dos bots, para o jogador humano
 // usar como "auto" caso não queira digitar. Usa a edge function de bots
 // (mesma IA + mesmas regras gramaticais), com fallback local.
-export async function generateAiDefinitionForPlayer(word: Word): Promise<string> {
+export async function generateAiDefinitionForPlayer(word: Word, roomId?: string, round?: number): Promise<string> {
   const personas = ["formal", "giria", "tecnico", "regional", "poetico", "pratico"];
   const persona = personas[Math.floor(Math.random() * personas.length)];
+
+  // Evita colisão com definições já enviadas na rodada: sem a chave de IA,
+  // bots e o "gerar automática" sorteiam do MESMO pool de templates — sem
+  // este dedup, o jogador recebia "definição igual" ao tentar enviar.
+  const used = new Set<string>();
+  if (roomId && round != null) {
+    try {
+      const { data: existing } = await supabase
+        .from("definitions").select("text").eq("room_id", roomId).eq("round", round);
+      for (const row of existing ?? []) {
+        const t = (row as { text?: string }).text;
+        if (t) used.add(normalizeDefText(t));
+      }
+    } catch { /* dedup é melhor-esforço */ }
+  }
+
   try {
     const { data } = await supabase.functions.invoke("bot-definitions", {
       body: { word_id: word.id, count: 1, personas: [persona] },
     });
     const arr = (data as any)?.definitions;
     const raw = Array.isArray(arr) ? arr.find((s: unknown) => typeof s === "string" && (s as string).length > 5) : null;
-    if (raw) return sanitizeDefinition(raw as string, 140, word.word);
+    if (raw) {
+      const clean = sanitizeDefinition(raw as string, 140, word.word);
+      if (!used.has(normalizeDefText(clean))) return clean;
+    }
   } catch (e) {
     console.warn("generateAiDefinitionForPlayer failed, using fallback", e);
   }
-  const fb = BOT_FAKE_DEFINITIONS_TEMPLATES[Math.floor(Math.random() * BOT_FAKE_DEFINITIONS_TEMPLATES.length)];
-  return sanitizeDefinition(fb, 140, word.word);
+  const pool = shuffle([...BOT_FAKE_DEFINITIONS_TEMPLATES]);
+  for (const fb of pool) {
+    const clean = sanitizeDefinition(fb, 140, word.word);
+    if (!used.has(normalizeDefText(clean))) return clean;
+  }
+  return sanitizeDefinition(pool[0] + " incomum", 140, word.word);
 }
 
 export async function startShuffling(roomId: string): Promise<boolean> {
