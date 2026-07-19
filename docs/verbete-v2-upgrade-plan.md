@@ -73,6 +73,10 @@ Vitest + RTL (unit: text-filter, sanitização, timers, XP/nível, avatars, esta
 ### Fase 3 — Design system
 Tokens semânticos em `src/styles.css` (@theme) + `src/design/tokens.ts` (velocidades/easing/z-index/breakpoints); componentes `Game*` em `src/components/game/` (lista da spec); migração gradual — nenhum big-bang. Referência: gradiente magenta→roxo→azul da Home atual. Corrigir mensagens EN, theme-color PWA (#1a0f2e escuro), estados de erro/offline.
 
+**Diretrizes do usuário (2026-07-19):**
+- `VerbeteLogo`: a REFERÊNCIA canônica é o "Verbete" da PRIMEIRA TELA (Home) — ícone "V" com livro + wordmark bubbly branca com contorno/sombra sobre o gradiente. Todas as demais ocorrências da marca (formulário de criar sala, lobby, erros, splash) passam a usar exatamente esse tratamento; eliminar a variante "texto com gradiente" da tela de criar sala.
+- Fase de EMBARALHAMENTO (Shuffling): o VERSO das cédulas/cartas da animação deve exibir o logotipo do jogo (hoje mostra o ícone `/icon-192.png` genérico dentro da carta — trocar pelo `VerbeteLogo`/marca oficial como padronagem de verso de baralho).
+
 ### Fase 4 — Coreografia
 Uma fase por commit, na ordem: Lobby → Escolha → Escrita → Embaralhamento → Votação → Revelação (clímax: sequência 8 passos da spec) → Placar (animação de posições) → Final (pódio + revanche). 60 FPS: transform/opacity apenas; `prefers-reduced-motion` corta partículas e loops.
 
