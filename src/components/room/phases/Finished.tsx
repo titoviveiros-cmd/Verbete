@@ -43,25 +43,13 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
       const { supabase } = await import("@/integrations/supabase/client");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const me = sorted.find((p) => p.id === playerId);
-      if (!me) return;
-      const position = sorted.findIndex((p) => p.id === playerId) + 1;
 
-      // Conta acertos da verdade e jogadores enganados a partir do histórico
-      const truthIds = new Set(history.defs.filter(isTruthDef).map((d) => d.id));
-      const myDefIds = new Set(history.defs.filter((d) => d.player_id === playerId).map((d) => d.id));
-      const truthHits = history.votes.filter((v) => v.voter_id === playerId && truthIds.has(v.definition_id)).length;
-      const fooledCount = history.votes.filter((v) => myDefIds.has(v.definition_id)).length;
-
+      // Fase 1 (S3): o servidor calcula TUDO (score, posição, acertos,
+      // blefes, XP, conquistas) a partir das tabelas oficiais. O client
+      // apenas vincula sua identidade ao jogador e informa a sala.
+      await (supabase.rpc as any)("claim_player_identity", { p_player_id: playerId });
       const { data } = await (supabase.rpc as any)("record_match_result", {
-        p_user_id: user.id,
         p_room_code: roomCode,
-        p_final_score: me.score,
-        p_position: position,
-        p_players_count: sorted.length,
-        p_rounds_coordinated: me.coordinator_count ?? 0,
-        p_truth_hits: truthHits,
-        p_fooled_count: fooledCount,
       });
       const res = data as { xp_gained?: number; level?: number; unlocked?: string[]; deduped?: boolean } | null;
       if (res && !res.deduped && (res.xp_gained ?? 0) > 0) {
