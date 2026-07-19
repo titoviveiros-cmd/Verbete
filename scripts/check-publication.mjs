@@ -1,0 +1,10 @@
+import pg from "pg";
+const c = new pg.Client({ connectionString: process.env.DB_URL, ssl: { rejectUnauthorized: false } });
+await c.connect();
+const pub = await c.query("SELECT tablename FROM pg_publication_tables WHERE pubname='supabase_realtime' ORDER BY tablename");
+console.log("publication:", pub.rows.map((x) => x.tablename).join(","));
+const fn = await c.query("SELECT count(*) FROM pg_proc WHERE proname='get_round_sync'");
+console.log("get_round_sync exists:", fn.rows[0].count);
+const mig = await c.query("SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3");
+console.log("last migrations:", mig.rows.map((x) => x.version).join(","));
+await c.end();

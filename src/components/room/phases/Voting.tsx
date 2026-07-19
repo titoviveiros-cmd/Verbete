@@ -5,6 +5,7 @@ import {
   type Definition, type Player, type Room, type Vote, type Word,
 } from "@/lib/room";
 import { playVoteCast } from "@/lib/sound";
+import { getStored } from "@/lib/player-id";
 import { ReportButton } from "@/components/room/ReportButton";
 import type { RoundExtension } from "@/hooks/use-room";
 
@@ -22,7 +23,16 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
     [votes, room.current_round],
   );
   const myVote = useMemo(() => roundVotes.find((v) => v.voter_id === me?.id), [roundVotes, me?.id]);
-  const myDef = useMemo(() => definitions.find((d) => d.player_id === me?.id), [definitions, me?.id]);
+  // S1: cédulas chegam sem autor — a própria definição é identificada pelo
+  // id devolvido no envio (persistido em `mydef:<sala>:<rodada>`).
+  const myDefId = useMemo(
+    () => getStored<string>(`mydef:${room.id}:${room.current_round}`, ""),
+    [room.id, room.current_round],
+  );
+  const myDef = useMemo(
+    () => definitions.find((d) => d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id)),
+    [definitions, myDefId, me?.id],
+  );
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const remaining = room.round_phase_ends_at ? Math.max(0, Math.floor((new Date(room.round_phase_ends_at).getTime() - now) / 1000)) : 0;
@@ -240,7 +250,9 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
         onContextMenu={(e) => e.preventDefault()}
       >
         {ordered.map((d) => {
-          const isMine = d.player_id === me?.id;
+          // S1: as cédulas chegam sem autor — a própria é reconhecida pelo
+          // id guardado no envio (fallback pro player_id em salas antigas).
+          const isMine = d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id);
           const isPicked = effectiveVoteDefId === d.id;
           return (
             <motion.button

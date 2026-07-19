@@ -47,7 +47,9 @@ function ScoreboardImpl({ room, players, isHost }: {
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
       const [{ data: defs }, { data: votes }, { data: rounds }, { data: reveal }, { data: exts }] = await Promise.all([
-        supabase.from("definitions").select("*").eq("room_id", room.id),
+        // S1: leitura direta de definitions foi revogada — RPC devolve as
+        // rodadas já reveladas (a corrente só a partir do reveal).
+        (supabase.rpc as any)("get_room_definitions", { p_room_id: room.id }),
         supabase.from("votes").select("*").eq("room_id", room.id),
         supabase.from("rounds").select("round,coordinator_id,scored_at").eq("room_id", room.id),
         supabase.rpc("get_room_reveal", { p_room_id: room.id }),

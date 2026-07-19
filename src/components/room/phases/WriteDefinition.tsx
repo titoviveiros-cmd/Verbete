@@ -57,13 +57,11 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
         // com alguém faltando. Avançar nesse caso pula a penalidade/prorrogação
         // do timeout — o que é o bug que esta verificação previne.
         try {
-          const { count } = await supabase
-            .from("definitions")
-            .select("id", { count: "exact", head: true })
-            .eq("room_id", room.id)
-            .eq("round", roundAtCheck)
-            .neq("player_id", "__truth__");
-          if ((count ?? 0) < expectedDefs) return; // alguém ainda falta — deixa o timer/RPC cuidar
+          // S1: recontagem via RPC phase-aware (SELECT direto foi revogado).
+          const { data: sync } = await supabase.rpc("get_round_sync" as never, { p_room_id: room.id } as never);
+          const serverDefs = (sync as { definitions?: { round: number }[] } | null)?.definitions ?? [];
+          const count = serverDefs.filter((d) => d.round === roundAtCheck).length;
+          if (count < expectedDefs) return; // alguém ainda falta — deixa o timer/RPC cuidar
         } catch (e) {
           console.warn("allSubmitted recount failed, falling back to advance", e);
         }

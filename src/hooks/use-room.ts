@@ -76,16 +76,16 @@ export function useRoom(code: string | undefined, playerId?: string) {
       if (!alive) return;
       if (e || !r) { setError(e?.message ?? "Sala não encontrada"); setLoading(false); return; }
       setRoom(r as unknown as Room);
-      const [{ data: ps }, { data: ds }, { data: vs }, { data: rxs }] = await Promise.all([
+      const [{ data: ps }, { data: sync }, { data: rxs }] = await Promise.all([
         supabase.from("players").select("*").eq("room_id", r.id).is("kicked_at", null).order("joined_at"),
-        supabase.from("definitions").select("*").eq("room_id", r.id).eq("round", r.current_round),
-        supabase.from("votes").select("*").eq("room_id", r.id).eq("round", r.current_round),
+        (supabase.rpc as any)("get_round_sync", { p_room_id: r.id }),
         supabase.from("round_extensions").select("*").eq("room_id", r.id),
       ]);
       if (!alive) return;
       setPlayers((ps as Player[]) ?? []);
-      setDefinitions((ds as Definition[]) ?? []);
-      setVotes((vs as Vote[]) ?? []);
+      const syncPayload = sync as { definitions?: Definition[]; votes?: Vote[] } | null;
+      setDefinitions(syncPayload?.definitions ?? []);
+      setVotes(syncPayload?.votes ?? []);
       setRoundExtensions((rxs as RoundExtension[]) ?? []);
       setLoading(false);
     };
@@ -139,27 +139,11 @@ export function useRoom(code: string | undefined, playerId?: string) {
             const copy = [...cur]; copy[idx] = incoming; return copy;
           });
         })
-      .on("postgres_changes", { event: "*", schema: "public", table: "definitions", filter: `room_id=eq.${room.id}` },
-        (p) => {
-          lastEventAtRef.current = Date.now();
-          setDefinitions((cur) => {
-            if (p.eventType === "DELETE") return cur.filter((x) => x.id !== (p.old as Definition).id);
-            const incoming = p.new as Definition;
-            // Remove qualquer linha "pending_" do mesmo jogador/rodada
-            // (UI otimista) antes de inserir/atualizar a linha real.
-            const cleaned = cur.filter(
-              (x) =>
-                !(
-                  x.id.startsWith("pending_") &&
-                  x.player_id === incoming.player_id &&
-                  x.round === incoming.round
-                ),
-            );
-            const idx = cleaned.findIndex((x) => x.id === incoming.id);
-            if (idx === -1) return [...cleaned, incoming];
-            const copy = [...cleaned]; copy[idx] = incoming; return copy;
-          });
-        })
+      // NOTA (Fase 1/S1): `definitions` saiu da publication realtime — a
+      // verdade vazava no payload dos eventos. A sincronização de definições
+      // agora é 100% via RPC get_round_sync (poll de fase abaixo), que o
+      // servidor molda por fase: progresso sem texto na escrita, cédulas sem
+      // autor na votação, tudo visível só a partir da revelação.
       .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `room_id=eq.${room.id}` },
         (p) => {
           lastEventAtRef.current = Date.now();
@@ -361,34 +345,27 @@ export function useRoom(code: string | undefined, playerId?: string) {
     setDefinitions([]);
     setVotes([]);
     (async () => {
-      const [{ data: ds }, { data: vs }] = await Promise.all([
-        supabase.from("definitions").select("*").eq("room_id", room.id).eq("round", room.current_round),
-        supabase.from("votes").select("*").eq("room_id", room.id).eq("round", room.current_round),
-      ]);
-      setDefinitions((ds as Definition[]) ?? []);
-      setVotes((vs as Vote[]) ?? []);
+      const { data: sync } = await (supabase.rpc as any)("get_round_sync", { p_room_id: room.id });
+      const payload = sync as { definitions?: Definition[]; votes?: Vote[] } | null;
+      setDefinitions(payload?.definitions ?? []);
+      setVotes(payload?.votes ?? []);
     })();
   }, [room?.id, room?.current_round]);
 
-  // `definitions` is intentionally not in realtime (it contains hidden truth
-  // flags in the table). During active phases we refresh the safe columns so
-  // every client sees submitted definitions, assigned letters and truth rows.
+  // Fonte única de definições/votos durante as fases ativas: a RPC
+  // get_round_sync devolve o shape que o servidor permite para a fase
+  // (S1: sem texto na escrita, sem autor na votação, completo no reveal).
   useEffect(() => {
     if (!room?.id) return;
     if (!["writing", "shuffling", "voting", "reveal"].includes(room.status)) return;
     let cancelled = false;
     const refreshRound = async () => {
-      const [{ data: ds }, { data: vs }] = await Promise.all([
-        supabase
-          .from("definitions")
-          .select("id,room_id,round,player_id,text,letter")
-          .eq("room_id", room.id)
-          .eq("round", room.current_round),
-        supabase.from("votes").select("*").eq("room_id", room.id).eq("round", room.current_round),
-      ]);
+      const { data: sync } = await (supabase.rpc as any)("get_round_sync", { p_room_id: room.id });
       if (cancelled) return;
-      setDefinitions((ds as Definition[]) ?? []);
-      setVotes((vs as Vote[]) ?? []);
+      const payload = sync as { definitions?: Definition[]; votes?: Vote[] } | null;
+      if (!payload) return;
+      setDefinitions(payload.definitions ?? []);
+      setVotes(payload.votes ?? []);
     };
     refreshRound();
     const interval = room.status === "writing" ? 1200 : 700;

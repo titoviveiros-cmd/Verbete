@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { setStored } from "./player-id";
 import { sanitizeDefinition, sanitizeNickname, humanizeMeaning } from "./text-filter";
 import { BOT_NAMES, BOT_FAKE_DEFINITIONS_TEMPLATES, randomBotDef } from "./bot-names";
 import { randomAvatar, randomColor } from "./avatars";
@@ -529,24 +530,9 @@ export async function submitDefinition(roomId: string, round: number, playerId: 
   // Passa a palavra-alvo para o sanitizer detectar tentativas de "colar a resposta"
   // mesmo com acento/maiúscula/separadores que sobreviveriam à normalização básica.
   const clean = sanitizeDefinition(text, 140, isTruth ? undefined : word);
-
-  // Dedup: jogadores humanos não podem enviar uma definição idêntica
-  // (após normalização) a outra já submetida na mesma rodada — inclusive
-  // a definição verdadeira. Bots usam sua própria dedup interna.
-  if (!isTruth) {
-    const key = normalizeDefText(clean);
-    if (key.length > 0) {
-      const { data: existing } = await supabase
-        .from("definitions")
-        .select("text, player_id")
-        .eq("room_id", roomId)
-        .eq("round", round);
-      const clash = (existing ?? []).some(
-        (d) => d.player_id !== playerId && normalizeDefText(String(d.text ?? "")) === key,
-      );
-      if (clash) throw new DuplicateDefinitionError();
-    }
-  }
+  // Dedup de texto agora é 100% server-side (submit_definition devolve
+  // reason 'duplicate_definition') — o client não lê mais as definições
+  // da rodada (Fase 1/S1).
 
   // Otimismo: já injeta a definição na UI local com id sintético
   // (`pending_${player}_${round}`). O reducer do realtime dedupica por
@@ -581,7 +567,15 @@ export async function submitDefinition(roomId: string, round: number, playerId: 
       });
       if (error) throw error;
       if (data && (data as any).ok === false) {
+        if ((data as any).reason === "duplicate_definition") throw new DuplicateDefinitionError();
         throw new Error(`submit_definition rejected: ${(data as any).reason}`);
+      }
+      // Guarda o id da PRÓPRIA definição: na votação as cédulas chegam sem
+      // autor (S1), então este id é a única forma de bloquear o self-vote
+      // na UI (o servidor também bloqueia via trigger).
+      const realId = (data as any)?.id;
+      if (realId && typeof window !== "undefined") {
+        setStored(`mydef:${roomId}:${round}`, String(realId));
       }
     }
   } catch (e) {

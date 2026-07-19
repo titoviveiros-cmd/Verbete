@@ -27,7 +27,8 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
       const [{ data: defs }, { data: votes }] = await Promise.all([
-        supabase.from("definitions").select("id,room_id,round,player_id,text,letter").eq("room_id", roomId),
+        // S1: leitura direta de definitions foi revogada — RPC status-gated.
+        (supabase.rpc as any)("get_room_definitions", { p_room_id: roomId }),
         supabase.from("votes").select("*").eq("room_id", roomId),
       ]);
       setHistory({ defs: (defs ?? []) as Definition[], votes: (votes ?? []) as Vote[] });
