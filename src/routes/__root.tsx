@@ -12,6 +12,7 @@ import {
 import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { installAudioUnlock, playUITap, vibrate } from "@/lib/sound";
+import { ensureAnonSession } from "@/lib/auth-session";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { Toaster } from "@/components/ui/sonner";
@@ -181,6 +182,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => { installAudioUnlock(); }, []);
+  // S4: abre a sessão anônima já no boot para que o primeiro join/create
+  // saia com auth.uid() e a identidade seja reivindicada de imediato.
+  useEffect(() => { void ensureAnonSession(); }, []);
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;

@@ -78,7 +78,9 @@ function HomePage() {
       const room = await createRoom(playerId, cleanNick, avatar, color);
       // Marca este jogador como criador desta sala — usado para restaurar
       // identidade de host caso o /room/$code seja aberto em outra aba/sessão.
-      setStored("hosted:" + room.code, playerId);
+      // room.host_id (e não playerId): createRoom pode ter regenerado o id
+      // local se o antigo pertencia a outra identidade (player_id_taken).
+      setStored("hosted:" + room.code, room.host_id ?? playerId);
       nav({ to: "/room/$code", params: { code: room.code } });
     } catch (e) {
       setError((e as Error).message);

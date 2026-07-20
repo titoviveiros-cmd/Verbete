@@ -11,6 +11,14 @@ export function getPlayerId(): string {
   return id;
 }
 
+// S4: gera e persiste um NOVO id local. Usado quando o servidor responde
+// 'player_id_taken' (o id guardado pertence a outra identidade auth).
+export function regeneratePlayerId(): string {
+  const id = "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  if (typeof window !== "undefined") localStorage.setItem(KEY, id);
+  return id;
+}
+
 // Force-set the local player id (used to restore a host identity when
 // re-entering a room they created in a previous session/tab).
 export function setPlayerId(id: string) {

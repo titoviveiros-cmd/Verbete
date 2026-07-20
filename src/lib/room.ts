@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import { setStored } from "./player-id";
+import { setStored, regeneratePlayerId } from "./player-id";
+import { ensureAnonSession } from "./auth-session";
 import { sanitizeDefinition, sanitizeNickname, humanizeMeaning } from "./text-filter";
 import { BOT_NAMES, BOT_FAKE_DEFINITIONS_TEMPLATES, randomBotDef } from "./bot-names";
 import { randomAvatar, randomColor } from "./avatars";
@@ -122,14 +123,26 @@ function genCode(): string {
 
 export async function createRoom(hostId: string, nickname: string, avatar: string, color: string) {
   // Single-RPC creation (rooms+player insert in one transaction). Falls back to legacy path on error.
+  await ensureAnonSession();
   const cleanNick = sanitizeNickname(nickname);
-  const { data, error } = await (supabase.rpc as any)("create_room_with_host", {
-    p_host_id: hostId,
+  const callCreate = (pid: string) => (supabase.rpc as any)("create_room_with_host", {
+    p_host_id: pid,
     p_nickname: cleanNick,
     p_avatar: avatar,
     p_color: color,
   });
-  if (!error && data) return data as Room;
+  let { data, error } = await callCreate(hostId);
+  // S4: id local pertence a outra identidade — gera um novo e tenta 1x.
+  if (error && String(error.message ?? "").includes("player_id_taken")) {
+    ({ data, error } = await callCreate(regeneratePlayerId()));
+  }
+  if (!error && data) {
+    const room = data as Room;
+    // Amarra a identidade auth ao jogador do host (idempotente).
+    (supabase.rpc as any)("claim_player_identity", { p_player_id: room.host_id })
+      .then(() => {}, () => {});
+    return room;
+  }
 
   // Fallback (RPC unavailable)
   let code = genCode();
@@ -148,6 +161,7 @@ export async function createRoom(hostId: string, nickname: string, avatar: strin
 }
 
 export async function joinRoom(code: string, playerId: string, nickname: string, avatar: string, color: string) {
+  await ensureAnonSession();
   const { data: room, error } = await supabase
     .from("rooms").select("*").eq("code", code).maybeSingle();
   if (error) throw error;
@@ -168,19 +182,30 @@ export async function joinRoom(code: string, playerId: string, nickname: string,
 
   // Usa rejoin_room: se o jogador existir (mesmo kicked_at), preserva
   // a pontuação acumulada e zera apenas os contadores de penalidade.
-  const { error: rpcErr } = await (supabase.rpc as any)("rejoin_room", {
+  const callRejoin = (pid: string) => (supabase.rpc as any)("rejoin_room", {
     p_code: code,
-    p_player_id: playerId,
+    p_player_id: pid,
     p_nickname: cleanNick,
     p_avatar: avatar,
     p_color: color,
   });
+  let effectiveId = playerId;
+  let { error: rpcErr } = await callRejoin(playerId);
+  // S4: o id local pertence a outra identidade auth — gera um novo e
+  // tenta 1x. O componente da sala relê getPlayerId() após a navegação.
+  if (rpcErr && String(rpcErr.message ?? "").includes("player_id_taken")) {
+    effectiveId = regeneratePlayerId();
+    ({ error: rpcErr } = await callRejoin(effectiveId));
+  }
   if (rpcErr) {
     // Fallback legado
     await supabase.from("players").upsert({
-      id: playerId, room_id: room.id, nickname: cleanNick, avatar, color, is_connected: true,
+      id: effectiveId, room_id: room.id, nickname: cleanNick, avatar, color, is_connected: true,
     });
   }
+  // Amarra a identidade auth ao jogador (idempotente; ignora sem sessão).
+  (supabase.rpc as any)("claim_player_identity", { p_player_id: effectiveId })
+    .then(() => {}, () => {});
   return room as unknown as Room;
 }
 
