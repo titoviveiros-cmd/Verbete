@@ -186,6 +186,16 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
     } catch (e) {
       console.error("castVote failed", e);
       setOptimisticVoteId(null);
+      // Feedback explícito: com o lock server-side, voto na virada do
+      // timer é rejeitado — sem este aviso o jogador achava que tinha
+      // votado e estranhava o placar.
+      const msg = String((e as Error)?.message ?? "");
+      const { toast } = await import("sonner");
+      if (msg.includes("wrong_phase")) {
+        toast.error("⏰ O tempo acabou antes do seu voto — ele não contou nesta rodada.");
+      } else {
+        toast.error("Não foi possível registrar seu voto. Tente de novo.");
+      }
     }
   }, [hasVoted, myDef, room.id, room.current_round, me?.id]);
 

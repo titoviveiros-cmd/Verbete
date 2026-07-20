@@ -231,7 +231,7 @@ function ScoreboardImpl({ room, players, isHost }: {
       {isHost ? (
         <button onClick={() => nextRound(room, players)}
           className="btn-pop bg-gradient-fun text-white text-2xl py-3 shrink-0">
-          ▶ Próxima rodada{holdLeft > 0 ? <span className="text-sm opacity-80"> · {holdLeft}s</span> : null}
+          ▶ Próxima rodada
         </button>
       ) : (
         <p className="text-center text-muted-foreground italic shrink-0">
