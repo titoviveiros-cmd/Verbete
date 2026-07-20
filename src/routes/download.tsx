@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { VerbeteTile, verbeteWordmarkStyle } from "@/components/VerbeteLogo";
 
 export const Route = createFileRoute("/download")({
   head: () => ({
@@ -57,8 +58,14 @@ function DownloadPage() {
       </header>
 
       <section className="flex flex-col items-center text-center gap-3 pb-8">
-        <div className="text-6xl">📖✨</div>
-        <h1 className="font-display text-4xl leading-tight">Verbete</h1>
+        {/* Fase 3: marca canônica no lugar do emoji + texto simples */}
+        <VerbeteTile size={96} />
+        <h1
+          className="font-display font-black leading-tight mt-2"
+          style={verbeteWordmarkStyle(44)}
+        >
+          Verbete
+        </h1>
         <p className="text-base text-muted-foreground max-w-sm">
           Um jogo de palavras multiplayer feito pra rir com os amigos.
         </p>

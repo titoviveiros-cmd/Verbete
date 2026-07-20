@@ -12,6 +12,7 @@ import { SoundToggle } from "@/components/SoundToggle";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
+import { VerbeteTile, verbeteWordmarkStyle } from "@/components/VerbeteLogo";
 
 // Carregados sob demanda: nenhum aparece no bundle inicial da home.
 const Onboarding = lazy(() =>
@@ -353,55 +354,9 @@ function HomePage() {
               transition={{ type: "spring", stiffness: 180, damping: 14 }}
               className="relative"
             >
-              <div
-                className="relative w-[124px] h-[124px] rounded-[28px] flex flex-col items-center justify-center"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #ff4bb0 0%, #c026d3 50%, #6a1fd4 100%)",
-                  border: "5px solid #ffffff",
-                  boxShadow:
-                    "0 0 40px rgba(255,0,150,0.65), 0 12px 0 rgba(76,0,128,0.35), inset 0 3px 0 rgba(255,255,255,0.35)",
-                }}
-              >
-                <span
-                  className="font-display font-black leading-none select-none"
-                  style={{
-                    color: "#ffffff",
-                    fontSize: 82,
-                    marginTop: -6,
-                    marginBottom: -6,
-                    letterSpacing: "-0.05em",
-                    filter: "drop-shadow(0 4px 0 rgba(76,0,128,0.35))",
-                  }}
-                >
-                  V
-                </span>
-                {/* livro aberto abaixo */}
-                <svg
-                  width="60"
-                  height="20"
-                  viewBox="0 0 60 20"
-                  fill="none"
-                  aria-hidden
-                >
-                  <path
-                    d="M2 16 Q15 8 29 14 L29 6 Q15 0 2 8 Z"
-                    fill="#ffffff"
-                  />
-                  <path
-                    d="M58 16 Q45 8 31 14 L31 6 Q45 0 58 8 Z"
-                    fill="#ffffff"
-                  />
-                  <line
-                    x1="30"
-                    y1="6"
-                    x2="30"
-                    y2="16"
-                    stroke="#ffffff"
-                    strokeWidth="2"
-                  />
-                </svg>
-              </div>
+              {/* Fase 3: tile canônico vem do componente compartilhado —
+                  mesma marca em todas as telas (saída idêntica ao original). */}
+              <VerbeteTile size={124} />
             </motion.div>
 
             {/* Wordmark "Verbete" */}
@@ -415,15 +370,7 @@ function HomePage() {
                 delay: 0.1,
               }}
               className="relative mt-6 font-display font-black leading-none select-none"
-              style={{
-                fontSize: "clamp(56px, 16vw, 80px)",
-                color: "#ffffff",
-                WebkitTextStroke: "4px #4c1a8f",
-                paintOrder: "stroke fill",
-                filter:
-                  "drop-shadow(0 6px 0 #4c1a8f) drop-shadow(0 12px 24px rgba(76,26,143,0.55))",
-                letterSpacing: "-0.02em",
-              }}
+              style={verbeteWordmarkStyle()}
             >
               Verbete
             </motion.h1>
@@ -647,14 +594,12 @@ function HomePage() {
         </>
       ) : (
         <>
+          {/* Fase 3: marca canônica também no formulário — a variante de
+              texto com gradiente foi eliminada (diretriz 2026-07-19). */}
           <div className="text-center pt-3 pb-1">
             <motion.h1
-              className="font-display text-stroke text-4xl"
-              style={{
-                background: "var(--gradient-fun)",
-                WebkitBackgroundClip: "text",
-                color: "transparent",
-              }}
+              className="font-display font-black leading-none select-none inline-block"
+              style={verbeteWordmarkStyle(40)}
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 200 }}

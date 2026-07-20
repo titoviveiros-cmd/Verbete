@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { startVoting, type Definition, type Room, type Word } from "@/lib/room";
 import { playCardShuffle } from "@/lib/sound";
+import { VerbeteTile } from "@/components/VerbeteLogo";
 
 export function Shuffling({
   room,
@@ -79,13 +80,10 @@ export function Shuffling({
                 delay: i * 0.06,
               }}
             >
+              {/* Fase 3: verso da cédula com a marca oficial (diretriz
+                  2026-07-19) — antes era o ícone genérico do app. */}
               <div className="h-full w-full rounded-2xl flex items-center justify-center">
-                <img
-                  src="/icon-192.png"
-                  alt=""
-                  className="w-12 h-12 rounded-xl drop-shadow"
-                  draggable={false}
-                />
+                <VerbeteTile size={56} glow={false} />
               </div>
             </motion.div>
           );

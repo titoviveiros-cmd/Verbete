@@ -21,3 +21,4 @@ android/capacitor-cordova-android-plugins/
 # Playwright
 test-results/
 playwright-report/
+shots-*.png
