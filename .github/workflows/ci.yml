@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # O lockfile é gerado com npm 11 (local); o npm 10 do runner resolve a
+      # árvore diferente e falha o `npm ci` (Missing: lru-cache from lock file).
+      - name: Alinha versão do npm
+        run: npm install -g npm@11
       - name: Instala dependências
         run: npm ci
       - name: Typecheck
@@ -43,6 +47,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # O lockfile é gerado com npm 11 (local); o npm 10 do runner resolve a
+      # árvore diferente e falha o `npm ci` (Missing: lru-cache from lock file).
+      - name: Alinha versão do npm
+        run: npm install -g npm@11
       - name: Instala dependências
         run: npm ci
       - name: Suíte de integração (identidade + rodada E2E)
