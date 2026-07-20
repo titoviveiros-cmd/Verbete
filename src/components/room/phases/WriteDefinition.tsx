@@ -51,20 +51,31 @@ export function WriteDefinition({
   const [aiLoading, setAiLoading] = useState(false);
 
   // Frases prontas (2 sugestões por rodada — playtest mobile: com 3, a dica
-  // de "letras minúsculas" saía da tela) em UMA chamada de IA com personas
-  // distintas. Sem IA disponível, cai no pool local (sempre distintas).
+  // de "letras minúsculas" saía da tela). Latência (playtest 5G): o pool
+  // local aparece INSTANTANEAMENTE; a IA responde em background e troca as
+  // sugestões quando chegar — a tela nunca fica vazia esperando.
   const [suggestions, setSuggestions] = useState<string[]>([]);
   useEffect(() => {
     if (isCoordinator) return;
     let alive = true;
-    setSuggestions([]);
     (async () => {
-      const { supabase } = await import("@/integrations/supabase/client");
       const { sanitizeDefinition } = await import("@/lib/text-filter");
       const { BOT_FAKE_DEFINITIONS_TEMPLATES } =
         await import("@/lib/bot-names");
-      let out: string[] = [];
+      // 1) Pool local imediato
+      const local: string[] = [];
+      const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
+        () => Math.random() - 0.5,
+      );
+      for (const fb of pool) {
+        if (local.length >= 2) break;
+        const s = sanitizeDefinition(fb, 140, word.word);
+        if (s && !local.includes(s)) local.push(s);
+      }
+      if (alive) setSuggestions(local);
+      // 2) IA em background — quando responder, assume o lugar
       try {
+        const { supabase } = await import("@/integrations/supabase/client");
         const { data } = await supabase.functions.invoke("bot-definitions", {
           body: {
             word_id: word.id,
@@ -74,25 +85,24 @@ export function WriteDefinition({
         });
         const arr =
           (data as { definitions?: unknown[] } | null)?.definitions ?? [];
-        out = arr
+        const ai = arr
           .filter((s): s is string => typeof s === "string" && s.length > 5)
           .map((s) => sanitizeDefinition(s, 140, word.word))
           .filter((s, i, a) => s.length > 0 && a.indexOf(s) === i)
           .slice(0, 2);
-      } catch {
-        /* fallback abaixo */
-      }
-      if (out.length < 2) {
-        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
-          () => Math.random() - 0.5,
-        );
-        for (const fb of pool) {
-          if (out.length >= 2) break;
-          const s = sanitizeDefinition(fb, 140, word.word);
-          if (s && !out.includes(s)) out.push(s);
+        if (alive && ai.length > 0) {
+          setSuggestions((cur) => {
+            const merged = [...ai];
+            for (const s of cur) {
+              if (merged.length >= 2) break;
+              if (!merged.includes(s)) merged.push(s);
+            }
+            return merged;
+          });
         }
+      } catch {
+        /* fica com as locais */
       }
-      if (alive) setSuggestions(out);
     })();
     return () => {
       alive = false;
@@ -268,11 +278,26 @@ export function WriteDefinition({
     if (!word || aiLoading || submitted || myDef) return;
     setAiLoading(true);
     try {
-      const generated = await generateAiDefinitionForPlayer(
-        word,
-        room.id,
-        room.current_round,
-      );
+      // Playtest 5G: IA lenta não pode segurar o jogador — teto de 6s e
+      // cai no pool local (resposta imediata em vez de espera).
+      const localFallback = async (): Promise<string> => {
+        const { BOT_FAKE_DEFINITIONS_TEMPLATES } =
+          await import("@/lib/bot-names");
+        const { sanitizeDefinition } = await import("@/lib/text-filter");
+        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
+          () => Math.random() - 0.5,
+        );
+        const pick = pool
+          .map((p) => sanitizeDefinition(p, 140, word.word))
+          .find((s) => s && s !== text && !suggestions.includes(s));
+        return pick ?? pool[0];
+      };
+      const generated = await Promise.race([
+        generateAiDefinitionForPlayer(word, room.id, room.current_round),
+        new Promise<string>((resolve) =>
+          setTimeout(() => void localFallback().then(resolve), 6000),
+        ),
+      ]);
       setText(generated.slice(0, 140));
     } catch (e) {
       console.error("generateAiDefinitionForPlayer failed", e);

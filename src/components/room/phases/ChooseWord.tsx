@@ -61,13 +61,13 @@ export function ChooseWord({
     >
       {phase !== "ready" && <Mascot mood="thinking" size={140} />}
       <div className="text-center">
-        <p className="text-muted-foreground text-xs font-display">
+        <p className="text-muted-foreground text-sm font-display">
           Coordenador da rodada
         </p>
         <h2
           className={
             "font-display text-sun " +
-            (phase === "ready" ? "text-xl" : "text-3xl mt-1")
+            (phase === "ready" ? "text-2xl" : "text-4xl mt-1")
           }
         >
           {coord?.nickname} 👑
@@ -96,7 +96,7 @@ export function ChooseWord({
               animate={{ opacity: 1, y: 0 }}
               className="w-full space-y-2"
             >
-              <p className="text-center font-display text-pink animate-pulse text-sm">
+              <p className="text-center font-display text-pink animate-pulse text-lg">
                 {picking ? "Confirmando palavra…" : "Escolha uma palavra rara!"}
               </p>
               {words.map((w, i) => (
