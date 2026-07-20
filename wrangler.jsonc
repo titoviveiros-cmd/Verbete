@@ -1,7 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tanstack-start-app",
+  "name": "verbete",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  // Vars públicas de runtime do SSR (a service key NÃO vai aqui —
+  // é secret: `npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY`).
+  "vars": {
+    "SUPABASE_URL": "https://wspztmimctgbjcmyzexn.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_c6lm-1ngivRyyW1XysBplw_U2jBDRIA",
+  },
 }
