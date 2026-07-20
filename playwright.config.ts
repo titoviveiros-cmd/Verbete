@@ -20,7 +20,11 @@ export default defineConfig({
     // E2E_RESOLVE="MAP host ip" contorna cache DNS local ao testar um
     // deploy recém-criado (o DNS global já resolve, o resolvedor local não).
     ...(process.env.E2E_RESOLVE
-      ? { launchOptions: { args: [`--host-resolver-rules=${process.env.E2E_RESOLVE}`] } }
+      ? {
+          launchOptions: {
+            args: [`--host-resolver-rules=${process.env.E2E_RESOLVE}`],
+          },
+        }
       : {}),
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
