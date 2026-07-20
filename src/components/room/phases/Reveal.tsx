@@ -24,6 +24,11 @@ import { getPlayerId } from "@/lib/player-id";
 import { RevealFx } from "@/components/RevealFx";
 import { scrollbarClip } from "@/lib/utils";
 
+// Fase 4 (aprovado 2026-07-20): clímax da revelação em etapas —
+// blefes eliminados UM A UM (da cédula menos votada à mais votada, cada uma
+// mostrando autor + quem caiu), pausa de suspense, a VERDADE surge por último
+// em destaque e a "chuva de pontos" (+3 acertadores / +N blefadores) fecha.
+// Mesmos cards/cores de antes; muda apenas a ordem dramática.
 function RevealImpl({
   room,
   players,
@@ -43,107 +48,6 @@ function RevealImpl({
     () => definitions.find((d) => d.player_id === "__truth__"),
     [definitions],
   );
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t1 = setTimeout(() => setStep(1), 1500);
-    const t2 = setTimeout(() => setStep(2), 3500);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
-
-  const REVEAL_HOLD = 15;
-  const TRANSITION_MS = PHASE_ANNOUNCER_TOTAL_MS;
-  const [transitionDone, setTransitionDone] = useState(false);
-  const latestPlayersRef = useRef(players);
-  useEffect(() => {
-    latestPlayersRef.current = players;
-  }, [players]);
-  useEffect(() => {
-    setTransitionDone(false);
-    const t = setTimeout(() => setTransitionDone(true), TRANSITION_MS);
-    return () => clearTimeout(t);
-  }, [room.id, room.current_round]);
-
-  const [revealCountdown, setRevealCountdown] = useState(REVEAL_HOLD);
-  useEffect(() => {
-    if (step < 2 || !transitionDone) return;
-    setRevealCountdown(REVEAL_HOLD);
-    const iv = setInterval(() => {
-      setRevealCountdown((s) => (s > 0 ? s - 1 : 0));
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [step, transitionDone]);
-  // Tail-freeze cinematográfico: 1.4s antes do scoreboard, em todos os clientes.
-  const tailFreezePlayed = useRef(false);
-  useEffect(() => {
-    if (step < 2 || !transitionDone) return;
-    if (tailFreezePlayed.current) return;
-    if (revealCountdown !== 2) return;
-    tailFreezePlayed.current = true;
-    void playTailFreeze();
-  }, [revealCountdown, step, transitionDone]);
-  // Reset entre rodadas
-  useEffect(() => {
-    tailFreezePlayed.current = false;
-  }, [room.id, room.current_round]);
-
-  useEffect(() => {
-    if (!isHost) return;
-    if (step < 2 || !transitionDone) return;
-    const t = setTimeout(
-      () => advanceAfterReveal(room, latestPlayersRef.current),
-      REVEAL_HOLD * 1000,
-    );
-    return () => clearTimeout(t);
-  }, [isHost, step, transitionDone, room.id, room.current_round]);
-
-  const ordered = useMemo(
-    () =>
-      [...definitions].sort((a, b) =>
-        (a.letter ?? "Z").localeCompare(b.letter ?? "Z"),
-      ),
-    [definitions],
-  );
-
-  // Stinger pessoal: quando step=2 (votos visíveis), tocar fooled/fooledOthers conforme resultado do jogador.
-  const personalStingerPlayed = useRef(false);
-  useEffect(() => {
-    if (step < 2 || personalStingerPlayed.current) return;
-    personalStingerPlayed.current = true;
-    const myId = getPlayerId();
-    if (!myId) return;
-    const myVote = votes.find((v) => v.voter_id === myId);
-    const truthDef = definitions.find((d) => d.player_id === "__truth__");
-    const myDef = definitions.find((d) => d.player_id === myId);
-    const iWasFooled = !!(
-      myVote &&
-      truthDef &&
-      myVote.definition_id !== truthDef.id
-    );
-    const myDefVotes = myDef
-      ? votes.filter((v) => v.definition_id === myDef.id).length
-      : 0;
-    // Total de jogadores enganados nesta rodada (escala o trombone)
-    const totalFooled = truthDef
-      ? votes.filter(
-          (v) => v.definition_id !== truthDef.id && v.voter_id !== "__truth__",
-        ).length
-      : 0;
-    // Total de votantes (excluindo coordenador que não vota se aplicável) e detecção de marcos
-    const totalVoters = votes.filter((v) => v.voter_id !== "__truth__").length;
-    const isPerfectRound =
-      myDef && myDefVotes >= totalVoters && totalVoters >= 3;
-    const isSavage = myDefVotes >= 4;
-    // Prioridade: perfect > savage > magnitude > fooled (positivo > negativo)
-    setTimeout(() => {
-      if (isPerfectRound) void playPerfectRound();
-      else if (isSavage) void playSavage();
-      else if (myDefVotes > 0) void playFooledOthersMagnitude(myDefVotes);
-      else if (iWasFooled) void playFooledMagnitude(totalFooled);
-    }, 600);
-  }, [step, votes, definitions]);
 
   const playersById = useMemo(() => {
     const map = new Map<string, Player>();
@@ -162,6 +66,135 @@ function RevealImpl({
     return map;
   }, [votes, playersById]);
 
+  // Blefes em ordem de drama: menos votados caem primeiro; o blefe mais
+  // enganador é o último eliminado antes da verdade.
+  const bluffs = useMemo(
+    () =>
+      definitions
+        .filter((d) => d.player_id !== "__truth__")
+        .sort((a, b) => {
+          const va = votersByDefId.get(a.id)?.length ?? 0;
+          const vb = votersByDefId.get(b.id)?.length ?? 0;
+          if (va !== vb) return va - vb;
+          return (a.letter ?? "Z").localeCompare(b.letter ?? "Z");
+        }),
+    [definitions, votersByDefId],
+  );
+
+  // ---- Máquina da coreografia -------------------------------------------
+  const [elimCount, setElimCount] = useState(0);
+  const [truthShown, setTruthShown] = useState(false);
+  const [pointsShown, setPointsShown] = useState(false);
+
+  const TRANSITION_MS = PHASE_ANNOUNCER_TOTAL_MS;
+  const [transitionDone, setTransitionDone] = useState(false);
+  useEffect(() => {
+    setTransitionDone(false);
+    setElimCount(0);
+    setTruthShown(false);
+    setPointsShown(false);
+    const t = setTimeout(() => setTransitionDone(true), TRANSITION_MS);
+    return () => clearTimeout(t);
+  }, [room.id, room.current_round]);
+
+  useEffect(() => {
+    if (!transitionDone) return;
+    const n = bluffs.length;
+    // Orçamento: ~7s de eliminações independentemente do nº de blefes.
+    const stepMs = Math.min(1500, Math.max(700, 7000 / Math.max(1, n)));
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let t = 900; // suspense inicial (mascote "Tãm tãm tãm…")
+    for (let i = 1; i <= n; i++) {
+      timers.push(
+        setTimeout(() => {
+          setElimCount(i);
+          void playUITap("secondary");
+        }, t),
+      );
+      t += stepMs;
+    }
+    t += 700; // pausa de suspense antes da verdade
+    timers.push(setTimeout(() => setTruthShown(true), t));
+    timers.push(setTimeout(() => setPointsShown(true), t + 900));
+    return () => timers.forEach(clearTimeout);
+  }, [transitionDone, room.current_round, bluffs.length]);
+
+  // Coreografia (~7s) + contagem de 12s = ~19s < backstop do cron (20s).
+  const REVEAL_HOLD = 12;
+  const latestPlayersRef = useRef(players);
+  useEffect(() => {
+    latestPlayersRef.current = players;
+  }, [players]);
+
+  const [revealCountdown, setRevealCountdown] = useState(REVEAL_HOLD);
+  useEffect(() => {
+    if (!truthShown) return;
+    setRevealCountdown(REVEAL_HOLD);
+    const iv = setInterval(() => {
+      setRevealCountdown((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [truthShown]);
+
+  // Tail-freeze cinematográfico: 1.4s antes do scoreboard, em todos os clientes.
+  const tailFreezePlayed = useRef(false);
+  useEffect(() => {
+    if (!truthShown) return;
+    if (tailFreezePlayed.current) return;
+    if (revealCountdown !== 2) return;
+    tailFreezePlayed.current = true;
+    void playTailFreeze();
+  }, [revealCountdown, truthShown]);
+  useEffect(() => {
+    tailFreezePlayed.current = false;
+  }, [room.id, room.current_round]);
+
+  useEffect(() => {
+    if (!isHost || !truthShown) return;
+    const t = setTimeout(
+      () => advanceAfterReveal(room, latestPlayersRef.current),
+      REVEAL_HOLD * 1000,
+    );
+    return () => clearTimeout(t);
+  }, [isHost, truthShown, room.id, room.current_round]);
+
+  // Stinger pessoal no momento da verdade (perfeito > savage > magnitude).
+  const personalStingerPlayed = useRef(false);
+  useEffect(() => {
+    if (!truthShown || personalStingerPlayed.current) return;
+    personalStingerPlayed.current = true;
+    const myId = getPlayerId();
+    if (!myId) return;
+    const myVote = votes.find((v) => v.voter_id === myId);
+    const truthDef = definitions.find((d) => d.player_id === "__truth__");
+    const myDef = definitions.find((d) => d.player_id === myId);
+    const iWasFooled = !!(
+      myVote &&
+      truthDef &&
+      myVote.definition_id !== truthDef.id
+    );
+    const myDefVotes = myDef
+      ? votes.filter((v) => v.definition_id === myDef.id).length
+      : 0;
+    const totalFooled = truthDef
+      ? votes.filter(
+          (v) => v.definition_id !== truthDef.id && v.voter_id !== "__truth__",
+        ).length
+      : 0;
+    const totalVoters = votes.filter((v) => v.voter_id !== "__truth__").length;
+    const isPerfectRound =
+      myDef && myDefVotes >= totalVoters && totalVoters >= 3;
+    const isSavage = myDefVotes >= 4;
+    setTimeout(() => {
+      if (isPerfectRound) void playPerfectRound();
+      else if (isSavage) void playSavage();
+      else if (myDefVotes > 0) void playFooledOthersMagnitude(myDefVotes);
+      else if (iWasFooled) void playFooledMagnitude(totalFooled);
+    }, 600);
+  }, [truthShown, votes, definitions]);
+
+  const truthVoters = truth ? (votersByDefId.get(truth.id) ?? []) : [];
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -169,9 +202,9 @@ function RevealImpl({
       exit={{ opacity: 0 }}
       className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
     >
-      <RevealFx trigger={step >= 1} strong />
+      <RevealFx trigger={truthShown} strong />
 
-      {step >= 2 && (
+      {truthShown && (
         <motion.div
           initial={{ y: -40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -193,21 +226,114 @@ function RevealImpl({
         </motion.div>
       )}
       <div
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-4 w-full max-w-full"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-3 w-full max-w-full"
         style={scrollbarClip()}
       >
         <WordCard word={word} compact />
 
-        {step < 1 && (
+        {elimCount === 0 && !truthShown && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Mascot mood="wow" size={130} />
             <p className="font-display text-2xl animate-pulse">Tãm tãm tãm…</p>
           </div>
         )}
 
-        {step >= 1 && (
+        {/* Eliminação dos blefes, um a um */}
+        {elimCount > 0 && (
+          <div className="space-y-2">
+            <p className="text-center text-xs uppercase tracking-wider font-display text-muted-foreground">
+              ❌ eliminando os blefes…
+            </p>
+            {bluffs.slice(0, elimCount).map((d) => {
+              const author = playersById.get(d.player_id);
+              const dVoters = votersByDefId.get(d.id) ?? [];
+              return (
+                <motion.div
+                  key={d.id}
+                  initial={{ x: -28, opacity: 0, rotate: -1.5 }}
+                  animate={{ x: 0, opacity: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 240, damping: 20 }}
+                  className="sticker"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="font-display text-2xl text-sun">
+                      {d.letter}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-base leading-snug line-through decoration-pink/60 decoration-2">
+                        {d.text}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
+                        {author && (
+                          <span className="font-display flex items-center gap-1">
+                            🤥{" "}
+                            <span className="text-base">{author.avatar}</span>
+                            {author.nickname}
+                          </span>
+                        )}
+                        {dVoters.length > 0 && (
+                          <span className="ml-auto text-pink font-display flex items-center gap-1">
+                            +{dVoters.length} voto
+                            {dVoters.length > 1 ? "s" : ""}
+                            {pointsShown && author && (
+                              <motion.span
+                                initial={{ scale: 0, y: 8 }}
+                                animate={{ scale: 1, y: 0 }}
+                                transition={{ type: "spring", stiffness: 300 }}
+                                className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
+                              >
+                                +{dVoters.length} pt
+                                {dVoters.length > 1 ? "s" : ""}
+                              </motion.span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      {dVoters.length > 0 && (
+                        <div className="mt-2 flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
+                            😂 caíram:
+                          </span>
+                          {dVoters.map((v, i) => (
+                            <motion.div
+                              key={v.id}
+                              initial={{ scale: 0, y: -10 }}
+                              animate={{ scale: 1, y: 0 }}
+                              transition={{
+                                delay: 0.1 + i * 0.12,
+                                type: "spring",
+                                stiffness: 260,
+                              }}
+                              className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-pink/15 border-pink/40 text-pink"
+                            >
+                              <span className="text-sm">{v.avatar}</span>
+                              <span>{v.nickname}</span>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Pausa de suspense antes da verdade */}
+        {elimCount >= bluffs.length && elimCount > 0 && !truthShown && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center font-display text-xl text-mint animate-pulse py-2"
+          >
+            E a verdade é… 🥁
+          </motion.p>
+        )}
+
+        {/* Clímax: a VERDADE */}
+        {truthShown && (
           <div className="relative overflow-hidden rounded-3xl">
-            {/* Spotlight pulsante atrás da verdade */}
             <motion.div
               aria-hidden
               initial={{ opacity: 0, scale: 0.4 }}
@@ -236,119 +362,80 @@ function RevealImpl({
               className="relative sticker bg-gradient-mint text-accent-foreground text-center py-6"
             >
               <p className="text-sm uppercase tracking-wider font-display">
-                A definição verdadeira é…
+                ✅ A definição verdadeira é…
               </p>
               <p className="font-display text-2xl mt-2 leading-snug break-words">
                 "{truth?.text}"
               </p>
+              {truthVoters.length > 0 && (
+                <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap px-3">
+                  <span className="text-[10px] uppercase tracking-wider font-display opacity-80 mr-1">
+                    🎯 acertaram:
+                  </span>
+                  {truthVoters.map((v, i) => (
+                    <motion.div
+                      key={v.id}
+                      initial={{ scale: 0, y: -10 }}
+                      animate={{ scale: 1, y: 0 }}
+                      transition={{
+                        delay: 0.25 + i * 0.15,
+                        type: "spring",
+                        stiffness: 260,
+                      }}
+                      className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-white/25 border-white/40"
+                    >
+                      <span className="text-sm">{v.avatar}</span>
+                      <span>{v.nickname}</span>
+                      {pointsShown && (
+                        <motion.span
+                          initial={{ scale: 0, y: 8 }}
+                          animate={{ scale: 1, y: 0 }}
+                          transition={{ type: "spring", stiffness: 300 }}
+                          className="rounded-full bg-white/40 px-1.5 text-[11px] font-display"
+                        >
+                          +3
+                        </motion.span>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+              {truthShown && truthVoters.length === 0 && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="mt-3 text-xs font-display opacity-90"
+                >
+                  😱 NINGUÉM acertou — coordenador leva +2!
+                </motion.p>
+              )}
             </motion.div>
           </div>
         )}
 
-        {/* Card "Sobre a palavra" removido a pedido do usuário (2026-07-19). */}
-
-        {step >= 2 && (
-          <div className="space-y-2">
-            <p className="text-center text-xs uppercase tracking-wider font-display text-muted-foreground">
-              🎬 replay da rodada — quem caiu em quem
-            </p>
-            {ordered.map((d) => {
-              const author = playersById.get(d.player_id);
-              const dVoters = votersByDefId.get(d.id) ?? [];
-              return (
-                <motion.div
-                  key={d.id}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  className={
-                    "sticker transition " +
-                    (d.player_id === "__truth__"
-                      ? "bg-mint/25 border-2 border-mint ring-4 ring-mint/40 shadow-[0_0_30px_rgba(74,222,128,0.45)]"
-                      : "")
-                  }
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="font-display text-2xl text-sun">
-                      {d.letter}
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-base leading-snug">{d.text}</p>
-                      <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
-                        {d.player_id === "__truth__" ? (
-                          <span className="text-mint font-display">
-                            ✅ Verdade
-                          </span>
-                        ) : author ? (
-                          <span className="font-display flex items-center gap-1">
-                            <span className="text-base">{author.avatar}</span>
-                            {author.nickname}
-                          </span>
-                        ) : null}
-                        {dVoters.length > 0 && (
-                          <span className="ml-auto text-pink font-display">
-                            +{dVoters.length} voto
-                            {dVoters.length > 1 ? "s" : ""}
-                          </span>
-                        )}
-                      </div>
-                      {dVoters.length > 0 && (
-                        <div className="mt-2 flex items-center gap-1 flex-wrap">
-                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
-                            {d.player_id === "__truth__"
-                              ? "🎯 acertaram:"
-                              : "😂 caíram:"}
-                          </span>
-                          {dVoters.map((v, i) => (
-                            <motion.div
-                              key={v.id}
-                              initial={{ scale: 0, y: -10 }}
-                              animate={{ scale: 1, y: 0 }}
-                              transition={{
-                                delay: 0.1 + i * 0.15,
-                                type: "spring",
-                                stiffness: 260,
-                              }}
-                              className={
-                                "flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border " +
-                                (d.player_id === "__truth__"
-                                  ? "bg-mint/20 border-mint/40 text-mint"
-                                  : "bg-pink/15 border-pink/40 text-pink")
-                              }
-                            >
-                              <span className="text-sm">{v.avatar}</span>
-                              <span>{v.nickname}</span>
-                            </motion.div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
-              <ShareReplayButton
-                room={room}
-                word={word}
-                definitions={definitions}
-                votes={votes}
-                players={players}
-              />
-              {isHost && (
-                <button
-                  onClick={() => {
-                    void playUITap("primary");
-                    void playTailFreeze();
-                    // Pequeno delay para o tail freeze "respirar" antes da transição
-                    setTimeout(() => advanceAfterReveal(room, players), 1100);
-                  }}
-                  className="btn-pop bg-gradient-fun text-white px-5 py-2.5 text-sm font-display"
-                  title="Pular contagem e ir direto ao placar"
-                >
-                  ⏭ Avançar agora
-                </button>
-              )}
-            </div>
+        {truthShown && (
+          <div className="pt-1 flex flex-wrap items-center justify-center gap-2">
+            <ShareReplayButton
+              room={room}
+              word={word}
+              definitions={definitions}
+              votes={votes}
+              players={players}
+            />
+            {isHost && (
+              <button
+                onClick={() => {
+                  void playUITap("primary");
+                  void playTailFreeze();
+                  setTimeout(() => advanceAfterReveal(room, players), 1100);
+                }}
+                className="btn-pop bg-gradient-fun text-white px-5 py-2.5 text-sm font-display"
+                title="Pular contagem e ir direto ao placar"
+              >
+                ⏭ Avançar agora
+              </button>
+            )}
           </div>
         )}
       </div>
