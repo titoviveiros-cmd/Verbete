@@ -73,6 +73,8 @@ Vitest + RTL (unit: text-filter, sanitização, timers, XP/nível, avatars, esta
 ### Fase 3 — Design system
 Tokens semânticos em `src/styles.css` (@theme) + `src/design/tokens.ts` (velocidades/easing/z-index/breakpoints); componentes `Game*` em `src/components/game/` (lista da spec); migração gradual — nenhum big-bang. Referência: gradiente magenta→roxo→azul da Home atual. Corrigir mensagens EN, theme-color PWA (#1a0f2e escuro), estados de erro/offline.
 
+**DIRETRIZ MESTRA (2026-07-20): a identidade visual atual está APROVADA pelo usuário.** A Fase 3 é **uniformização** (aplicar o padrão existente de forma consistente em todas as telas), não redesign. Qualquer alteração visual significativa (estilo novo de componente, mudança perceptível de paleta/tipografia/layout) deve ser apresentada ANTES como prévia comparativa (atual vs proposto) e só aplicada com aprovação explícita — as opções são sempre "aplicar" ou "manter o atual". Uniformizações fiéis ao padrão vigente seguem em commits pequenos e reversíveis, com captura no relatório para validação a posteriori.
+
 **Diretrizes do usuário (2026-07-19):**
 - `VerbeteLogo`: a REFERÊNCIA canônica é o "Verbete" da PRIMEIRA TELA (Home) — ícone "V" com livro + wordmark bubbly branca com contorno/sombra sobre o gradiente. Todas as demais ocorrências da marca (formulário de criar sala, lobby, erros, splash) passam a usar exatamente esse tratamento; eliminar a variante "texto com gradiente" da tela de criar sala.
 - Fase de EMBARALHAMENTO (Shuffling): o VERSO das cédulas/cartas da animação deve exibir o logotipo do jogo (hoje mostra o ícone `/icon-192.png` genérico dentro da carta — trocar pelo `VerbeteLogo`/marca oficial como padronagem de verso de baralho).
