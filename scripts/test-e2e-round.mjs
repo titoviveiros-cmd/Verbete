@@ -32,7 +32,12 @@ const check = (name, ok, detail = "") => {
 const room = await rpc("create_room_with_host", {
   p_host_id: "e2e_host", p_nickname: "E2E Host", p_avatar: "🤖", p_color: "#abc",
 });
-check("create_room_with_host", !!room?.id, room?.code);
+check("create_room_with_host", !!room?.id, room?.code ?? JSON.stringify(room).slice(0, 120));
+if (!room?.id) {
+  console.log("abortando: create_room_with_host falhou — sem sala para continuar");
+  await db.end();
+  process.exit(1);
+}
 const rid = room.id;
 
 // 2) bots direto no DB (como faz o client do host via inserts permitidos)
