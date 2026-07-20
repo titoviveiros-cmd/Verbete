@@ -267,9 +267,12 @@
     }
     .mobile-shell {
       max-width: 28rem;
-      height: min(100dvh, 920px);
-      min-height: min(100dvh, 920px);
-      max-height: min(100dvh, 920px);
+      /* Desconta a margem da altura: antes, shell (920px) + margin-top
+         podiam passar de 100dvh por alguns px e o body rolava — barra
+         nativa aparecia colada no painel (feedback de playtest). */
+      height: min(calc(100dvh - 1rem), 920px);
+      min-height: min(calc(100dvh - 1rem), 920px);
+      max-height: min(calc(100dvh - 1rem), 920px);
       margin-top: max(0.5rem, calc((100dvh - 920px) / 2));
       border-radius: 28px;
       border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
@@ -289,7 +292,12 @@ html, body {
   overscroll-behavior: none;
   overflow-x: hidden;
   max-width: 100vw;
+  /* Nunca exibir barra de rolagem nativa no nível da página — todo scroll
+     do jogo acontece em contêineres internos já estilizados (no-scrollbar). */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 @supports (height: 100dvh) {
   html, body { height: 100dvh; }
 }
