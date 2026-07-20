@@ -16,7 +16,11 @@ const rpc = async (fn, body) => {
   try { return JSON.parse(text); } catch { return text; }
 };
 
-const db = new pg.Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
+// SSL só contra o Supabase remoto; o Postgres local do CI (supabase start) não tem TLS.
+const db = new pg.Client({
+  connectionString: DB_URL,
+  ssl: /supabase\.co/.test(DB_URL ?? "") ? { rejectUnauthorized: false } : false,
+});
 await db.connect();
 let fails = 0;
 const check = (name, ok, detail = "") => {

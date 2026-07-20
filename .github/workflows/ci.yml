@@ -1,7 +1,7 @@
 # CI do Verbete — Fase 2
-# Unit + typecheck + build rodam sempre (sem segredos).
-# Integração (suítes SQL/identidade contra o Supabase) roda apenas quando os
-# segredos SUPABASE_DB_URL / SUPABASE_URL / SUPABASE_ANON_KEY existirem no repo.
+# build-and-test: lint + typecheck + unit + build (sem segredos).
+# integration: Supabase LOCAL (Docker) no runner com as migrations aplicadas
+# do zero — valida o motor SQL inteiro sem tocar produção e sem segredos.
 name: CI
 
 on:
@@ -39,10 +39,7 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     needs: build-and-test
-    env:
-      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      SUPA_URL: ${{ secrets.SUPABASE_URL }}
-      ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,10 +52,13 @@ jobs:
         run: npm install -g npm@11
       - name: Instala dependências
         run: npm ci
+      - name: Sobe Supabase local (aplica migrations do zero)
+        run: npx supabase start
       - name: Suíte de integração (identidade + rodada E2E)
         run: |
-          if [ -z "$DB_URL" ]; then
-            echo "Segredos do Supabase ausentes — integração pulada."
-            exit 0
-          fi
+          STATUS=$(npx supabase status -o env)
+          export SUPA_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
+          export ANON=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          export DB_URL=$(echo "$STATUS" | grep -E '^DB_URL=' | cut -d= -f2- | tr -d '"')
+          echo "API=$SUPA_URL DB=$DB_URL"
           npm run test:integration

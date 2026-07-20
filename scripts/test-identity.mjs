@@ -2,7 +2,9 @@
 // autenticadas via SET LOCAL request.jwt.claims — auth.uid() lê esse GUC,
 // então dá para validar o enforcement sem o toggle de anonymous sign-in.
 import pg from "pg";
-const c = new pg.Client({ connectionString: process.env.DB_URL, ssl: { rejectUnauthorized: false } });
+// SSL só contra o Supabase remoto; o Postgres local do CI (supabase start) não tem TLS.
+const ssl = /supabase\.co/.test(process.env.DB_URL ?? "") ? { rejectUnauthorized: false } : false;
+const c = new pg.Client({ connectionString: process.env.DB_URL, ssl });
 await c.connect();
 
 const results = [];
