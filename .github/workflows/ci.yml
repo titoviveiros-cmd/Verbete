@@ -1,0 +1,54 @@
+# CI do Verbete — Fase 2
+# Unit + typecheck + build rodam sempre (sem segredos).
+# Integração (suítes SQL/identidade contra o Supabase) roda apenas quando os
+# segredos SUPABASE_DB_URL / SUPABASE_URL / SUPABASE_ANON_KEY existirem no repo.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instala dependências
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Testes unitários
+        run: npm run test
+      - name: Build web
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPA_URL: ${{ secrets.SUPABASE_URL }}
+      ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instala dependências
+        run: npm ci
+      - name: Suíte de integração (identidade + rodada E2E)
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "Segredos do Supabase ausentes — integração pulada."
+            exit 0
+          fi
+          npm run test:integration
