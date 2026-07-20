@@ -98,6 +98,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-status-bar-style", content: "default" },
         { name: "apple-mobile-web-app-title", content: "Verbete" },
+        // Versão do build servido — lida por reloadIfOutdated() para
+        // recarregar abas com bundle velho (iOS mantém páginas por horas).
+        {
+          name: "verbete-build",
+          content: (import.meta.env.VITE_BUILD_ID as string) ?? "dev",
+        },
         { title: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
         {
           name: "description",

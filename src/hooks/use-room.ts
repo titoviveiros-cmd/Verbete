@@ -813,8 +813,26 @@ export function useRoom(code: string | undefined, playerId?: string) {
   // Sincroniza IMEDIATAMENTE ao ficar visível de novo.
   useEffect(() => {
     if (typeof document === "undefined") return;
+    let hiddenAt = 0;
     const onResume = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
       if (document.visibilityState !== "visible") return;
+      // Playtest 20:15: o iOS mantém a aba viva por HORAS com o bundle
+      // antigo — nenhuma correção nova chega a quem nunca recarrega.
+      // Ausência longa (>15min) = recarga completa: bundle novo + estado
+      // novo. A rodada de 15min atrás já era, nada a preservar.
+      if (hiddenAt && Date.now() - hiddenAt > 15 * 60_000) {
+        window.location.reload();
+        return;
+      }
+      // Ausência mais curta (>60s): compara o build com o publicado e
+      // recarrega sozinho se saiu versão nova enquanto a aba dormia.
+      if (hiddenAt && Date.now() - hiddenAt > 60_000) {
+        void import("@/lib/app-version").then((m) => m.reloadIfOutdated());
+      }
       lastEventAtRef.current = 0; // canal esteve mudo — poll adaptativo acorda
       void reloadRef.current?.();
     };

@@ -587,7 +587,12 @@ function HomePage() {
                 className="text-[12px] font-display font-bold"
                 style={{ color: footerTextColor }}
               >
-                4 a 12 jogadores · Mobile-first · Conta opcional
+                4 a 12 jogadores · Mobile-first · Conta opcional ·{" "}
+                {"v" +
+                  ((import.meta.env.VITE_BUILD_ID as string) ?? "dev").slice(
+                    0,
+                    7,
+                  )}
               </p>
             </div>
           </motion.div>
