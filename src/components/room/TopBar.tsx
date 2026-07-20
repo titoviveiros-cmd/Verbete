@@ -27,6 +27,7 @@ export function TopBar({
   isHost,
   onReset,
   onReload,
+  degraded,
 }: {
   code: string;
   round: number;
@@ -34,6 +35,8 @@ export function TopBar({
   isHost?: boolean;
   onReset?: () => void;
   onReload?: () => void;
+  /** Conexão degradada (poll falhando/offline) — mostra o "reconectar". */
+  degraded?: boolean;
 }) {
   const navigate = useNavigate();
   const [showLeave, setShowLeave] = useState(false);
@@ -80,14 +83,21 @@ export function TopBar({
         >
           ❔
         </button>
-        {onReload && (
+        {/* Fase 3 (decisão 2026-07-19): o 🔄 fixo virou ConnectionState —
+            só aparece quando a conexão degrada (poll falhando/offline). */}
+        {onReload && degraded && (
           <button
             onClick={handleReload}
-            className={btn + (spinning ? " animate-spin" : "")}
-            title="Atualizar sala"
-            aria-label="Atualizar sala"
+            className={
+              "shrink-0 flex items-center gap-1 px-2.5 h-7 rounded-full font-display text-[11px] " +
+              "bg-sun/15 border border-sun text-sun animate-pulse transition" +
+              (spinning ? " opacity-60" : "")
+            }
+            title="Conexão instável — toque para reconectar"
+            aria-label="Conexão instável — toque para reconectar"
           >
-            🔄
+            <span className={spinning ? "animate-spin" : ""}>🔄</span>
+            reconectar
           </button>
         )}
         {canReset && (

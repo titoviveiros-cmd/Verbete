@@ -22,6 +22,9 @@ export function useRoom(code: string | undefined, playerId?: string) {
   const [roundExtensions, setRoundExtensions] = useState<RoundExtension[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Fase 3 (ConnectionState): true quando o servidor está inalcançável
+  // (poll falhando ou navegador offline) — a TopBar mostra "reconectar".
+  const [degraded, setDegraded] = useState(false);
   // Local override of is_connected derived from realtime presence.
   // Keys are player ids; values true=connected, false=disconnected.
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({});
@@ -565,10 +568,14 @@ export function useRoom(code: string | undefined, playerId?: string) {
       return;
     let cancelled = false;
     const refreshRound = async () => {
-      const { data: sync } = await (supabase.rpc as any)("get_round_sync", {
-        p_room_id: room.id,
-      });
+      const { data: sync, error: syncErr } = await (supabase.rpc as any)(
+        "get_round_sync",
+        { p_room_id: room.id },
+      );
       if (cancelled) return;
+      // Fase 3 (ConnectionState): o poll é o batimento com o servidor —
+      // falha liga o indicador de reconexão; sucesso desliga.
+      setDegraded(!!syncErr);
       const payload = sync as {
         definitions?: Definition[];
         votes?: Vote[];
@@ -783,6 +790,22 @@ export function useRoom(code: string | undefined, playerId?: string) {
     };
   }, [room?.id]);
 
+  // Navegador offline/online — sinal imediato para o ConnectionState.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onOffline = () => setDegraded(true);
+    const onOnline = () => {
+      setDegraded(false);
+      void reloadRef.current?.();
+    };
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
+
   // Retomada da aba (playtest mobile): o iOS congela timers/realtime quando o
   // jogador troca de app; ao voltar, a UI mostrava fase/timer VELHOS por
   // segundos e um toque caía numa fase que já tinha virado no servidor
@@ -818,6 +841,7 @@ export function useRoom(code: string | undefined, playerId?: string) {
     roundExtensions,
     loading,
     error,
+    degraded,
     reload,
   };
 }

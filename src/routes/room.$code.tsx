@@ -135,6 +135,7 @@ function RoomPage() {
     roundExtensions,
     loading,
     error,
+    degraded,
     reload,
   } = useRoom(code, playerId);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -608,6 +609,7 @@ function RoomPage() {
         status={room.status}
         isHost={isHost}
         onReload={reload}
+        degraded={degraded}
         onReset={() => setConfirmReset(true)}
       />
 
