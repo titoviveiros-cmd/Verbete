@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "node scripts/test-identity.mjs && node scripts/test-e2e-round.mjs",
+    "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm run test",
     "cap:sync": "vite build --mode capacitor && cap sync",
     "cap:icons": "capacitor-assets generate --assetPath resources",
@@ -90,6 +91,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

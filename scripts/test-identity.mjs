@@ -23,8 +23,11 @@ console.log("user_id FK:", userFk ? userFk.def : "nenhuma (uuid livre)");
 
 const U1 = "11111111-1111-4111-8111-111111111111";
 const U2 = "22222222-2222-4222-8222-222222222222";
+// Só os claims — SEM `SET ROLE`: as guardas leem auth.uid() (claims) e as
+// RPCs são SECURITY DEFINER; trocar o role só acopla o teste aos GRANTs de
+// tabela, que divergem entre produção e o Supabase local do CI.
 const asUser = (uid) =>
-  `SET LOCAL request.jwt.claims = '{"sub":"${uid}","role":"authenticated"}'; SET LOCAL ROLE authenticated;`;
+  `SET LOCAL request.jwt.claims = '{"sub":"${uid}","role":"authenticated"}';`;
 
 // Se houver FK para auth.users, cria usuários fake direto (service-level)
 if (userFk) {
