@@ -12,7 +12,8 @@ export const Route = createFileRoute("/download")({
       { property: "og:title", content: "Baixe o Verbete" },
       {
         property: "og:description",
-        content: "Jogo de palavras multiplayer kawaii. Crie salas, desafie amigos.",
+        content:
+          "Jogo de palavras multiplayer kawaii. Crie salas, desafie amigos.",
       },
       { name: "robots", content: "index,follow" },
     ],
@@ -47,7 +48,10 @@ function DownloadPage() {
   return (
     <div className="mobile-shell">
       <header className="mb-6">
-        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          to="/"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           ← Voltar
         </Link>
       </header>
@@ -82,7 +86,7 @@ function DownloadPage() {
             className="rounded-full border border-border bg-card text-muted-foreground font-medium py-3 cursor-not-allowed"
             aria-label="Em breve na App Store"
           >
-             Em breve na App Store
+            Em breve na App Store
           </button>
         </div>
       </section>
@@ -101,7 +105,9 @@ function DownloadPage() {
       </section>
 
       <section className="rounded-2xl bg-card border border-border p-5 flex flex-col gap-2 mb-8">
-        <h2 className="font-display text-xl">Quer ser beta tester no iPhone?</h2>
+        <h2 className="font-display text-xl">
+          Quer ser beta tester no iPhone?
+        </h2>
         <p className="text-sm text-muted-foreground">
           Em breve abriremos o TestFlight. Avise se quiser receber o convite.
         </p>
@@ -125,5 +131,3 @@ function DownloadPage() {
     </div>
   );
 }
-
-

@@ -1,35 +1,65 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  advanceAfterReveal, type Definition, type Player, type Room, type Vote, type Word,
+  advanceAfterReveal,
+  type Definition,
+  type Player,
+  type Room,
+  type Vote,
+  type Word,
 } from "@/lib/room";
 import { humanizeMeaning } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import { WordCard } from "@/components/room/shared";
-import { playFooledMagnitude, playFooledOthersMagnitude, playPerfectRound, playSavage, playTailFreeze, playUITap } from "@/lib/sound";
+import {
+  playFooledMagnitude,
+  playFooledOthersMagnitude,
+  playPerfectRound,
+  playSavage,
+  playTailFreeze,
+  playUITap,
+} from "@/lib/sound";
 import { getPlayerId } from "@/lib/player-id";
 import { RevealFx } from "@/components/RevealFx";
 import { scrollbarClip } from "@/lib/utils";
 
-
-
-function RevealImpl({ room, players, word, definitions, votes, isHost }: {
-  room: Room; players: Player[]; word: Word; definitions: Definition[]; votes: Vote[]; isHost: boolean;
+function RevealImpl({
+  room,
+  players,
+  word,
+  definitions,
+  votes,
+  isHost,
+}: {
+  room: Room;
+  players: Player[];
+  word: Word;
+  definitions: Definition[];
+  votes: Vote[];
+  isHost: boolean;
 }) {
-  const truth = useMemo(() => definitions.find((d) => (d.player_id === "__truth__")), [definitions]);
+  const truth = useMemo(
+    () => definitions.find((d) => d.player_id === "__truth__"),
+    [definitions],
+  );
   const [step, setStep] = useState(0);
   useEffect(() => {
     const t1 = setTimeout(() => setStep(1), 1500);
     const t2 = setTimeout(() => setStep(2), 3500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
   const REVEAL_HOLD = 15;
   const TRANSITION_MS = PHASE_ANNOUNCER_TOTAL_MS;
   const [transitionDone, setTransitionDone] = useState(false);
   const latestPlayersRef = useRef(players);
-  useEffect(() => { latestPlayersRef.current = players; }, [players]);
+  useEffect(() => {
+    latestPlayersRef.current = players;
+  }, [players]);
   useEffect(() => {
     setTransitionDone(false);
     const t = setTimeout(() => setTransitionDone(true), TRANSITION_MS);
@@ -55,17 +85,25 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
     void playTailFreeze();
   }, [revealCountdown, step, transitionDone]);
   // Reset entre rodadas
-  useEffect(() => { tailFreezePlayed.current = false; }, [room.id, room.current_round]);
+  useEffect(() => {
+    tailFreezePlayed.current = false;
+  }, [room.id, room.current_round]);
 
   useEffect(() => {
     if (!isHost) return;
     if (step < 2 || !transitionDone) return;
-    const t = setTimeout(() => advanceAfterReveal(room, latestPlayersRef.current), REVEAL_HOLD * 1000);
+    const t = setTimeout(
+      () => advanceAfterReveal(room, latestPlayersRef.current),
+      REVEAL_HOLD * 1000,
+    );
     return () => clearTimeout(t);
   }, [isHost, step, transitionDone, room.id, room.current_round]);
 
   const ordered = useMemo(
-    () => [...definitions].sort((a, b) => (a.letter ?? "Z").localeCompare(b.letter ?? "Z")),
+    () =>
+      [...definitions].sort((a, b) =>
+        (a.letter ?? "Z").localeCompare(b.letter ?? "Z"),
+      ),
     [definitions],
   );
 
@@ -77,17 +115,26 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
     const myId = getPlayerId();
     if (!myId) return;
     const myVote = votes.find((v) => v.voter_id === myId);
-    const truthDef = definitions.find((d) => (d.player_id === "__truth__"));
+    const truthDef = definitions.find((d) => d.player_id === "__truth__");
     const myDef = definitions.find((d) => d.player_id === myId);
-    const iWasFooled = !!(myVote && truthDef && myVote.definition_id !== truthDef.id);
-    const myDefVotes = myDef ? votes.filter((v) => v.definition_id === myDef.id).length : 0;
+    const iWasFooled = !!(
+      myVote &&
+      truthDef &&
+      myVote.definition_id !== truthDef.id
+    );
+    const myDefVotes = myDef
+      ? votes.filter((v) => v.definition_id === myDef.id).length
+      : 0;
     // Total de jogadores enganados nesta rodada (escala o trombone)
     const totalFooled = truthDef
-      ? votes.filter((v) => v.definition_id !== truthDef.id && v.voter_id !== "__truth__").length
+      ? votes.filter(
+          (v) => v.definition_id !== truthDef.id && v.voter_id !== "__truth__",
+        ).length
       : 0;
     // Total de votantes (excluindo coordenador que não vota se aplicável) e detecção de marcos
     const totalVoters = votes.filter((v) => v.voter_id !== "__truth__").length;
-    const isPerfectRound = myDef && myDefVotes >= totalVoters && totalVoters >= 3;
+    const isPerfectRound =
+      myDef && myDefVotes >= totalVoters && totalVoters >= 3;
     const isSavage = myDefVotes >= 4;
     // Prioridade: perfect > savage > magnitude > fooled (positivo > negativo)
     setTimeout(() => {
@@ -116,7 +163,12 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
   }, [votes, playersById]);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
+    >
       <RevealFx trigger={step >= 1} strong />
 
       {step >= 2 && (
@@ -125,7 +177,9 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           animate={{ y: 0, opacity: 1 }}
           className="shrink-0 rounded-2xl px-4 py-2 bg-gradient-fun shadow-pop border-2 border-black/20 flex items-center justify-center gap-3 w-full max-w-full"
         >
-          <span className="font-display text-sm uppercase tracking-wider text-white/90">📊 Placar em</span>
+          <span className="font-display text-sm uppercase tracking-wider text-white/90">
+            📊 Placar em
+          </span>
           <motion.span
             key={revealCountdown}
             initial={{ scale: 1.4 }}
@@ -138,7 +192,10 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           <span className="font-display text-sm text-white/90">s</span>
         </motion.div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-4 w-full max-w-full" style={scrollbarClip()}>
+      <div
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-4 w-full max-w-full"
+        style={scrollbarClip()}
+      >
         <WordCard word={word} compact />
 
         {step < 1 && (
@@ -158,84 +215,125 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
               transition={{ duration: 1.4, ease: "easeOut" }}
               className="absolute inset-0 pointer-events-none"
               style={{
-                background: "radial-gradient(closest-side, color-mix(in oklab, var(--mint) 50%, transparent), transparent 70%)",
+                background:
+                  "radial-gradient(closest-side, color-mix(in oklab, var(--mint) 50%, transparent), transparent 70%)",
                 filter: "blur(20px)",
               }}
             />
             <motion.div
               initial={{ scale: 0.3, opacity: 0, y: -40, rotate: -3 }}
-              animate={{ scale: [0.3, 1.15, 0.95, 1.02, 1], opacity: 1, y: 0, rotate: [-3, 2, -1, 0] }}
-              transition={{ duration: 0.7, times: [0, 0.45, 0.7, 0.88, 1], ease: "easeOut" }}
-              className="relative sticker bg-gradient-mint text-accent-foreground text-center py-6">
-              <p className="text-sm uppercase tracking-wider font-display">A definição verdadeira é…</p>
-              <p className="font-display text-2xl mt-2 leading-snug break-words">"{truth?.text}"</p>
+              animate={{
+                scale: [0.3, 1.15, 0.95, 1.02, 1],
+                opacity: 1,
+                y: 0,
+                rotate: [-3, 2, -1, 0],
+              }}
+              transition={{
+                duration: 0.7,
+                times: [0, 0.45, 0.7, 0.88, 1],
+                ease: "easeOut",
+              }}
+              className="relative sticker bg-gradient-mint text-accent-foreground text-center py-6"
+            >
+              <p className="text-sm uppercase tracking-wider font-display">
+                A definição verdadeira é…
+              </p>
+              <p className="font-display text-2xl mt-2 leading-snug break-words">
+                "{truth?.text}"
+              </p>
             </motion.div>
           </div>
         )}
 
         {/* Card "Sobre a palavra" removido a pedido do usuário (2026-07-19). */}
 
-
         {step >= 2 && (
           <div className="space-y-2">
-          <p className="text-center text-xs uppercase tracking-wider font-display text-muted-foreground">
-            🎬 replay da rodada — quem caiu em quem
-          </p>
-          {ordered.map((d) => {
-            const author = playersById.get(d.player_id);
-            const dVoters = votersByDefId.get(d.id) ?? [];
-            return (
-              <motion.div key={d.id} initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                className={"sticker transition " + ((d.player_id === "__truth__") ? "bg-mint/25 border-2 border-mint ring-4 ring-mint/40 shadow-[0_0_30px_rgba(74,222,128,0.45)]" : "")}>
-                <div className="flex items-start gap-2">
-                  <span className="font-display text-2xl text-sun">{d.letter}</span>
-                  <div className="flex-1">
-                    <p className="text-base leading-snug">{d.text}</p>
-                    <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
-                      {(d.player_id === "__truth__") ? (
-                        <span className="text-mint font-display">✅ Verdade</span>
-                      ) : author ? (
-                        <span className="font-display flex items-center gap-1">
-                          <span className="text-base">{author.avatar}</span>{author.nickname}
-                        </span>
-                      ) : null}
+            <p className="text-center text-xs uppercase tracking-wider font-display text-muted-foreground">
+              🎬 replay da rodada — quem caiu em quem
+            </p>
+            {ordered.map((d) => {
+              const author = playersById.get(d.player_id);
+              const dVoters = votersByDefId.get(d.id) ?? [];
+              return (
+                <motion.div
+                  key={d.id}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  className={
+                    "sticker transition " +
+                    (d.player_id === "__truth__"
+                      ? "bg-mint/25 border-2 border-mint ring-4 ring-mint/40 shadow-[0_0_30px_rgba(74,222,128,0.45)]"
+                      : "")
+                  }
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="font-display text-2xl text-sun">
+                      {d.letter}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-base leading-snug">{d.text}</p>
+                      <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
+                        {d.player_id === "__truth__" ? (
+                          <span className="text-mint font-display">
+                            ✅ Verdade
+                          </span>
+                        ) : author ? (
+                          <span className="font-display flex items-center gap-1">
+                            <span className="text-base">{author.avatar}</span>
+                            {author.nickname}
+                          </span>
+                        ) : null}
+                        {dVoters.length > 0 && (
+                          <span className="ml-auto text-pink font-display">
+                            +{dVoters.length} voto
+                            {dVoters.length > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
                       {dVoters.length > 0 && (
-                        <span className="ml-auto text-pink font-display">
-                          +{dVoters.length} voto{dVoters.length > 1 ? "s" : ""}
-                        </span>
+                        <div className="mt-2 flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
+                            {d.player_id === "__truth__"
+                              ? "🎯 acertaram:"
+                              : "😂 caíram:"}
+                          </span>
+                          {dVoters.map((v, i) => (
+                            <motion.div
+                              key={v.id}
+                              initial={{ scale: 0, y: -10 }}
+                              animate={{ scale: 1, y: 0 }}
+                              transition={{
+                                delay: 0.1 + i * 0.15,
+                                type: "spring",
+                                stiffness: 260,
+                              }}
+                              className={
+                                "flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border " +
+                                (d.player_id === "__truth__"
+                                  ? "bg-mint/20 border-mint/40 text-mint"
+                                  : "bg-pink/15 border-pink/40 text-pink")
+                              }
+                            >
+                              <span className="text-sm">{v.avatar}</span>
+                              <span>{v.nickname}</span>
+                            </motion.div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    {dVoters.length > 0 && (
-                      <div className="mt-2 flex items-center gap-1 flex-wrap">
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
-                          {(d.player_id === "__truth__") ? "🎯 acertaram:" : "😂 caíram:"}
-                        </span>
-                        {dVoters.map((v, i) => (
-                          <motion.div
-                            key={v.id}
-                            initial={{ scale: 0, y: -10 }}
-                            animate={{ scale: 1, y: 0 }}
-                            transition={{ delay: 0.1 + i * 0.15, type: "spring", stiffness: 260 }}
-                            className={
-                              "flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border " +
-                              ((d.player_id === "__truth__")
-                                ? "bg-mint/20 border-mint/40 text-mint"
-                                : "bg-pink/15 border-pink/40 text-pink")
-                            }
-                          >
-                            <span className="text-sm">{v.avatar}</span>
-                            <span>{v.nickname}</span>
-                          </motion.div>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                </div>
-              </motion.div>
-            );
-          })}
+                </motion.div>
+              );
+            })}
             <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
-              <ShareReplayButton room={room} word={word} definitions={definitions} votes={votes} players={players} />
+              <ShareReplayButton
+                room={room}
+                word={word}
+                definitions={definitions}
+                votes={votes}
+                players={players}
+              />
               {isHost && (
                 <button
                   onClick={() => {
@@ -254,28 +352,41 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           </div>
         )}
       </div>
-
     </motion.div>
   );
 }
 
-function ShareReplayButton({ room, word, definitions, votes, players }: {
-  room: Room; word: Word; definitions: Definition[]; votes: Vote[]; players: Player[];
+function ShareReplayButton({
+  room,
+  word,
+  definitions,
+  votes,
+  players,
+}: {
+  room: Room;
+  word: Word;
+  definitions: Definition[];
+  votes: Vote[];
+  players: Player[];
 }) {
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<null | "shared" | "downloaded" | "error">(null);
+  const [done, setDone] = useState<null | "shared" | "downloaded" | "error">(
+    null,
+  );
   const onShare = async () => {
     if (busy) return;
     setBusy(true);
     const { shareReplayCard } = await import("@/lib/share-replay");
-    const truth = definitions.find((d) => (d.player_id === "__truth__"));
+    const truth = definitions.find((d) => d.player_id === "__truth__");
     const truthHits = votes
       .filter((v) => v.definition_id === truth?.id)
       .map((v) => players.find((p) => p.id === v.voter_id))
       .filter((p): p is Player => !!p)
       .map((p) => ({ name: p.nickname, emoji: p.avatar }));
     const fooled = definitions
-      .filter((d) => !(d.player_id === "__truth__") && d.player_id !== "__truth__")
+      .filter(
+        (d) => !(d.player_id === "__truth__") && d.player_id !== "__truth__",
+      )
       .map((d) => {
         const author = players.find((p) => p.id === d.player_id);
         const voters = votes
@@ -284,7 +395,12 @@ function ShareReplayButton({ room, word, definitions, votes, players }: {
           .filter((p): p is Player => !!p)
           .map((p) => ({ name: p.nickname, emoji: p.avatar }));
         return author && voters.length > 0
-          ? { author: author.nickname, emoji: author.avatar, voters, text: d.text }
+          ? {
+              author: author.nickname,
+              emoji: author.avatar,
+              voters,
+              text: d.text,
+            }
           : null;
       })
       .filter((x): x is NonNullable<typeof x> => !!x)
@@ -303,18 +419,29 @@ function ShareReplayButton({ room, word, definitions, votes, players }: {
   };
   return (
     <div className="pt-2 flex flex-col items-center gap-1">
-      <button onClick={onShare} disabled={busy}
-        className="btn-pop bg-gradient-sun text-primary-foreground px-5 py-2.5 text-sm font-display disabled:opacity-50">
+      <button
+        onClick={onShare}
+        disabled={busy}
+        className="btn-pop bg-gradient-sun text-primary-foreground px-5 py-2.5 text-sm font-display disabled:opacity-50"
+      >
         {busy ? "Gerando card…" : "📲 Compartilhar replay"}
       </button>
-      {done === "shared" && <p className="text-xs text-mint font-display">Card enviado! 🎉</p>}
-      {done === "downloaded" && <p className="text-xs text-mint font-display">Card baixado — manda no zap! 📥</p>}
-      {done === "error" && <p className="text-xs text-destructive font-display">Não rolou — tenta de novo</p>}
+      {done === "shared" && (
+        <p className="text-xs text-mint font-display">Card enviado! 🎉</p>
+      )}
+      {done === "downloaded" && (
+        <p className="text-xs text-mint font-display">
+          Card baixado — manda no zap! 📥
+        </p>
+      )}
+      {done === "error" && (
+        <p className="text-xs text-destructive font-display">
+          Não rolou — tenta de novo
+        </p>
+      )}
     </div>
   );
 }
 
 export const Reveal = memo(RevealImpl);
 export default Reveal;
-
-

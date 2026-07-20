@@ -6,17 +6,30 @@ import { Mascot } from "@/components/Mascot";
 import { WordCard } from "./PhaseShared";
 import { burst, sideCannons } from "@/lib/confetti";
 
-export default function RevealPhase({ room, players, word, definitions, votes, isHost }: {
-
-
-  room: Room; players: Player[]; word: Word; definitions: Definition[]; votes: Vote[]; isHost: boolean;
+export default function RevealPhase({
+  room,
+  players,
+  word,
+  definitions,
+  votes,
+  isHost,
+}: {
+  room: Room;
+  players: Player[];
+  word: Word;
+  definitions: Definition[];
+  votes: Vote[];
+  isHost: boolean;
 }) {
-  const truth = definitions.find((d) => (d.player_id === "__truth__"));
+  const truth = definitions.find((d) => d.player_id === "__truth__");
   const [step, setStep] = useState(0);
   useEffect(() => {
     const t1 = setTimeout(() => setStep(1), 1500);
     const t2 = setTimeout(() => setStep(2), 3500);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
   // Confete na revelação da verdade + canhões laterais quando os votos chegam.
@@ -30,7 +43,10 @@ export default function RevealPhase({ room, players, word, definitions, votes, i
   useEffect(() => {
     if (step < 2) return;
     setRevealCountdown(REVEAL_HOLD);
-    const iv = setInterval(() => setRevealCountdown((s) => (s > 0 ? s - 1 : 0)), 1000);
+    const iv = setInterval(
+      () => setRevealCountdown((s) => (s > 0 ? s - 1 : 0)),
+      1000,
+    );
     return () => clearInterval(iv);
   }, [step]);
   useEffect(() => {
@@ -39,16 +55,33 @@ export default function RevealPhase({ room, players, word, definitions, votes, i
     return () => clearTimeout(t);
   }, [isHost, step, room.id]);
 
-  const ordered = [...definitions].sort((a, b) => (a.letter ?? "Z").localeCompare(b.letter ?? "Z"));
+  const ordered = [...definitions].sort((a, b) =>
+    (a.letter ?? "Z").localeCompare(b.letter ?? "Z"),
+  );
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col gap-4 pt-2">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col gap-4 pt-2"
+    >
       {step >= 2 && (
-        <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          className="sticky top-0 z-30 -mx-4 px-4 py-2 bg-gradient-fun shadow-pop border-b-2 border-black/30 flex items-center justify-center gap-3">
-          <span className="font-display text-sm uppercase tracking-wider text-white/90">📊 Placar em</span>
-          <motion.span key={revealCountdown} initial={{ scale: 1.4 }} animate={{ scale: 1 }} transition={{ duration: 0.25 }}
-            className="font-display text-4xl text-white tabular-nums drop-shadow">
+        <motion.div
+          initial={{ y: -40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="sticky top-0 z-30 -mx-4 px-4 py-2 bg-gradient-fun shadow-pop border-b-2 border-black/30 flex items-center justify-center gap-3"
+        >
+          <span className="font-display text-sm uppercase tracking-wider text-white/90">
+            📊 Placar em
+          </span>
+          <motion.span
+            key={revealCountdown}
+            initial={{ scale: 1.4 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 0.25 }}
+            className="font-display text-4xl text-white tabular-nums drop-shadow"
+          >
             {revealCountdown}
           </motion.span>
           <span className="font-display text-sm text-white/90">s</span>
@@ -64,10 +97,17 @@ export default function RevealPhase({ room, players, word, definitions, votes, i
       )}
 
       {step >= 1 && (
-        <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          className="sticker bg-gradient-mint text-accent-foreground text-center py-6">
-          <p className="text-sm uppercase tracking-wider font-display">A definição verdadeira é…</p>
-          <p className="font-display text-2xl mt-2 leading-snug">"{truth?.text}"</p>
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="sticker bg-gradient-mint text-accent-foreground text-center py-6"
+        >
+          <p className="text-sm uppercase tracking-wider font-display">
+            A definição verdadeira é…
+          </p>
+          <p className="font-display text-2xl mt-2 leading-snug">
+            "{truth?.text}"
+          </p>
         </motion.div>
       )}
 
@@ -77,18 +117,30 @@ export default function RevealPhase({ room, players, word, definitions, votes, i
             const author = players.find((p) => p.id === d.player_id);
             const dVoters = votes.filter((v) => v.definition_id === d.id);
             return (
-              <motion.div key={d.id} initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                className={"sticker " + ((d.player_id === "__truth__") ? "bg-mint/20 border-mint" : "")}>
+              <motion.div
+                key={d.id}
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className={
+                  "sticker " +
+                  (d.player_id === "__truth__" ? "bg-mint/20 border-mint" : "")
+                }
+              >
                 <div className="flex items-start gap-2">
-                  <span className="font-display text-2xl text-sun">{d.letter}</span>
+                  <span className="font-display text-2xl text-sun">
+                    {d.letter}
+                  </span>
                   <div className="flex-1">
                     <p className="text-base leading-snug">{d.text}</p>
                     <div className="flex items-center gap-2 mt-2 text-xs">
-                      {(d.player_id === "__truth__") ? (
-                        <span className="text-mint font-display">✅ Verdade</span>
+                      {d.player_id === "__truth__" ? (
+                        <span className="text-mint font-display">
+                          ✅ Verdade
+                        </span>
                       ) : author ? (
                         <span className="font-display flex items-center gap-1">
-                          <span className="text-base">{author.avatar}</span>{author.nickname}
+                          <span className="text-base">{author.avatar}</span>
+                          {author.nickname}
                         </span>
                       ) : null}
                       {dVoters.length > 0 && (
@@ -107,5 +159,3 @@ export default function RevealPhase({ room, players, word, definitions, votes, i
     </motion.div>
   );
 }
-
-

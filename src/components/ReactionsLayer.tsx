@@ -9,14 +9,26 @@ import { playEmojiReaction, playCrowdAah, playCrowdOoh } from "@/lib/sound";
 const EMOJIS = ["😂", "💀", "🔥", "👏", "🤯", "🤥", "🎉", "👀"];
 const COOLDOWN_MS = 500;
 
-interface Floater { id: string; emoji: string; x: number; }
+interface Floater {
+  id: string;
+  emoji: string;
+  x: number;
+}
 
 // Hash simples para variar pitch por emoji.
 const emojiSeed = (e: string) => {
-  let s = 0; for (let i = 0; i < e.length; i++) s = (s * 31 + e.charCodeAt(i)) | 0; return s;
+  let s = 0;
+  for (let i = 0; i < e.length; i++) s = (s * 31 + e.charCodeAt(i)) | 0;
+  return s;
 };
 
-export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }: { roomId: string; playerId: string }) {
+export const ReactionsLayer = memo(function ReactionsLayer({
+  roomId,
+  playerId,
+}: {
+  roomId: string;
+  playerId: string;
+}) {
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const [bursting, setBursting] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -30,23 +42,39 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => { reducedMotion.current = mq.matches; };
+    const apply = () => {
+      reducedMotion.current = mq.matches;
+    };
     apply();
     mq.addEventListener?.("change", apply);
     return () => mq.removeEventListener?.("change", apply);
   }, []);
 
-
   useEffect(() => {
     if (!roomId) return;
-    const ch = supabase.channel(`reactions:${roomId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "reactions", filter: `room_id=eq.${roomId}` },
+    const ch = supabase
+      .channel(`reactions:${roomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "reactions",
+          filter: `room_id=eq.${roomId}`,
+        },
         (p) => {
           const r = p.new as { id: string; emoji: string; player_id?: string };
           if (!reducedMotion.current) {
-            const f: Floater = { id: r.id, emoji: r.emoji, x: 5 + Math.random() * 90 };
+            const f: Floater = {
+              id: r.id,
+              emoji: r.emoji,
+              x: 5 + Math.random() * 90,
+            };
             setFloaters((cur) => [...cur, f]);
-            setTimeout(() => setFloaters((cur) => cur.filter((x) => x.id !== f.id)), 3000);
+            setTimeout(
+              () => setFloaters((cur) => cur.filter((x) => x.id !== f.id)),
+              3000,
+            );
           }
           // Áudio só para reações de OUTROS, com throttle de 180ms (evita máquina de pinball).
           const isMine = r.player_id === playerId;
@@ -57,16 +85,24 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
           }
           // Detector de crowd reaction: janela de 1.2s.
           recentTimestamps.current.push(now);
-          recentTimestamps.current = recentTimestamps.current.filter((t) => now - t < 1200);
-          if (recentTimestamps.current.length >= 4 && now - lastCrowdAt.current > 2500) {
+          recentTimestamps.current = recentTimestamps.current.filter(
+            (t) => now - t < 1200,
+          );
+          if (
+            recentTimestamps.current.length >= 4 &&
+            now - lastCrowdAt.current > 2500
+          ) {
             lastCrowdAt.current = now;
             // Alterna entre Aah e Ooh para variar
             void (Math.random() > 0.5 ? playCrowdAah() : playCrowdOoh());
           }
-        }).subscribe();
-    return () => { supabase.removeChannel(ch); };
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [roomId, playerId]);
-
 
   const send = (emoji: string) => {
     const now = Date.now();
@@ -79,7 +115,9 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
       lastAudioAt.current = now;
       void playEmojiReaction(emojiSeed(emoji));
     }
-    try { navigator.vibrate?.(15); } catch {}
+    try {
+      navigator.vibrate?.(15);
+    } catch {}
     sendReaction(roomId, playerId, emoji).catch(() => {});
   };
 
@@ -92,7 +130,11 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
             <motion.div
               key={f.id}
               initial={{ y: 80, opacity: 0, scale: 0.6 }}
-              animate={{ y: -window.innerHeight * 0.7, opacity: [0, 1, 1, 0], scale: [0.6, 1.4, 1.2, 0.9] }}
+              animate={{
+                y: -window.innerHeight * 0.7,
+                opacity: [0, 1, 1, 0],
+                scale: [0.6, 1.4, 1.2, 0.9],
+              }}
               exit={{ opacity: 0 }}
               transition={{ duration: 3, ease: "easeOut" }}
               className="absolute text-4xl"
@@ -111,7 +153,9 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
         className="fixed z-[60] bg-card/90 backdrop-blur-md border border-white/10 rounded-full w-9 h-9 flex items-center justify-center shadow-pop text-sm"
         style={{
           right: "max(1rem, env(safe-area-inset-right, 0px))",
-          bottom: hidden ? "max(1rem, env(safe-area-inset-bottom, 0px))" : "calc(env(safe-area-inset-bottom, 0px) + 76px)",
+          bottom: hidden
+            ? "max(1rem, env(safe-area-inset-bottom, 0px))"
+            : "calc(env(safe-area-inset-bottom, 0px) + 76px)",
         }}
       >
         {hidden ? "🎈" : "▾"}
@@ -144,7 +188,11 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
                 >
                   <motion.span
                     className="text-2xl leading-none"
-                    animate={bursting === e ? { scale: [1, 1.7, 1], rotate: [0, -10, 10, 0] } : {}}
+                    animate={
+                      bursting === e
+                        ? { scale: [1, 1.7, 1], rotate: [0, -10, 10, 0] }
+                        : {}
+                    }
                     transition={{ duration: 0.35 }}
                   >
                     {e}
@@ -158,5 +206,3 @@ export const ReactionsLayer = memo(function ReactionsLayer({ roomId, playerId }:
     </>
   );
 });
-
-

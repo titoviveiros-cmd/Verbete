@@ -11,20 +11,48 @@ const CURTAIN_VISIBLE_MS = 3000;
 const LABEL_VISIBLE_MS = 1800;
 
 const LABELS: Record<string, { title: string; emoji: string; tint: string }> = {
-  lobby:      { title: "Sala de Espera", emoji: "🛋️", tint: "from-sun/30 via-transparent to-transparent" },
-  choosing:   { title: "Escolha da Palavra", emoji: "📖", tint: "from-coral/30 via-transparent to-transparent" },
-  writing:    { title: "Hora de Inventar", emoji: "✍️", tint: "from-mint/30 via-transparent to-transparent" },
+  lobby: {
+    title: "Sala de Espera",
+    emoji: "🛋️",
+    tint: "from-sun/30 via-transparent to-transparent",
+  },
+  choosing: {
+    title: "Escolha da Palavra",
+    emoji: "📖",
+    tint: "from-coral/30 via-transparent to-transparent",
+  },
+  writing: {
+    title: "Hora de Inventar",
+    emoji: "✍️",
+    tint: "from-mint/30 via-transparent to-transparent",
+  },
   // shuffling: intencionalmente sem cortina — a própria fase Shuffling já mostra
   // uma tela cheia animada "Embaralhando as cédulas…", evitando duplicidade.
   // voting: intencionalmente sem cortina — a fase Shuffling imediatamente
   // anterior já é uma tela cheia de transição ("Embaralhando as cédulas"),
   // então mostrar outra cortina logo depois soa duplicado.
-  reveal:     { title: "Revelação!", emoji: "✨", tint: "from-sun/40 via-transparent to-transparent" },
-  scoreboard: { title: "Placar da Rodada", emoji: "🏆", tint: "from-mint/30 via-transparent to-transparent" },
-  finished:   { title: "Fim de Jogo", emoji: "🎉", tint: "from-sun/40 via-transparent to-transparent" },
+  reveal: {
+    title: "Revelação!",
+    emoji: "✨",
+    tint: "from-sun/40 via-transparent to-transparent",
+  },
+  scoreboard: {
+    title: "Placar da Rodada",
+    emoji: "🏆",
+    tint: "from-mint/30 via-transparent to-transparent",
+  },
+  finished: {
+    title: "Fim de Jogo",
+    emoji: "🎉",
+    tint: "from-sun/40 via-transparent to-transparent",
+  },
 };
 
-export const PhaseAnnouncer = memo(function PhaseAnnouncer({ status }: { status: string }) {
+export const PhaseAnnouncer = memo(function PhaseAnnouncer({
+  status,
+}: {
+  status: string;
+}) {
   const [show, setShow] = useState(false);
   const [labelOn, setLabelOn] = useState(false);
   const prev = useRef(status);
@@ -37,7 +65,10 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({ status }: { status:
     setLabelOn(true);
     const tLabel = setTimeout(() => setLabelOn(false), LABEL_VISIBLE_MS);
     const tShow = setTimeout(() => setShow(false), CURTAIN_VISIBLE_MS);
-    return () => { clearTimeout(tLabel); clearTimeout(tShow); };
+    return () => {
+      clearTimeout(tLabel);
+      clearTimeout(tShow);
+    };
   }, [status]);
 
   const cfg = LABELS[status];
@@ -74,14 +105,22 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({ status }: { status:
           <motion.div
             initial={{ x: "-115%", skewX: "-12deg" }}
             animate={{ x: "115%", skewX: "-12deg" }}
-            transition={{ duration: 2.8, ease: [0.77, 0, 0.18, 1], delay: 0.12 }}
+            transition={{
+              duration: 2.8,
+              ease: [0.77, 0, 0.18, 1],
+              delay: 0.12,
+            }}
             className={`absolute -inset-y-10 -inset-x-20 bg-gradient-to-r ${cfg.tint}`}
           />
           {/* bright leading edge — the "blade" */}
           <motion.div
             initial={{ x: "-115%", skewX: "-12deg" }}
             animate={{ x: "115%", skewX: "-12deg" }}
-            transition={{ duration: 2.8, ease: [0.77, 0, 0.18, 1], delay: 0.06 }}
+            transition={{
+              duration: 2.8,
+              ease: [0.77, 0, 0.18, 1],
+              delay: 0.06,
+            }}
             className="absolute -inset-y-10 w-[18vw] bg-gradient-to-r from-transparent via-white/70 to-transparent mix-blend-overlay blur-md"
           />
           {/* trailing shimmer */}
@@ -95,7 +134,12 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({ status }: { status:
           <motion.div
             initial={{ x: "-110%", opacity: 0.4 }}
             animate={{ x: "110%", opacity: [0.4, 0.4, 0] }}
-            transition={{ duration: 2.6, ease: [0.65, 0, 0.35, 1], delay: 0.4, times: [0, 0.75, 1] }}
+            transition={{
+              duration: 2.6,
+              ease: [0.65, 0, 0.35, 1],
+              delay: 0.4,
+              times: [0, 0.75, 1],
+            }}
             className="absolute inset-0"
             style={{
               backgroundImage:
@@ -162,5 +206,3 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({ status }: { status:
     </AnimatePresence>
   );
 });
-
-

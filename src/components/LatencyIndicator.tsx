@@ -26,7 +26,11 @@ export function LatencyIndicator({ code }: { code: string }) {
       if (status === "SUBSCRIBED") {
         ready = true;
         ping();
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+      } else if (
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT" ||
+        status === "CLOSED"
+      ) {
         if (!cancelled) {
           setOk(false);
           setMs(null);
@@ -70,16 +74,21 @@ export function LatencyIndicator({ code }: { code: string }) {
 
   if (ms === null && ok) return null;
 
-  const color =
-    !ok ? "bg-red-500" :
-    ms === null ? "bg-muted-foreground" :
-    ms < 250 ? "bg-mint" :
-    ms < 600 ? "bg-sun" : "bg-red-500";
+  const color = !ok
+    ? "bg-red-500"
+    : ms === null
+      ? "bg-muted-foreground"
+      : ms < 250
+        ? "bg-mint"
+        : ms < 600
+          ? "bg-sun"
+          : "bg-red-500";
 
-  const label =
-    !ok ? "Conexão instável" :
-    ms === null ? "Medindo conexão" :
-    `Latência ${ms} milissegundos`;
+  const label = !ok
+    ? "Conexão instável"
+    : ms === null
+      ? "Medindo conexão"
+      : `Latência ${ms} milissegundos`;
 
   return (
     <div
@@ -88,12 +97,20 @@ export function LatencyIndicator({ code }: { code: string }) {
       aria-label={label}
       role="status"
     >
-      <span aria-hidden className={"inline-block w-2 h-2 rounded-full " + color + " " + (ok ? "animate-pulse" : "")} />
+      <span
+        aria-hidden
+        className={
+          "inline-block w-2 h-2 rounded-full " +
+          color +
+          " " +
+          (ok ? "animate-pulse" : "")
+        }
+      />
       {ms !== null && ms >= 250 && (
-        <span aria-hidden className="tabular-nums">{ms}ms</span>
+        <span aria-hidden className="tabular-nums">
+          {ms}ms
+        </span>
       )}
     </div>
   );
 }
-
-

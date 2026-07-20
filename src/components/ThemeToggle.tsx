@@ -17,9 +17,9 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       }
       suppressHydrationWarning
     >
-      <span suppressHydrationWarning>{mounted ? (isDark ? "☀️" : "🌙") : ""}</span>
+      <span suppressHydrationWarning>
+        {mounted ? (isDark ? "☀️" : "🌙") : ""}
+      </span>
     </button>
   );
 }
-
-

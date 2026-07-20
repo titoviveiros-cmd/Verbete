@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { getAudioPrefs, setAudioMuted, subscribeAudioPrefs, primeAudio, playUITap, type AudioPrefs } from "@/lib/sound";
+import {
+  getAudioPrefs,
+  setAudioMuted,
+  subscribeAudioPrefs,
+  primeAudio,
+  playUITap,
+  type AudioPrefs,
+} from "@/lib/sound";
 
 export function SoundToggle({ className = "" }: { className?: string }) {
   // Always start with defaults so SSR and first client render match.
@@ -14,7 +21,9 @@ export function SoundToggle({ className = "" }: { className?: string }) {
   const toggle = () => {
     const next = !prefs.muted;
     setAudioMuted(next);
-    if (!next) { void primeAudio().then(() => playUITap()); }
+    if (!next) {
+      void primeAudio().then(() => playUITap());
+    }
   };
 
   return (
@@ -33,5 +42,3 @@ export function SoundToggle({ className = "" }: { className?: string }) {
     </button>
   );
 }
-
-

@@ -27,18 +27,16 @@ const STEPS: Step[] = [
     kind: "static",
     emoji: "📖",
     title: "Sorteie a palavra",
-    body:
-      "O Coordenador 👑 toca em \"Sortear palavra\" e escolhe uma entre 3 palavras esquisitíssimas do dicionário. Ninguém faz ideia do que é — e essa é a graça.",
-    joke: "Spoiler: ninguém aqui sabe o que é \"jacarandá-do-cerrado\". Tudo bem.",
+    body: 'O Coordenador 👑 toca em "Sortear palavra" e escolhe uma entre 3 palavras esquisitíssimas do dicionário. Ninguém faz ideia do que é — e essa é a graça.',
+    joke: 'Spoiler: ninguém aqui sabe o que é "jacarandá-do-cerrado". Tudo bem.',
     mood: "thinking",
   },
   {
     kind: "static",
     emoji: "✍️",
     title: "Blefe ou diga a verdade",
-    body:
-      "Cada jogador escreve uma definição falsa convincente (ou tenta acertar a verdadeira). O jogo embaralha tudo e mostra as opções sem nomes. Hora de votar!",
-    joke: "Capricha no portuguesinho de dicionário, tipo: \"s.f. ato ou efeito de…\". Funciona sempre.",
+    body: "Cada jogador escreve uma definição falsa convincente (ou tenta acertar a verdadeira). O jogo embaralha tudo e mostra as opções sem nomes. Hora de votar!",
+    joke: 'Capricha no portuguesinho de dicionário, tipo: "s.f. ato ou efeito de…". Funciona sempre.',
     mood: "excited",
   },
   {
@@ -57,8 +55,7 @@ const STEPS: Step[] = [
     kind: "static",
     emoji: "🏆",
     title: "Pontue enganando",
-    body:
-      "+3 se você acertar a verdadeira.\n+3 se seu significado for ao menos 80% equivalente ao verdadeiro.\n+2 pro Coordenador se ninguém descobrir a verdade.\n+1 pra cada voto que SUA definição receber.",
+    body: "+3 se você acertar a verdadeira.\n+3 se seu significado for ao menos 80% equivalente ao verdadeiro.\n+2 pro Coordenador se ninguém descobrir a verdade.\n+1 pra cada voto que SUA definição receber.",
     joke: "Tradução: enganar amigos = lucro. Ser enganado = aprendizado emocional.",
     mood: "excited",
   },
@@ -88,7 +85,11 @@ function DemoStepView({
       </p>
       <div
         className="font-display text-4xl mb-3 leading-tight pb-1"
-        style={{ background: "var(--gradient-fun)", WebkitBackgroundClip: "text", color: "transparent" }}
+        style={{
+          background: "var(--gradient-fun)",
+          WebkitBackgroundClip: "text",
+          color: "transparent",
+        }}
       >
         {step.word}
       </div>
@@ -103,7 +104,8 @@ function DemoStepView({
           let style = "bg-input border-white/10";
           if (showResult) {
             if (isTruth) style = "bg-mint/20 border-mint text-mint";
-            else if (isPicked) style = "bg-destructive/20 border-destructive text-destructive";
+            else if (isPicked)
+              style = "bg-destructive/20 border-destructive text-destructive";
             else style = "bg-input/40 border-white/5 opacity-60";
           }
 
@@ -114,13 +116,17 @@ function DemoStepView({
               disabled={picked !== null}
               onClick={() => setPicked(idx)}
               className={`text-left text-sm rounded-2xl border-2 px-3 py-2 flex items-start gap-2 transition ${style} ${
-                picked === null ? "hover:border-pink/50 active:scale-[0.98]" : ""
+                picked === null
+                  ? "hover:border-pink/50 active:scale-[0.98]"
+                  : ""
               }`}
             >
               <span className="font-display text-sm shrink-0">{letter}</span>
               <span className="flex-1 leading-snug">{opt}</span>
               {showResult && isTruth && <span className="shrink-0">✅</span>}
-              {showResult && isPicked && !isTruth && <span className="shrink-0">❌</span>}
+              {showResult && isPicked && !isTruth && (
+                <span className="shrink-0">❌</span>
+              )}
             </button>
           );
         })}
@@ -210,7 +216,9 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
               className="text-center px-1"
             >
               <div className="text-5xl mb-2">{step.emoji}</div>
-              <h2 className="font-display text-2xl text-sun mb-2">{step.title}</h2>
+              <h2 className="font-display text-2xl text-sun mb-2">
+                {step.title}
+              </h2>
               <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-line">
                 {step.body}
               </p>
@@ -219,11 +227,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
               </p>
             </motion.div>
           ) : (
-            <DemoStepView
-              key={i}
-              step={step}
-              onContinue={() => setI(i + 1)}
-            />
+            <DemoStepView key={i} step={step} onContinue={() => setI(i + 1)} />
           )}
         </AnimatePresence>
 
@@ -262,5 +266,3 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
     </motion.div>
   );
 }
-
-

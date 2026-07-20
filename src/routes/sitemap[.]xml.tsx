@@ -30,5 +30,3 @@ export const Route = createFileRoute("/sitemap.xml")({
     },
   },
 });
-
-

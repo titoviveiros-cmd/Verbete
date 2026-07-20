@@ -4,7 +4,10 @@ import { cn, scrollbarClip } from "@/lib/utils";
 describe("cn", () => {
   it("mescla classes com tailwind-merge (última vence)", () => {
     expect(cn("p-2", "p-4")).toBe("p-4");
-    expect(cn("text-red-500", false && "hidden", "font-bold")).toBe("text-red-500 font-bold");
+    const oculto: boolean = [].length > 0;
+    expect(cn("text-red-500", oculto && "hidden", "font-bold")).toBe(
+      "text-red-500 font-bold",
+    );
   });
 });
 
@@ -18,6 +21,8 @@ describe("scrollbarClip", () => {
   });
   it("default usa o padding do shell (1rem + safe-area)", () => {
     const s = scrollbarClip();
-    expect(s.marginRight).toContain("max(1rem, env(safe-area-inset-right, 0px))");
+    expect(s.marginRight).toContain(
+      "max(1rem, env(safe-area-inset-right, 0px))",
+    );
   });
 });

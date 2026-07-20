@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
-import { restartGame, computeTeamScores, isTruthDef, type Definition, type Player, type Room, type Vote } from "@/lib/room";
+import {
+  restartGame,
+  computeTeamScores,
+  isTruthDef,
+  type Definition,
+  type Player,
+  type Room,
+  type Vote,
+} from "@/lib/room";
 import { Mascot } from "@/components/Mascot";
 import { Confetti } from "@/components/Confetti";
 import { Scoreboard } from "@/components/room/phases/Scoreboard";
@@ -9,12 +17,29 @@ import { useAuth } from "@/hooks/use-auth";
 import { pushAchievement } from "@/components/AchievementToaster";
 import { scrollbarClip } from "@/lib/utils";
 
-export function Finished({ room, players, isHost, roomId, roomCode, playerId, onLeave }: {
-  room: Room; players: Player[]; isHost: boolean; roomId: string; roomCode: string; playerId: string; onLeave: () => void;
+export function Finished({
+  room,
+  players,
+  isHost,
+  roomId,
+  roomCode,
+  playerId,
+  onLeave,
+}: {
+  room: Room;
+  players: Player[];
+  isHost: boolean;
+  roomId: string;
+  roomCode: string;
+  playerId: string;
+  onLeave: () => void;
 }) {
-  const sortedTeams = (room.mode === "teams" && (room.teams?.length ?? 0) > 0)
-    ? computeTeamScores(players, room.teams ?? []).sort((a, b) => b.score - a.score)
-    : [];
+  const sortedTeams =
+    room.mode === "teams" && (room.teams?.length ?? 0) > 0
+      ? computeTeamScores(players, room.teams ?? []).sort(
+          (a, b) => b.score - a.score,
+        )
+      : [];
   const teamWinner = sortedTeams[0];
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const { user, loading: authLoading } = useAuth();
@@ -23,7 +48,10 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
 
   // Histórico da partida (defs + votos) — alimenta o registro de XP e as
   // estatísticas divertidas do pódio.
-  const [history, setHistory] = useState<{ defs: Definition[]; votes: Vote[] } | null>(null);
+  const [history, setHistory] = useState<{
+    defs: Definition[];
+    votes: Vote[];
+  } | null>(null);
   useEffect(() => {
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -32,28 +60,43 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
         (supabase.rpc as any)("get_room_definitions", { p_room_id: roomId }),
         supabase.from("votes").select("*").eq("room_id", roomId),
       ]);
-      setHistory({ defs: (defs ?? []) as Definition[], votes: (votes ?? []) as Vote[] });
+      setHistory({
+        defs: (defs ?? []) as Definition[],
+        votes: (votes ?? []) as Vote[],
+      });
     })().catch((e) => console.error("finished history fetch failed", e));
   }, [roomId]);
 
-  const [xpResult, setXpResult] = useState<{ xpGained: number; level: number } | null>(null);
+  const [xpResult, setXpResult] = useState<{
+    xpGained: number;
+    level: number;
+  } | null>(null);
   const recordedRef = useRef(false);
   useEffect(() => {
     if (recordedRef.current || !history) return;
     recordedRef.current = true;
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       // Fase 1 (S3): o servidor calcula TUDO (score, posição, acertos,
       // blefes, XP, conquistas) a partir das tabelas oficiais. O client
       // apenas vincula sua identidade ao jogador e informa a sala.
-      await (supabase.rpc as any)("claim_player_identity", { p_player_id: playerId });
+      await (supabase.rpc as any)("claim_player_identity", {
+        p_player_id: playerId,
+      });
       const { data } = await (supabase.rpc as any)("record_match_result", {
         p_room_code: roomCode,
       });
-      const res = data as { xp_gained?: number; level?: number; unlocked?: string[]; deduped?: boolean } | null;
+      const res = data as {
+        xp_gained?: number;
+        level?: number;
+        unlocked?: string[];
+        deduped?: boolean;
+      } | null;
       if (res && !res.deduped && (res.xp_gained ?? 0) > 0) {
         setXpResult({ xpGained: res.xp_gained ?? 0, level: res.level ?? 1 });
       }
@@ -72,8 +115,13 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
   const second = sorted[1];
   const third = sorted[Math.min(2, sorted.length - 1)];
 
-
-  const titles: Array<{ title: string; desc: string; player?: Player; medal: string; tone: string }> = [
+  const titles: Array<{
+    title: string;
+    desc: string;
+    player?: Player;
+    medal: string;
+    tone: string;
+  }> = [
     {
       title: "Campeão",
       desc: "Fez mais pontos somando acertos e blefes que enganaram a galera.",
@@ -100,12 +148,21 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
   const [viewingScoreboard, setViewingScoreboard] = useState(false);
   if (viewingScoreboard) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col min-h-0 pt-2">
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2" style={scrollbarClip()}>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="flex-1 flex flex-col min-h-0 pt-2"
+      >
+        <div
+          className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2"
+          style={scrollbarClip()}
+        >
           <button
             type="button"
             onClick={() => setViewingScoreboard(false)}
-            className="self-start flex items-center gap-1.5 text-sm font-display px-3 py-1.5 rounded-full bg-card/60 border border-white/10 hover:bg-card/80 transition">
+            className="self-start flex items-center gap-1.5 text-sm font-display px-3 py-1.5 rounded-full bg-card/60 border border-white/10 hover:bg-card/80 transition"
+          >
             ← Voltar ao resumo
           </button>
           <Scoreboard room={room} players={players} isHost={false} />
@@ -115,10 +172,17 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col min-h-0 pt-2">
-
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col min-h-0 pt-2"
+    >
       <Confetti />
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2 pb-2" style={scrollbarClip()}>
+      <div
+        className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2 pb-2"
+        style={scrollbarClip()}
+      >
         <div className="flex flex-col items-center">
           <Mascot mood="excited" size={72} />
           <motion.div
@@ -136,7 +200,8 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
               className="relative rounded-[1.5rem] border-2 border-white/25 overflow-hidden px-4 py-3"
               style={{
                 background: "var(--gradient-fun)",
-                boxShadow: "0 6px 0 0 oklch(0.15 0.05 290 / 0.45), 0 16px 36px -10px oklch(0.72 0.22 0 / 0.55), inset 0 1px 0 0 rgba(255,255,255,0.35)",
+                boxShadow:
+                  "0 6px 0 0 oklch(0.15 0.05 290 / 0.45), 0 16px 36px -10px oklch(0.72 0.22 0 / 0.55), inset 0 1px 0 0 rgba(255,255,255,0.35)",
               }}
             >
               <motion.span
@@ -144,24 +209,37 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
                 animate={{ rotate: [0, 20, -10, 0], scale: [1, 1.2, 1] }}
                 transition={{ duration: 2.4, repeat: Infinity }}
                 aria-hidden
-              >✨</motion.span>
+              >
+                ✨
+              </motion.span>
               <motion.span
                 className="absolute top-2 right-3 text-sm"
                 animate={{ rotate: [0, -15, 15, 0], scale: [1, 1.3, 1] }}
                 transition={{ duration: 2.8, repeat: Infinity, delay: 0.4 }}
                 aria-hidden
-              >⭐</motion.span>
+              >
+                ⭐
+              </motion.span>
 
               <div className="flex flex-col items-center text-center gap-1.5">
                 <motion.div
                   animate={{ rotate: [-5, 5, -5], y: [0, -2, 0] }}
-                  transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+                  transition={{
+                    duration: 2.6,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
                   className="text-3xl leading-none drop-shadow-[0_2px_0_rgba(0,0,0,0.4)]"
                   aria-hidden
-                >🏆</motion.div>
+                >
+                  🏆
+                </motion.div>
                 <h2
                   className="font-display text-2xl text-white tracking-tight leading-none"
-                  style={{ textShadow: "0 2px 0 oklch(0.15 0.05 290 / 0.6), 0 0 18px oklch(0.88 0.18 95 / 0.55)" }}
+                  style={{
+                    textShadow:
+                      "0 2px 0 oklch(0.15 0.05 290 / 0.6), 0 0 18px oklch(0.88 0.18 95 / 0.55)",
+                  }}
                 >
                   Fim de jogo!
                 </h2>
@@ -170,15 +248,25 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border-2 shadow-sm"
                     style={{ borderColor: teamWinner.color }}
                   >
-                    <span className="text-sm leading-none">{teamWinner.emoji}</span>
-                    <span className="font-display text-xs leading-none" style={{ color: teamWinner.color }}>
+                    <span className="text-sm leading-none">
+                      {teamWinner.emoji}
+                    </span>
+                    <span
+                      className="font-display text-xs leading-none"
+                      style={{ color: teamWinner.color }}
+                    >
                       {teamWinner.name} venceu · {teamWinner.score} pts
                     </span>
                   </div>
                 ) : (
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border-2 border-sun shadow-sm">
-                    <span className="text-sm leading-none">{winner?.avatar}</span>
-                    <span className="font-display text-xs leading-none" style={{ color: "oklch(0.22 0.06 290)" }}>
+                    <span className="text-sm leading-none">
+                      {winner?.avatar}
+                    </span>
+                    <span
+                      className="font-display text-xs leading-none"
+                      style={{ color: "oklch(0.22 0.06 290)" }}
+                    >
                       {winner?.nickname} venceu!
                     </span>
                   </div>
@@ -196,10 +284,22 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
             <ul className="space-y-0.5">
               {sortedTeams.map((t, i) => (
                 <li key={t.id} className="flex items-center gap-2 px-2">
-                  <span className="font-display text-sm w-5 text-center text-sun">{i + 1}</span>
+                  <span className="font-display text-sm w-5 text-center text-sun">
+                    {i + 1}
+                  </span>
                   <span className="text-base">{t.emoji}</span>
-                  <span className="font-display text-xs flex-1 truncate" style={{ color: t.color }}>{t.name}</span>
-                  <span className="font-display text-base" style={{ color: t.color }}>{t.score}</span>
+                  <span
+                    className="font-display text-xs flex-1 truncate"
+                    style={{ color: t.color }}
+                  >
+                    {t.name}
+                  </span>
+                  <span
+                    className="font-display text-base"
+                    style={{ color: t.color }}
+                  >
+                    {t.score}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -214,10 +314,16 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
             <ul className="space-y-0.5">
               {sorted.map((p, i) => (
                 <li key={p.id} className="flex items-center gap-2 px-2">
-                  <span className="font-display text-xs w-5 text-center opacity-70">{i + 1}º</span>
+                  <span className="font-display text-xs w-5 text-center opacity-70">
+                    {i + 1}º
+                  </span>
                   <span className="text-base">{p.avatar}</span>
-                  <span className="font-display text-xs flex-1 truncate">{p.nickname}</span>
-                  <span className="font-display text-xs text-primary">{p.score} pts</span>
+                  <span className="font-display text-xs flex-1 truncate">
+                    {p.nickname}
+                  </span>
+                  <span className="font-display text-xs text-primary">
+                    {p.score} pts
+                  </span>
                 </li>
               ))}
             </ul>
@@ -235,17 +341,26 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
               transition={{ delay: 0.4 }}
               className="rounded-2xl border-2 border-pink/40 p-3 flex items-center gap-3"
               style={{
-                background: "linear-gradient(135deg, color-mix(in oklab, var(--pink) 12%, transparent), color-mix(in oklab, var(--sun) 10%, transparent))",
-                boxShadow: "0 6px 18px -8px color-mix(in oklab, var(--pink) 50%, transparent)",
+                background:
+                  "linear-gradient(135deg, color-mix(in oklab, var(--pink) 12%, transparent), color-mix(in oklab, var(--sun) 10%, transparent))",
+                boxShadow:
+                  "0 6px 18px -8px color-mix(in oklab, var(--pink) 50%, transparent)",
               }}
             >
-              <div className="text-2xl shrink-0" aria-hidden>🏅</div>
+              <div className="text-2xl shrink-0" aria-hidden>
+                🏅
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="font-display text-sm leading-tight">
                   Crie uma conta para entrar no ranking!
                 </p>
                 <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                  Você fez <span className="font-display text-pink">{myFinalScore} pts</span>, mas como convidado eles não contam no ranking global. Próximas partidas vão acumular.
+                  Você fez{" "}
+                  <span className="font-display text-pink">
+                    {myFinalScore} pts
+                  </span>
+                  , mas como convidado eles não contam no ranking global.
+                  Próximas partidas vão acumular.
                 </p>
               </div>
               <Link
@@ -258,40 +373,84 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
           )}
           {titles.map(({ title, desc, player, medal, tone }, idx) => {
             if (!player) return null;
-            const team = sortedTeams.length > 0 ? (room.teams ?? []).find((t) => t.id === player.team_id) : undefined;
+            const team =
+              sortedTeams.length > 0
+                ? (room.teams ?? []).find((t) => t.id === player.team_id)
+                : undefined;
             const isGold = idx === 0;
             return (
               <motion.div
                 key={title}
                 initial={{ y: 20, opacity: 0, scale: isGold ? 0.9 : 1 }}
                 animate={{ y: 0, opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 + idx * 0.15, type: "spring", stiffness: 200 }}
-                className={"rounded-2xl flex flex-col gap-0.5 border-2 " + (isGold ? "py-2.5 px-3" : "py-1.5 px-2.5")}
+                transition={{
+                  delay: 0.2 + idx * 0.15,
+                  type: "spring",
+                  stiffness: 200,
+                }}
+                className={
+                  "rounded-2xl flex flex-col gap-0.5 border-2 " +
+                  (isGold ? "py-2.5 px-3" : "py-1.5 px-2.5")
+                }
                 style={{
                   borderColor: tone,
                   backgroundColor: isGold ? `${tone}22` : `${tone}14`,
-                  boxShadow: isGold ? `0 0 24px ${tone}77, inset 0 0 12px ${tone}33` : `0 0 8px ${tone}33`,
+                  boxShadow: isGold
+                    ? `0 0 24px ${tone}77, inset 0 0 12px ${tone}33`
+                    : `0 0 8px ${tone}33`,
                 }}
               >
                 <div className="flex items-center gap-2">
                   <motion.span
-                    animate={isGold ? { rotate: [0, -8, 8, -4, 4, 0], scale: [1, 1.15, 1] } : undefined}
-                    transition={isGold ? { duration: 1.2, repeat: Infinity, repeatDelay: 2 } : undefined}
-                    className={"shrink-0 leading-none " + (isGold ? "text-4xl" : "text-2xl")}
+                    animate={
+                      isGold
+                        ? { rotate: [0, -8, 8, -4, 4, 0], scale: [1, 1.15, 1] }
+                        : undefined
+                    }
+                    transition={
+                      isGold
+                        ? { duration: 1.2, repeat: Infinity, repeatDelay: 2 }
+                        : undefined
+                    }
+                    className={
+                      "shrink-0 leading-none " +
+                      (isGold ? "text-4xl" : "text-2xl")
+                    }
                     style={{ filter: `drop-shadow(0 0 8px ${tone})` }}
                   >
                     {medal}
                   </motion.span>
                   <div className="flex-1 min-w-0">
-                    <span className={"font-display block leading-tight " + (isGold ? "text-sm" : "text-xs")} style={{ color: tone }}>{title}</span>
-                    <p className="text-[10px] text-muted-foreground italic leading-tight">{desc}</p>
+                    <span
+                      className={
+                        "font-display block leading-tight " +
+                        (isGold ? "text-sm" : "text-xs")
+                      }
+                      style={{ color: tone }}
+                    >
+                      {title}
+                    </span>
+                    <p className="text-[10px] text-muted-foreground italic leading-tight">
+                      {desc}
+                    </p>
                   </div>
                   <div className="flex flex-col items-end gap-0.5 shrink-0">
                     <div className="flex items-center gap-1">
-                      <span className={isGold ? "text-xl" : "text-base"}>{player.avatar}</span>
-                      <span className={"font-display " + (isGold ? "text-sm" : "text-xs")}>{player.nickname}</span>
+                      <span className={isGold ? "text-xl" : "text-base"}>
+                        {player.avatar}
+                      </span>
+                      <span
+                        className={
+                          "font-display " + (isGold ? "text-sm" : "text-xs")
+                        }
+                      >
+                        {player.nickname}
+                      </span>
                     </div>
-                    <span className="font-display text-[11px] tabular-nums" style={{ color: tone }}>
+                    <span
+                      className="font-display text-[11px] tabular-nums"
+                      style={{ color: tone }}
+                    >
                       {player.score} pts
                     </span>
                     {sortedTeams.length > 0 && (
@@ -300,11 +459,15 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
                         style={{
                           color: team?.color ?? "rgba(255,255,255,0.55)",
                           borderColor: team?.color ?? "rgba(255,255,255,0.18)",
-                          backgroundColor: team ? `${team.color}1a` : "rgba(255,255,255,0.06)",
+                          backgroundColor: team
+                            ? `${team.color}1a`
+                            : "rgba(255,255,255,0.06)",
                         }}
                       >
                         <span>{team?.emoji ?? "—"}</span>
-                        <span className="truncate max-w-[80px]">{team?.name ?? "sem time"}</span>
+                        <span className="truncate max-w-[80px]">
+                          {team?.name ?? "sem time"}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -321,37 +484,51 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
             transition={{ type: "spring", stiffness: 240 }}
             className="sticker bg-gradient-sun text-secondary-foreground text-center py-2"
           >
-            <span className="font-display text-lg">⚡ +{xpResult.xpGained} XP</span>
-            <span className="font-display text-xs ml-2 opacity-80">Nível {xpResult.level}</span>
+            <span className="font-display text-lg">
+              ⚡ +{xpResult.xpGained} XP
+            </span>
+            <span className="font-display text-xs ml-2 opacity-80">
+              Nível {xpResult.level}
+            </span>
           </motion.div>
         )}
 
         <FunStats players={players} history={history} />
-
       </div>
 
       <div className="flex gap-2 mt-2 pt-2 border-t border-white/10 bg-background/80 backdrop-blur-sm sticky bottom-0">
-        <button onClick={onLeave} className="btn-pop bg-card flex-1">Sair</button>
+        <button onClick={onLeave} className="btn-pop bg-card flex-1">
+          Sair
+        </button>
         <button
           onClick={() => setViewingScoreboard(true)}
           className="btn-pop bg-card flex-1 text-sm"
-          title="Rever placar da última rodada">
+          title="Rever placar da última rodada"
+        >
           📊 Ver placar
         </button>
         {isHost && (
-          <button onClick={() => restartGame(roomId)} className="btn-pop bg-gradient-fun text-white flex-[2] text-lg">
+          <button
+            onClick={() => restartGame(roomId)}
+            className="btn-pop bg-gradient-fun text-white flex-[2] text-lg"
+          >
             🔄 Nova partida
           </button>
         )}
       </div>
-
     </motion.div>
   );
 }
 
 // Estatísticas divertidas do fim de partida (spec): maior enganador,
 // maior enganado, resposta mais votada e maior sequência de acertos.
-function FunStats({ players, history }: { players: Player[]; history: { defs: Definition[]; votes: Vote[] } | null }) {
+function FunStats({
+  players,
+  history,
+}: {
+  players: Player[];
+  history: { defs: Definition[]; votes: Vote[] } | null;
+}) {
   const stats = useMemo(() => {
     if (!history || history.votes.length === 0) return [];
     const byId = new Map(players.map((p) => [p.id, p]));
@@ -368,12 +545,18 @@ function FunStats({ players, history }: { players: Player[]; history: { defs: De
     const votesByPlayerRound = new Map<string, Map<number, boolean>>();
 
     for (const v of history.votes) {
-      votesByDef.set(v.definition_id, (votesByDef.get(v.definition_id) ?? 0) + 1);
+      votesByDef.set(
+        v.definition_id,
+        (votesByDef.get(v.definition_id) ?? 0) + 1,
+      );
       const def = defById.get(v.definition_id);
       if (!def) continue;
       if (truthIds.has(def.id)) {
         let m = votesByPlayerRound.get(v.voter_id);
-        if (!m) { m = new Map(); votesByPlayerRound.set(v.voter_id, m); }
+        if (!m) {
+          m = new Map();
+          votesByPlayerRound.set(v.voter_id, m);
+        }
         m.set(v.round, true);
       } else {
         fooledCount.set(v.voter_id, (fooledCount.get(v.voter_id) ?? 0) + 1);
@@ -381,7 +564,10 @@ function FunStats({ players, history }: { players: Player[]; history: { defs: De
           fooledBy.set(def.player_id, (fooledBy.get(def.player_id) ?? 0) + 1);
         }
         let m = votesByPlayerRound.get(v.voter_id);
-        if (!m) { m = new Map(); votesByPlayerRound.set(v.voter_id, m); }
+        if (!m) {
+          m = new Map();
+          votesByPlayerRound.set(v.voter_id, m);
+        }
         m.set(v.round, false);
       }
     }
@@ -394,14 +580,20 @@ function FunStats({ players, history }: { players: Player[]; history: { defs: De
 
     // Maior sequência de acertos consecutivos entre todos os jogadores
     let bestStreak: { id: string; n: number } | null = null;
-    const rounds = Array.from(new Set(history.defs.map((d) => d.round))).sort((a, b) => a - b);
+    const rounds = Array.from(new Set(history.defs.map((d) => d.round))).sort(
+      (a, b) => a - b,
+    );
     for (const [pid, m] of votesByPlayerRound) {
-      let cur = 0, max = 0;
+      let cur = 0,
+        max = 0;
       for (const r of rounds) {
-        if (m.get(r) === true) { cur++; max = Math.max(max, cur); }
-        else if (m.has(r)) cur = 0;
+        if (m.get(r) === true) {
+          cur++;
+          max = Math.max(max, cur);
+        } else if (m.has(r)) cur = 0;
       }
-      if (max >= 2 && (!bestStreak || max > bestStreak.n)) bestStreak = { id: pid, n: max };
+      if (max >= 2 && (!bestStreak || max > bestStreak.n))
+        bestStreak = { id: pid, n: max };
     }
 
     let topVotedDef: { def: Definition; n: number } | null = null;
@@ -415,16 +607,31 @@ function FunStats({ players, history }: { players: Player[]; history: { defs: De
     const enganador = top(fooledBy);
     if (enganador) {
       const p = byId.get(enganador.id);
-      if (p) out.push({ emoji: "🦊", label: "Maior enganador", value: `${p.avatar} ${p.nickname} — enganou ${enganador.n}×` });
+      if (p)
+        out.push({
+          emoji: "🦊",
+          label: "Maior enganador",
+          value: `${p.avatar} ${p.nickname} — enganou ${enganador.n}×`,
+        });
     }
     const enganado = top(fooledCount);
     if (enganado) {
       const p = byId.get(enganado.id);
-      if (p) out.push({ emoji: "🎣", label: "Maior enganado", value: `${p.avatar} ${p.nickname} — caiu ${enganado.n}×` });
+      if (p)
+        out.push({
+          emoji: "🎣",
+          label: "Maior enganado",
+          value: `${p.avatar} ${p.nickname} — caiu ${enganado.n}×`,
+        });
     }
     if (bestStreak) {
       const p = byId.get(bestStreak.id);
-      if (p) out.push({ emoji: "🎯", label: "Sequência de acertos", value: `${p.avatar} ${p.nickname} — ${bestStreak.n} seguidos` });
+      if (p)
+        out.push({
+          emoji: "🎯",
+          label: "Sequência de acertos",
+          value: `${p.avatar} ${p.nickname} — ${bestStreak.n} seguidos`,
+        });
     }
     if (topVotedDef && topVotedDef.n >= 2) {
       const author = byId.get(topVotedDef.def.player_id);
@@ -453,7 +660,9 @@ function FunStats({ players, history }: { players: Player[]; history: { defs: De
         >
           <span className="text-base shrink-0">{s.emoji}</span>
           <div className="min-w-0">
-            <p className="font-display text-[10px] uppercase tracking-wider text-muted-foreground leading-none">{s.label}</p>
+            <p className="font-display text-[10px] uppercase tracking-wider text-muted-foreground leading-none">
+              {s.label}
+            </p>
             <p className="text-xs leading-snug break-words">{s.value}</p>
           </div>
         </motion.div>
@@ -463,5 +672,3 @@ function FunStats({ players, history }: { players: Player[]; history: { defs: De
 }
 
 export default Finished;
-
-

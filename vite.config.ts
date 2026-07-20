@@ -27,7 +27,9 @@ export default defineConfig(({ mode }) => {
       tsConfigPaths(),
       tailwindcss(),
       // Cloudflare só no build web de produção; nunca no bundle nativo.
-      ...(isProd && !isCapacitor ? [cloudflare({ viteEnvironment: { name: "ssr" } })] : []),
+      ...(isProd && !isCapacitor
+        ? [cloudflare({ viteEnvironment: { name: "ssr" } })]
+        : []),
       tanstackStart({
         // Entry SSR customizado (src/server.ts embrulha o handler com captura de erros)
         server: { entry: "server" },
@@ -38,7 +40,12 @@ export default defineConfig(({ mode }) => {
       viteReact(),
     ],
     resolve: {
-      dedupe: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-query"],
+      dedupe: [
+        "react",
+        "react-dom",
+        "@tanstack/react-router",
+        "@tanstack/react-query",
+      ],
     },
   };
 });

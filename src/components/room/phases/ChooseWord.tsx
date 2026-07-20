@@ -1,11 +1,23 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { fetchThreeWords, chooseWord, type Player, type Room, type Word } from "@/lib/room";
+import {
+  fetchThreeWords,
+  chooseWord,
+  type Player,
+  type Room,
+  type Word,
+} from "@/lib/room";
 import { Mascot } from "@/components/Mascot";
 import { playUITap } from "@/lib/sound";
 
-export function ChooseWord({ room, players, isCoordinator }: {
-  room: Room; players: Player[]; isCoordinator: boolean;
+export function ChooseWord({
+  room,
+  players,
+  isCoordinator,
+}: {
+  room: Room;
+  players: Player[];
+  isCoordinator: boolean;
 }) {
   const [phase, setPhase] = useState<"idle" | "flipping" | "ready">("idle");
   const [words, setWords] = useState<Word[] | null>(null);
@@ -16,7 +28,12 @@ export function ChooseWord({ room, players, isCoordinator }: {
     if (phase !== "idle") return;
     setPhase("flipping");
     const [drawn] = await Promise.all([
-      fetchThreeWords(room.used_word_ids ?? [], room.categories ?? [], room.id, room.nivel ?? "aleatorio"),
+      fetchThreeWords(
+        room.used_word_ids ?? [],
+        room.categories ?? [],
+        room.id,
+        room.nivel ?? "aleatorio",
+      ),
       new Promise((r) => setTimeout(r, 1800)),
     ]);
     setWords(drawn);
@@ -36,11 +53,25 @@ export function ChooseWord({ room, players, isCoordinator }: {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center justify-center gap-3">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col items-center justify-center gap-3"
+    >
       {phase !== "ready" && <Mascot mood="thinking" size={140} />}
       <div className="text-center">
-        <p className="text-muted-foreground text-xs font-display">Coordenador da rodada</p>
-        <h2 className={"font-display text-sun " + (phase === "ready" ? "text-xl" : "text-3xl mt-1")}>{coord?.nickname} 👑</h2>
+        <p className="text-muted-foreground text-xs font-display">
+          Coordenador da rodada
+        </p>
+        <h2
+          className={
+            "font-display text-sun " +
+            (phase === "ready" ? "text-xl" : "text-3xl mt-1")
+          }
+        >
+          {coord?.nickname} 👑
+        </h2>
       </div>
 
       {isCoordinator ? (
@@ -73,7 +104,11 @@ export function ChooseWord({ room, players, isCoordinator }: {
                   key={w.id}
                   initial={{ scale: 0.6, opacity: 0, rotate: -3 }}
                   animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                  transition={{ delay: i * 0.1, type: "spring", stiffness: 220 }}
+                  transition={{
+                    delay: i * 0.1,
+                    type: "spring",
+                    stiffness: 220,
+                  }}
                   whileTap={{ scale: 0.96 }}
                   disabled={!!picking}
                   onClick={() => handlePick(w.id)}
@@ -81,19 +116,27 @@ export function ChooseWord({ room, players, isCoordinator }: {
                   onContextMenu={(e) => e.preventDefault()}
                   className={
                     "w-full sticker text-left transition px-3 py-2 flex items-baseline gap-2 no-copy " +
-                    (picking && picking !== w.id ? "opacity-40 pointer-events-none " : "active:bg-pink/10 ") +
+                    (picking && picking !== w.id
+                      ? "opacity-40 pointer-events-none "
+                      : "active:bg-pink/10 ") +
                     (picking === w.id ? "ring-2 ring-pink " : "")
                   }
                 >
-                  <p className="font-display text-lg leading-tight flex-1 truncate capitalize">{w.word}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider shrink-0">{w.category}</p>
+                  <p className="font-display text-lg leading-tight flex-1 truncate capitalize">
+                    {w.word}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider shrink-0">
+                    {w.category}
+                  </p>
                 </motion.button>
               ))}
             </motion.div>
           )}
         </div>
       ) : (
-        <p className="text-center text-muted-foreground italic">Aguardando o coordenador escolher uma palavra…</p>
+        <p className="text-center text-muted-foreground italic">
+          Aguardando o coordenador escolher uma palavra…
+        </p>
       )}
     </motion.div>
   );
@@ -132,11 +175,11 @@ function DictionaryFlip() {
           />
         ))}
       </div>
-      <p className="font-display text-pink animate-pulse">Folheando o dicionário…</p>
+      <p className="font-display text-pink animate-pulse">
+        Folheando o dicionário…
+      </p>
     </div>
   );
 }
 
 export default ChooseWord;
-
-

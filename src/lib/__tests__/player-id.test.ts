@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { getPlayerId, regeneratePlayerId, setPlayerId, getStored, setStored } from "@/lib/player-id";
+import {
+  getPlayerId,
+  regeneratePlayerId,
+  setPlayerId,
+  getStored,
+  setStored,
+} from "@/lib/player-id";
 
 beforeEach(() => localStorage.clear());
 

@@ -3,30 +3,59 @@ import { motion } from "framer-motion";
 import { playCountdownTick, playCountdownFinal } from "@/lib/sound";
 import type { Word, Player } from "@/lib/room";
 
-export function WordCard({ word, compact = false }: { word: Word; compact?: boolean }) {
+export function WordCard({
+  word,
+  compact = false,
+}: {
+  word: Word;
+  compact?: boolean;
+}) {
   return (
-    <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+    <motion.div
+      initial={{ scale: 0.6, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 220 }}
       onCopy={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
-      className="sticker bg-gradient-fun text-center py-2 no-copy">
-      <p className="text-[10px] uppercase tracking-widest font-display opacity-80 leading-tight">A palavra é</p>
-      <h2 className={"font-display text-stroke capitalize " + (compact ? "text-2xl" : "text-3xl") + " text-white mt-0.5 leading-tight"}>
+      className="sticker bg-gradient-fun text-center py-2 no-copy"
+    >
+      <p className="text-[10px] uppercase tracking-widest font-display opacity-80 leading-tight">
+        A palavra é
+      </p>
+      <h2
+        className={
+          "font-display text-stroke capitalize " +
+          (compact ? "text-2xl" : "text-3xl") +
+          " text-white mt-0.5 leading-tight"
+        }
+      >
         {word.word}
       </h2>
     </motion.div>
   );
 }
 
-export function ProgressBar({ current, total }: { current: number; total: number }) {
+export function ProgressBar({
+  current,
+  total,
+}: {
+  current: number;
+  total: number;
+}) {
   const pct = total > 0 ? (current / total) * 100 : 0;
   return (
     <div className="w-full">
       <div className="h-3 bg-card rounded-full overflow-hidden border border-white/10">
-        <motion.div className="h-full bg-gradient-fun"
-          initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ type: "spring" }} />
+        <motion.div
+          className="h-full bg-gradient-fun"
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ type: "spring" }}
+        />
       </div>
-      <p className="text-xs text-center text-muted-foreground mt-1">{current}/{total}</p>
+      <p className="text-xs text-center text-muted-foreground mt-1">
+        {current}/{total}
+      </p>
     </div>
   );
 }
@@ -42,10 +71,12 @@ export function PendingList({ pending }: { pending: Player[] }) {
       </p>
       <div className="flex flex-wrap justify-center gap-2">
         {pending.map((p) => (
-          <motion.div key={p.id}
+          <motion.div
+            key={p.id}
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ duration: 1.6, repeat: Infinity }}
-            className="flex items-center gap-1 bg-card border border-white/10 rounded-full pl-1 pr-3 py-1">
+            className="flex items-center gap-1 bg-card border border-white/10 rounded-full pl-1 pr-3 py-1"
+          >
             <span className="text-lg">{p.avatar}</span>
             <span className="font-display text-sm">{p.nickname}</span>
           </motion.div>
@@ -55,7 +86,15 @@ export function PendingList({ pending }: { pending: Player[] }) {
   );
 }
 
-export function TimerBar({ remaining, max, tickStartAt = 5 }: { remaining: number; max: number; tickStartAt?: number }) {
+export function TimerBar({
+  remaining,
+  max,
+  tickStartAt = 5,
+}: {
+  remaining: number;
+  max: number;
+  tickStartAt?: number;
+}) {
   const pct = (remaining / max) * 100;
   const urgent = remaining <= 10;
   const color = urgent ? "bg-destructive" : "bg-sun";
@@ -64,7 +103,8 @@ export function TimerBar({ remaining, max, tickStartAt = 5 }: { remaining: numbe
     const key = `${max}:${tickStartAt}:${remaining}`;
     if (lastPlayed.current === key) return;
     lastPlayed.current = key;
-    if (remaining > 0 && remaining <= tickStartAt) void playCountdownTick(remaining);
+    if (remaining > 0 && remaining <= tickStartAt)
+      void playCountdownTick(remaining);
     else if (remaining === 0) void playCountdownFinal();
   }, [remaining, max, tickStartAt]);
   return (
@@ -76,7 +116,9 @@ export function TimerBar({ remaining, max, tickStartAt = 5 }: { remaining: numbe
         transition={{ duration: 0.25 }}
         className={
           "font-display leading-none tracking-tight tabular-nums " +
-          (urgent ? "text-destructive text-5xl drop-shadow-[0_0_12px_rgba(255,80,80,0.45)]" : "text-sun text-5xl")
+          (urgent
+            ? "text-destructive text-5xl drop-shadow-[0_0_12px_rgba(255,80,80,0.45)]"
+            : "text-sun text-5xl")
         }
         aria-live="polite"
       >
@@ -84,10 +126,12 @@ export function TimerBar({ remaining, max, tickStartAt = 5 }: { remaining: numbe
         <span className="text-xl ml-1 align-top opacity-70">s</span>
       </motion.div>
       <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-white/10">
-        <motion.div className={"h-full " + color} animate={{ width: `${pct}%` }} transition={{ duration: 0.5, ease: "linear" }} />
+        <motion.div
+          className={"h-full " + color}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.5, ease: "linear" }}
+        />
       </div>
     </div>
   );
 }
-
-

@@ -10,7 +10,11 @@
 //  - reveal:  drone curto sustentado (overlay durante revelação)
 //  - victory: arpejo maior brilhante (curto, ~6s)
 
-import { getAudioPrefs, registerMusicDuck, subscribeAudioPrefs } from "@/lib/sound";
+import {
+  getAudioPrefs,
+  registerMusicDuck,
+  subscribeAudioPrefs,
+} from "@/lib/sound";
 
 export type Mood = "silent" | "lobby" | "tension" | "reveal" | "victory";
 
@@ -18,9 +22,14 @@ let ctx: AudioContext | null = null;
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
   if (!ctx) {
-    const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext | undefined;
+    const AC = (window.AudioContext || (window as any).webkitAudioContext) as
+      typeof AudioContext | undefined;
     if (!AC) return null;
-    try { ctx = new AC(); } catch { return null; }
+    try {
+      ctx = new AC();
+    } catch {
+      return null;
+    }
   }
   return ctx;
 }
@@ -43,7 +52,7 @@ function ensureMaster(c: AudioContext) {
     subscribed = true;
     subscribeAudioPrefs((p) => {
       if (!masterGain) return;
-      const now = (ctx?.currentTime ?? 0);
+      const now = ctx?.currentTime ?? 0;
       const target = p.muted ? 0 : MOOD_BASE_GAIN;
       try {
         masterGain.gain.cancelScheduledValues(now);
@@ -62,7 +71,10 @@ function ensureMaster(c: AudioContext) {
         masterGain.gain.cancelScheduledValues(t);
         masterGain.gain.setValueAtTime(masterGain.gain.value, t);
         masterGain.gain.linearRampToValueAtTime(target, t + 0.05);
-        masterGain.gain.linearRampToValueAtTime(base, t + 0.05 + holdMs / 1000 + 0.25);
+        masterGain.gain.linearRampToValueAtTime(
+          base,
+          t + 0.05 + holdMs / 1000 + 0.25,
+        );
       } catch {}
     });
   }
@@ -71,15 +83,17 @@ function ensureMaster(c: AudioContext) {
 
 // Escalas (semitons → frequência base C4=261.63)
 const C4 = 261.63;
-function nf(semis: number) { return C4 * Math.pow(2, semis / 12); }
+function nf(semis: number) {
+  return C4 * Math.pow(2, semis / 12);
+}
 
 // Padrões por mood: notas (semis relativos a C4) e timbres.
 interface MoodPattern {
-  pad: number[];         // acorde sustentado (semis)
+  pad: number[]; // acorde sustentado (semis)
   padType: OscillatorType;
-  arpeggio: number[];    // sequência (semis)
+  arpeggio: number[]; // sequência (semis)
   arpType: OscillatorType;
-  arpStep: number;       // segundos entre notas
+  arpStep: number; // segundos entre notas
   arpGain: number;
   padGain: number;
   filterFreq: number;
@@ -87,7 +101,12 @@ interface MoodPattern {
   kickBpm?: number;
   kickGain?: number;
   /** Heartbeat acelerando (tension). [bpmInicial, bpmFinal, segundosParaAcelerar]. */
-  heartbeat?: { bpmStart: number; bpmEnd: number; rampSec: number; gain: number };
+  heartbeat?: {
+    bpmStart: number;
+    bpmEnd: number;
+    rampSec: number;
+    gain: number;
+  };
 }
 
 const MOODS: Record<Exclude<Mood, "silent">, MoodPattern> = {
@@ -112,7 +131,7 @@ const MOODS: Record<Exclude<Mood, "silent">, MoodPattern> = {
     arpType: "sine",
     arpStep: 0.55,
     arpGain: 0.08,
-    padGain: 0.10, // pad mais quieto, sawtooth precisa de filtro
+    padGain: 0.1, // pad mais quieto, sawtooth precisa de filtro
     filterFreq: 700,
     heartbeat: { bpmStart: 70, bpmEnd: 130, rampSec: 28, gain: 0.22 },
   },
@@ -134,7 +153,7 @@ const MOODS: Record<Exclude<Mood, "silent">, MoodPattern> = {
     arpeggio: [12, 16, 19, 24, 19, 16],
     arpType: "triangle",
     arpStep: 0.18,
-    arpGain: 0.20,
+    arpGain: 0.2,
     padGain: 0.22,
     filterFreq: 3200,
   },
@@ -207,7 +226,7 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
   // para preservar o ataque grave.
   let kickIntervalId: ReturnType<typeof setInterval> | null = null;
   if (pattern.kickBpm && pattern.kickGain) {
-    const periodMs = (60_000 / pattern.kickBpm);
+    const periodMs = 60_000 / pattern.kickBpm;
     const fireKick = () => {
       if (stopped || !ctx) return;
       const t = ctx.currentTime;
@@ -215,7 +234,7 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
       const g = ctx.createGain();
       osc.type = "sine";
       osc.frequency.setValueAtTime(120, t);
-      osc.frequency.exponentialRampToValueAtTime(48, t + 0.10);
+      osc.frequency.exponentialRampToValueAtTime(48, t + 0.1);
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(pattern.kickGain!, t + 0.005);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
@@ -229,7 +248,7 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
 
   // Heartbeat acelerando (tension) — pulso grave duplo "lub-dub" que acelera.
   let heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  let heartbeatStartedAt = c.currentTime;
+  const heartbeatStartedAt = c.currentTime;
   if (pattern.heartbeat) {
     const hb = pattern.heartbeat;
     const scheduleHeartbeat = () => {
@@ -245,14 +264,23 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
       // Gain também cresce levemente (até +15%) — coração "batendo mais forte"
       const gainMul = 1 + progress * 0.15;
       // "lub" + "dub"
-      for (const [offset, gain] of [[0, 1], [0.14, 0.7]] as const) {
+      for (const [offset, gain] of [
+        [0, 1],
+        [0.14, 0.7],
+      ] as const) {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
         osc.type = "sine";
         osc.frequency.setValueAtTime(85 * detuneMul, t + offset);
-        osc.frequency.exponentialRampToValueAtTime(38 * detuneMul, t + offset + 0.10);
+        osc.frequency.exponentialRampToValueAtTime(
+          38 * detuneMul,
+          t + offset + 0.1,
+        );
         g.gain.setValueAtTime(0.0001, t + offset);
-        g.gain.exponentialRampToValueAtTime(hb.gain * gain * gainMul, t + offset + 0.005);
+        g.gain.exponentialRampToValueAtTime(
+          hb.gain * gain * gainMul,
+          t + offset + 0.005,
+        );
         g.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.18);
         osc.connect(g).connect(master);
         osc.start(t + offset);
@@ -278,9 +306,20 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
       moodGain.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
     } catch {}
     setTimeout(() => {
-      padOscs.forEach((o) => { try { o.stop(); o.disconnect(); } catch {} });
-      try { lfo.stop(); lfo.disconnect(); } catch {}
-      try { moodGain.disconnect(); filter.disconnect(); } catch {}
+      padOscs.forEach((o) => {
+        try {
+          o.stop();
+          o.disconnect();
+        } catch {}
+      });
+      try {
+        lfo.stop();
+        lfo.disconnect();
+      } catch {}
+      try {
+        moodGain.disconnect();
+        filter.disconnect();
+      } catch {}
     }, 1200);
   };
 }
@@ -303,15 +342,21 @@ export function setMusicMood(mood: Mood) {
   }
   // Auto-stop curto para reveal/victory (são acentos, não loops)
   if (mood === "reveal") {
-    setTimeout(() => { if (currentMood === "reveal") setMusicMood("silent"); }, 2800);
+    setTimeout(() => {
+      if (currentMood === "reveal") setMusicMood("silent");
+    }, 2800);
   } else if (mood === "victory") {
-    setTimeout(() => { if (currentMood === "victory") setMusicMood("silent"); }, 6500);
+    setTimeout(() => {
+      if (currentMood === "victory") setMusicMood("silent");
+    }, 6500);
   }
 }
 
-export function getMusicMood(): Mood { return currentMood; }
+export function getMusicMood(): Mood {
+  return currentMood;
+}
 
 /** Para tudo (ex.: ao sair da sala). */
-export function stopMusic() { setMusicMood("silent"); }
-
-
+export function stopMusic() {
+  setMusicMood("silent");
+}

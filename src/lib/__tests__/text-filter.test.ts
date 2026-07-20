@@ -32,7 +32,9 @@ describe("sanitizeDefinition", () => {
     expect(sanitizeDefinition("x".repeat(200)).length).toBeLessThanOrEqual(140);
   });
   it("substitui links", () => {
-    expect(sanitizeDefinition("veja https://x.com/abc agora")).toBe("veja [link] agora");
+    expect(sanitizeDefinition("veja https://x.com/abc agora")).toBe(
+      "veja [link] agora",
+    );
   });
   it("censura palavrões com asteriscos", () => {
     expect(sanitizeDefinition("que PORRA é essa")).toBe("que ***** e essa");
@@ -54,24 +56,32 @@ describe("sanitizeDefinition", () => {
       expect(out).not.toContain("fazeda");
     });
     it("plural/raiz é pego (pindaíbas ~ pindaíba)", () => {
-      const out = sanitizeDefinition("são as pindaibas do sertão", 140, "pindaíba");
+      const out = sanitizeDefinition(
+        "são as pindaibas do sertão",
+        140,
+        "pindaíba",
+      );
       expect(out).not.toContain("pindaiba");
       expect(out).toContain("***");
     });
     it("texto inocente passa intacto", () => {
-      expect(sanitizeDefinition("livro antigo e volumoso", 140, "fazeda"))
-        .toBe("livro antigo e volumoso");
+      expect(sanitizeDefinition("livro antigo e volumoso", 140, "fazeda")).toBe(
+        "livro antigo e volumoso",
+      );
     });
   });
 });
 
 describe("humanizeMeaning", () => {
   it("remove etiquetas de dicionário e fica na primeira acepção", () => {
-    expect(humanizeMeaning("s.m. Livro antigo, volumoso; calhamaço."))
-      .toBe("livro antigo, volumoso");
+    expect(humanizeMeaning("s.m. Livro antigo, volumoso; calhamaço.")).toBe(
+      "livro antigo, volumoso",
+    );
   });
   it("remove rótulo entre parênteses no início", () => {
-    expect(humanizeMeaning("(Bras.) pessoa sem dinheiro")).toBe("pessoa sem dinheiro");
+    expect(humanizeMeaning("(Bras.) pessoa sem dinheiro")).toBe(
+      "pessoa sem dinheiro",
+    );
   });
   it("corta longos em limite de palavra e sem pontuação final", () => {
     const out = humanizeMeaning("palavra ".repeat(30), 90);

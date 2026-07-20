@@ -3,8 +3,16 @@ import { motion } from "framer-motion";
 import { startVoting, type Definition, type Room, type Word } from "@/lib/room";
 import { playCardShuffle } from "@/lib/sound";
 
-export function Shuffling({ room, word, definitions, isHost }: {
-  room: Room; word: Word; definitions: Definition[]; isHost: boolean;
+export function Shuffling({
+  room,
+  word,
+  definitions,
+  isHost,
+}: {
+  room: Room;
+  word: Word;
+  definitions: Definition[];
+  isHost: boolean;
 }) {
   useEffect(() => {
     void playCardShuffle();
@@ -19,7 +27,9 @@ export function Shuffling({ room, word, definitions, isHost }: {
   }, [room.id, room.current_round, word, definitions, isHost]);
 
   // Pré-carrega o chunk de Voting durante a animação para entrar instantâneo
-  useEffect(() => { void import("@/components/room/phases/Voting"); }, []);
+  useEffect(() => {
+    void import("@/components/room/phases/Voting");
+  }, []);
 
   const cards = useMemo(() => [0, 1, 2, 3, 4], []);
 
@@ -49,7 +59,11 @@ export function Shuffling({ room, word, definitions, isHost }: {
             <motion.div
               key={i}
               className="absolute left-1/2 top-1/2 w-24 h-36 rounded-2xl bg-gradient-fun shadow-pop border-2 border-white/15"
-              style={{ marginLeft: -48, marginTop: -72, transformOrigin: "50% 100%" }}
+              style={{
+                marginLeft: -48,
+                marginTop: -72,
+                transformOrigin: "50% 100%",
+              }}
               initial={{ x: 0, y: 0, rotate: 0, scale: 0.92, opacity: 0 }}
               animate={{
                 x: [0, fanX, fanX, 0],
@@ -122,5 +136,3 @@ export function Shuffling({ room, word, definitions, isHost }: {
 }
 
 export default Shuffling;
-
-

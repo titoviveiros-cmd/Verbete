@@ -16,7 +16,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "node scripts/test-identity.mjs && node scripts/test-e2e-round.mjs",
-    "check": "npm run typecheck && npm run test",
+    "check": "npm run lint && npm run typecheck && npm run test",
     "cap:sync": "vite build --mode capacitor && cap sync",
     "cap:icons": "capacitor-assets generate --assetPath resources",
     "cap:ios": "vite build --mode capacitor && cap sync ios && cap open ios",

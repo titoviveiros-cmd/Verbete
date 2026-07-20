@@ -38,22 +38,37 @@ export function useRoom(code: string | undefined, playerId?: string) {
   // Mantém ref atualizada de `players` para consumo dentro de callbacks de
   // realtime (que capturariam estado obsoleto se usassem a variável direto).
   const playersRef = useRef<Player[]>([]);
-  useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => {
+    playersRef.current = players;
+  }, [players]);
   const roomRef = useRef<Room | null>(null);
-  useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
 
   // Initial load — single RPC roundtrip
   useEffect(() => {
     if (!code) return;
     let alive = true;
     const load = async () => {
-      const { data, error: rpcErr } = await (supabase.rpc as any)("get_room_state", { p_code: code });
+      const { data, error: rpcErr } = await (supabase.rpc as any)(
+        "get_room_state",
+        { p_code: code },
+      );
       if (!alive) return;
       if (!rpcErr && data) {
         const payload = data as {
-          room: Room; players: Player[]; definitions: Definition[]; votes: Vote[]; word: Word | null;
+          room: Room;
+          players: Player[];
+          definitions: Definition[];
+          votes: Vote[];
+          word: Word | null;
         };
-        if (!payload?.room) { setError("Sala não encontrada"); setLoading(false); return; }
+        if (!payload?.room) {
+          setError("Sala não encontrada");
+          setLoading(false);
+          return;
+        }
         setRoom(payload.room);
         lastRoomSigRef.current = `${payload.room.status}|${payload.room.current_round}|${payload.room.current_word_id ?? ""}`;
         lastEventAtRef.current = Date.now();
@@ -66,24 +81,41 @@ export function useRoom(code: string | undefined, playerId?: string) {
           .from("round_extensions")
           .select("*")
           .eq("room_id", payload.room.id)
-          .then(({ data }) => { if (alive) setRoundExtensions((data as RoundExtension[]) ?? []); });
+          .then(({ data }) => {
+            if (alive) setRoundExtensions((data as RoundExtension[]) ?? []);
+          });
         setLoading(false);
         return;
       }
       // Fallback legado (RPC indisponível)
       const { data: r, error: e } = await supabase
-        .from("rooms").select("*").eq("code", code).maybeSingle();
+        .from("rooms")
+        .select("*")
+        .eq("code", code)
+        .maybeSingle();
       if (!alive) return;
-      if (e || !r) { setError(e?.message ?? "Sala não encontrada"); setLoading(false); return; }
+      if (e || !r) {
+        setError(e?.message ?? "Sala não encontrada");
+        setLoading(false);
+        return;
+      }
       setRoom(r as unknown as Room);
       const [{ data: ps }, { data: sync }, { data: rxs }] = await Promise.all([
-        supabase.from("players").select("*").eq("room_id", r.id).is("kicked_at", null).order("joined_at"),
+        supabase
+          .from("players")
+          .select("*")
+          .eq("room_id", r.id)
+          .is("kicked_at", null)
+          .order("joined_at"),
         (supabase.rpc as any)("get_round_sync", { p_room_id: r.id }),
         supabase.from("round_extensions").select("*").eq("room_id", r.id),
       ]);
       if (!alive) return;
       setPlayers((ps as Player[]) ?? []);
-      const syncPayload = sync as { definitions?: Definition[]; votes?: Vote[] } | null;
+      const syncPayload = sync as {
+        definitions?: Definition[];
+        votes?: Vote[];
+      } | null;
       setDefinitions(syncPayload?.definitions ?? []);
       setVotes(syncPayload?.votes ?? []);
       setRoundExtensions((rxs as RoundExtension[]) ?? []);
@@ -91,16 +123,30 @@ export function useRoom(code: string | undefined, playerId?: string) {
     };
     reloadRef.current = load;
     load();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [code]);
 
   // Realtime subscription (postgres changes + presence for connection tracking)
   useEffect(() => {
     if (!room?.id) return;
-    const ch = supabase.channel(`room:${room.id}`, {
-      config: { presence: { key: playerId || `anon-${Math.random().toString(36).slice(2)}` } },
-    })
-      .on("postgres_changes", { event: "*", schema: "public", table: "rooms", filter: `id=eq.${room.id}` },
+    const ch = supabase
+      .channel(`room:${room.id}`, {
+        config: {
+          presence: {
+            key: playerId || `anon-${Math.random().toString(36).slice(2)}`,
+          },
+        },
+      })
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "rooms",
+          filter: `id=eq.${room.id}`,
+        },
         (p) => {
           lastEventAtRef.current = Date.now();
           if (p.new) {
@@ -112,11 +158,15 @@ export function useRoom(code: string | undefined, playerId?: string) {
             const sig = `${nr.status}|${nr.current_round}|${nr.current_word_id ?? ""}`;
             if (sig !== lastRoomSigRef.current) {
               lastRoomSigRef.current = sig;
-              ch.send({ type: "broadcast", event: "room-sync", payload: { sig, ts: Date.now() } })
-                .catch(() => {});
+              ch.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { sig, ts: Date.now() },
+              }).catch(() => {});
             }
           }
-        })
+        },
+      )
       .on("broadcast", { event: "room-sync" }, ({ payload }) => {
         lastEventAtRef.current = Date.now();
         const sig = (payload as { sig?: string })?.sig;
@@ -127,28 +177,48 @@ export function useRoom(code: string | undefined, playerId?: string) {
         lastRoomSigRef.current = sig;
         reloadRef.current?.();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_id=eq.${room.id}` },
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "players",
+          filter: `room_id=eq.${room.id}`,
+        },
         (p) => {
           lastEventAtRef.current = Date.now();
           setPlayers((cur) => {
-            if (p.eventType === "DELETE") return cur.filter((x) => x.id !== (p.old as Player).id);
+            if (p.eventType === "DELETE")
+              return cur.filter((x) => x.id !== (p.old as Player).id);
             const incoming = p.new as Player;
-            if (incoming.kicked_at) return cur.filter((x) => x.id !== incoming.id);
+            if (incoming.kicked_at)
+              return cur.filter((x) => x.id !== incoming.id);
             const idx = cur.findIndex((x) => x.id === incoming.id);
             if (idx === -1) return [...cur, incoming];
-            const copy = [...cur]; copy[idx] = incoming; return copy;
+            const copy = [...cur];
+            copy[idx] = incoming;
+            return copy;
           });
-        })
+        },
+      )
       // NOTA (Fase 1/S1): `definitions` saiu da publication realtime — a
       // verdade vazava no payload dos eventos. A sincronização de definições
       // agora é 100% via RPC get_round_sync (poll de fase abaixo), que o
       // servidor molda por fase: progresso sem texto na escrita, cédulas sem
       // autor na votação, tudo visível só a partir da revelação.
-      .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `room_id=eq.${room.id}` },
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "votes",
+          filter: `room_id=eq.${room.id}`,
+        },
         (p) => {
           lastEventAtRef.current = Date.now();
           setVotes((cur) => {
-            if (p.eventType === "DELETE") return cur.filter((x) => x.id !== (p.old as Vote).id);
+            if (p.eventType === "DELETE")
+              return cur.filter((x) => x.id !== (p.old as Vote).id);
             const incoming = p.new as Vote;
             // Mesmo padrão: dropa o voto "pending_" otimista do mesmo
             // votante/rodada quando o real chega via realtime.
@@ -162,14 +232,26 @@ export function useRoom(code: string | undefined, playerId?: string) {
             );
             const idx = cleaned.findIndex((x) => x.id === incoming.id);
             if (idx === -1) return [...cleaned, incoming];
-            const copy = [...cleaned]; copy[idx] = incoming; return copy;
+            const copy = [...cleaned];
+            copy[idx] = incoming;
+            return copy;
           });
-        })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "round_extensions", filter: `room_id=eq.${room.id}` },
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "round_extensions",
+          filter: `room_id=eq.${room.id}`,
+        },
         (p) => {
           lastEventAtRef.current = Date.now();
           const ext = p.new as RoundExtension;
-          setRoundExtensions((cur) => (cur.some((x) => x.id === ext.id) ? cur : [...cur, ext]));
+          setRoundExtensions((cur) =>
+            cur.some((x) => x.id === ext.id) ? cur : [...cur, ext],
+          );
           const player = playersRef.current.find((x) => x.id === ext.player_id);
           if (!player || player.is_bot) return;
           const currentRoom = roomRef.current;
@@ -178,21 +260,37 @@ export function useRoom(code: string | undefined, playerId?: string) {
           const verbo = isMe ? "perdeu" : "perdeu";
           const eliminated = ext.attempt >= 3;
           if (eliminated) {
-            toast.error(`${name} ${verbo} 1 ponto e foi eliminado(a) da partida ⛔`, { duration: 5000 });
-          } else if (currentRoom?.status === "writing" && currentRoom.current_round === ext.round) {
+            toast.error(
+              `${name} ${verbo} 1 ponto e foi eliminado(a) da partida ⛔`,
+              { duration: 5000 },
+            );
+          } else if (
+            currentRoom?.status === "writing" &&
+            currentRoom.current_round === ext.round
+          ) {
             const seconds = ext.attempt === 1 ? 20 : 15;
-            toast(`⏰ ${name} ${verbo} 1 ponto. ${ext.attempt === 1 ? `Nova oportunidade: +${seconds}s para enviar.` : `Última chance: +${seconds}s para enviar.`}`, {
-              duration: 5500,
-            });
+            toast(
+              `⏰ ${name} ${verbo} 1 ponto. ${ext.attempt === 1 ? `Nova oportunidade: +${seconds}s para enviar.` : `Última chance: +${seconds}s para enviar.`}`,
+              {
+                duration: 5500,
+              },
+            );
           } else {
             const restantes = 3 - ext.attempt;
-            toast(`⏰ ${name} ${verbo} 1 ponto por estourar o tempo. ${restantes === 1 ? "Última chance!" : `Faltam ${restantes} chances.`}`, {
-              duration: 4500,
-            });
+            toast(
+              `⏰ ${name} ${verbo} 1 ponto por estourar o tempo. ${restantes === 1 ? "Última chance!" : `Faltam ${restantes} chances.`}`,
+              {
+                duration: 4500,
+              },
+            );
           }
-        })
+        },
+      )
       .on("presence", { event: "sync" }, () => {
-        const state = ch.presenceState() as Record<string, Array<{ player_id?: string }>>;
+        const state = ch.presenceState() as Record<
+          string,
+          Array<{ player_id?: string }>
+        >;
         const connected: Record<string, boolean> = {};
         for (const key of Object.keys(state)) {
           const meta = state[key]?.[0];
@@ -203,7 +301,10 @@ export function useRoom(code: string | undefined, playerId?: string) {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED" && playerId) {
-          await ch.track({ player_id: playerId, online_at: new Date().toISOString() });
+          await ch.track({
+            player_id: playerId,
+            online_at: new Date().toISOString(),
+          });
           // Pode ter chegado depois de uma queda — recarrega para fechar a
           // janela em que eventos foram perdidos enquanto o canal estava off.
           // Otimização: se o snapshot inicial acabou de carregar (<3s),
@@ -211,13 +312,23 @@ export function useRoom(code: string | undefined, playerId?: string) {
           if (Date.now() - lastEventAtRef.current > 3000) {
             reloadRef.current?.();
           }
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        } else if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
           // Supabase já tenta reconectar sozinho; ao voltar ao SUBSCRIBED o
           // ramo acima dispara o reload. Aqui só logamos para diagnóstico.
-          console.warn("[realtime] channel status:", status, "— aguardando reconexão");
+          console.warn(
+            "[realtime] channel status:",
+            status,
+            "— aguardando reconexão",
+          );
         }
       });
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [room?.id, playerId]);
 
   // Optimistic player adds (e.g. addBot) — adiciona localmente sem esperar
@@ -226,92 +337,180 @@ export function useRoom(code: string | undefined, playerId?: string) {
   useEffect(() => {
     if (!room?.id) return;
     const onAdd = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; player?: Player } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string; player?: Player } | undefined;
       if (!detail?.player || detail.roomId !== room.id) return;
       optimisticPlayerIdsRef.current[detail.player.id] = Date.now();
       setPlayers((cur) =>
-        cur.some((p) => p.id === detail.player!.id) ? cur : [...cur, detail.player!],
+        cur.some((p) => p.id === detail.player!.id)
+          ? cur
+          : [...cur, detail.player!],
       );
     };
     const onRemove = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { playerId?: string } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { playerId?: string } | undefined;
       if (!detail?.playerId) return;
       delete optimisticPlayerIdsRef.current[detail.playerId];
       setPlayers((cur) => cur.filter((p) => p.id !== detail.playerId));
     };
     const onDefAdd = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; definition?: Definition } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string; definition?: Definition } | undefined;
       if (!detail?.definition || detail.roomId !== room.id) return;
       const incoming = detail.definition;
       setDefinitions((cur) => {
         // Evita duplicata se já existe linha real para este jogador/rodada.
-        if (cur.some((d) => d.player_id === incoming.player_id && d.round === incoming.round)) return cur;
+        if (
+          cur.some(
+            (d) =>
+              d.player_id === incoming.player_id && d.round === incoming.round,
+          )
+        )
+          return cur;
         return [...cur, incoming];
       });
     };
     const onVoteAdd = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; vote?: Vote } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string; vote?: Vote } | undefined;
       if (!detail?.vote || detail.roomId !== room.id) return;
       const incoming = detail.vote;
       setVotes((cur) => {
-        if (cur.some((v) => v.voter_id === incoming.voter_id && v.round === incoming.round)) return cur;
+        if (
+          cur.some(
+            (v) =>
+              v.voter_id === incoming.voter_id && v.round === incoming.round,
+          )
+        )
+          return cur;
         return [...cur, incoming];
       });
     };
     const onDefsReplaceRound = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; round?: number; definitions?: Definition[] } | undefined;
-      if (!detail?.definitions || detail.roomId !== room.id || typeof detail.round !== "number") return;
+      const detail = (e as CustomEvent).detail as
+        | { roomId?: string; round?: number; definitions?: Definition[] }
+        | undefined;
+      if (
+        !detail?.definitions ||
+        detail.roomId !== room.id ||
+        typeof detail.round !== "number"
+      )
+        return;
       setDefinitions((cur) => [
         ...cur.filter((d) => d.round !== detail.round),
         ...detail.definitions!,
       ]);
     };
     const onDefRollback = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; pendingId?: string } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string; pendingId?: string } | undefined;
       if (!detail?.pendingId || detail.roomId !== room.id) return;
       setDefinitions((cur) => cur.filter((d) => d.id !== detail.pendingId));
     };
     const onVoteRollback = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; pendingId?: string } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string; pendingId?: string } | undefined;
       if (!detail?.pendingId || detail.roomId !== room.id) return;
       setVotes((cur) => cur.filter((v) => v.id !== detail.pendingId));
     };
     const onRoomUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string; patch?: Partial<Room> } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string; patch?: Partial<Room> } | undefined;
       if (!detail?.patch || detail.roomId !== room.id) return;
       setRoom((cur) => (cur ? ({ ...cur, ...detail.patch } as Room) : cur));
     };
     const onPlayerUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { playerId?: string; patch?: Partial<Player> } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { playerId?: string; patch?: Partial<Player> } | undefined;
       if (!detail?.playerId || !detail.patch) return;
-      setPlayers((cur) => cur.map((p) => (p.id === detail.playerId ? ({ ...p, ...detail.patch } as Player) : p)));
+      setPlayers((cur) =>
+        cur.map((p) =>
+          p.id === detail.playerId ? ({ ...p, ...detail.patch } as Player) : p,
+        ),
+      );
     };
     const onPlayersClearTeam = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { roomId?: string } | undefined;
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string } | undefined;
       if (detail?.roomId !== room.id) return;
       setPlayers((cur) => cur.map((p) => ({ ...p, team_id: null })));
     };
     window.addEventListener("player:optimistic-add", onAdd as EventListener);
-    window.addEventListener("player:optimistic-remove", onRemove as EventListener);
-    window.addEventListener("player:optimistic-update", onPlayerUpdate as EventListener);
-    window.addEventListener("players:optimistic-clear-team", onPlayersClearTeam as EventListener);
-    window.addEventListener("room:optimistic-update", onRoomUpdate as EventListener);
-    window.addEventListener("definition:optimistic-add", onDefAdd as EventListener);
-    window.addEventListener("definitions:optimistic-replace-round", onDefsReplaceRound as EventListener);
+    window.addEventListener(
+      "player:optimistic-remove",
+      onRemove as EventListener,
+    );
+    window.addEventListener(
+      "player:optimistic-update",
+      onPlayerUpdate as EventListener,
+    );
+    window.addEventListener(
+      "players:optimistic-clear-team",
+      onPlayersClearTeam as EventListener,
+    );
+    window.addEventListener(
+      "room:optimistic-update",
+      onRoomUpdate as EventListener,
+    );
+    window.addEventListener(
+      "definition:optimistic-add",
+      onDefAdd as EventListener,
+    );
+    window.addEventListener(
+      "definitions:optimistic-replace-round",
+      onDefsReplaceRound as EventListener,
+    );
     window.addEventListener("vote:optimistic-add", onVoteAdd as EventListener);
-    window.addEventListener("definition:optimistic-rollback", onDefRollback as EventListener);
-    window.addEventListener("vote:optimistic-rollback", onVoteRollback as EventListener);
+    window.addEventListener(
+      "definition:optimistic-rollback",
+      onDefRollback as EventListener,
+    );
+    window.addEventListener(
+      "vote:optimistic-rollback",
+      onVoteRollback as EventListener,
+    );
     return () => {
-      window.removeEventListener("player:optimistic-add", onAdd as EventListener);
-      window.removeEventListener("player:optimistic-remove", onRemove as EventListener);
-      window.removeEventListener("player:optimistic-update", onPlayerUpdate as EventListener);
-      window.removeEventListener("players:optimistic-clear-team", onPlayersClearTeam as EventListener);
-      window.removeEventListener("room:optimistic-update", onRoomUpdate as EventListener);
-      window.removeEventListener("definition:optimistic-add", onDefAdd as EventListener);
-      window.removeEventListener("definitions:optimistic-replace-round", onDefsReplaceRound as EventListener);
-      window.removeEventListener("vote:optimistic-add", onVoteAdd as EventListener);
-      window.removeEventListener("definition:optimistic-rollback", onDefRollback as EventListener);
-      window.removeEventListener("vote:optimistic-rollback", onVoteRollback as EventListener);
+      window.removeEventListener(
+        "player:optimistic-add",
+        onAdd as EventListener,
+      );
+      window.removeEventListener(
+        "player:optimistic-remove",
+        onRemove as EventListener,
+      );
+      window.removeEventListener(
+        "player:optimistic-update",
+        onPlayerUpdate as EventListener,
+      );
+      window.removeEventListener(
+        "players:optimistic-clear-team",
+        onPlayersClearTeam as EventListener,
+      );
+      window.removeEventListener(
+        "room:optimistic-update",
+        onRoomUpdate as EventListener,
+      );
+      window.removeEventListener(
+        "definition:optimistic-add",
+        onDefAdd as EventListener,
+      );
+      window.removeEventListener(
+        "definitions:optimistic-replace-round",
+        onDefsReplaceRound as EventListener,
+      );
+      window.removeEventListener(
+        "vote:optimistic-add",
+        onVoteAdd as EventListener,
+      );
+      window.removeEventListener(
+        "definition:optimistic-rollback",
+        onDefRollback as EventListener,
+      );
+      window.removeEventListener(
+        "vote:optimistic-rollback",
+        onVoteRollback as EventListener,
+      );
     };
   }, [room?.id]);
 
@@ -345,8 +544,13 @@ export function useRoom(code: string | undefined, playerId?: string) {
     setDefinitions([]);
     setVotes([]);
     (async () => {
-      const { data: sync } = await (supabase.rpc as any)("get_round_sync", { p_room_id: room.id });
-      const payload = sync as { definitions?: Definition[]; votes?: Vote[] } | null;
+      const { data: sync } = await (supabase.rpc as any)("get_round_sync", {
+        p_room_id: room.id,
+      });
+      const payload = sync as {
+        definitions?: Definition[];
+        votes?: Vote[];
+      } | null;
       setDefinitions(payload?.definitions ?? []);
       setVotes(payload?.votes ?? []);
     })();
@@ -357,12 +561,18 @@ export function useRoom(code: string | undefined, playerId?: string) {
   // (S1: sem texto na escrita, sem autor na votação, completo no reveal).
   useEffect(() => {
     if (!room?.id) return;
-    if (!["writing", "shuffling", "voting", "reveal"].includes(room.status)) return;
+    if (!["writing", "shuffling", "voting", "reveal"].includes(room.status))
+      return;
     let cancelled = false;
     const refreshRound = async () => {
-      const { data: sync } = await (supabase.rpc as any)("get_round_sync", { p_room_id: room.id });
+      const { data: sync } = await (supabase.rpc as any)("get_round_sync", {
+        p_room_id: room.id,
+      });
       if (cancelled) return;
-      const payload = sync as { definitions?: Definition[]; votes?: Vote[] } | null;
+      const payload = sync as {
+        definitions?: Definition[];
+        votes?: Vote[];
+      } | null;
       if (!payload) return;
       setDefinitions(payload.definitions ?? []);
       setVotes(payload.votes ?? []);
@@ -370,18 +580,31 @@ export function useRoom(code: string | undefined, playerId?: string) {
     refreshRound();
     const interval = room.status === "writing" ? 1200 : 700;
     const t = window.setInterval(refreshRound, interval);
-    return () => { cancelled = true; window.clearInterval(t); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
   }, [room?.id, room?.current_round, room?.status]);
 
   // Load current word
   useEffect(() => {
     const wid = room?.current_word_id;
-    if (!wid) { setWord(null); return; }
+    if (!wid) {
+      setWord(null);
+      return;
+    }
     (async () => {
       // Colunas seguras apenas — meaning/curiosidade são bloqueadas por grants
       // e chegam via get_word_reveal() somente após a revelação.
-      const { data } = await supabase.from("words").select("id,word,category,rarity,nivel,classe,pronuncia").eq("id", wid).maybeSingle();
-      if (data) { setWord(data as unknown as Word); return; }
+      const { data } = await supabase
+        .from("words")
+        .select("id,word,category,rarity,nivel,classe,pronuncia")
+        .eq("id", wid)
+        .maybeSingle();
+      if (data) {
+        setWord(data as unknown as Word);
+        return;
+      }
       const { data: cw } = await supabase
         .from("room_words")
         .select("id,word,meaning,category")
@@ -426,7 +649,11 @@ export function useRoom(code: string | undefined, playerId?: string) {
   useEffect(() => {
     if (!code) return;
     const t = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       if (Date.now() - lastEventAtRef.current > 25000) {
         reloadRef.current?.();
       }
@@ -446,7 +673,11 @@ export function useRoom(code: string | undefined, playerId?: string) {
     let cancelled = false;
     const t = setInterval(async () => {
       if (cancelled) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      )
+        return;
       // Em paralelo: assinatura da sala + lista de jogadores. A segunda é
       // necessária porque eventos INSERT em `players` ocasionalmente não
       // chegam via Realtime (canal frio recém-assinado, perda de WS), e
@@ -454,7 +685,9 @@ export function useRoom(code: string | undefined, playerId?: string) {
       const [{ data }, { data: ps }, { data: rxs }] = await Promise.all([
         supabase
           .from("rooms")
-          .select("status,current_round,current_word_id,round_phase_ends_at,current_coordinator,host_id")
+          .select(
+            "status,current_round,current_word_id,round_phase_ends_at,current_coordinator,host_id",
+          )
           .eq("id", roomId)
           .maybeSingle(),
         supabase
@@ -471,7 +704,8 @@ export function useRoom(code: string | undefined, playerId?: string) {
           .limit(80),
       ]);
       if (cancelled) return;
-      if (Array.isArray(rxs)) setRoundExtensions((rxs as RoundExtension[]) ?? []);
+      if (Array.isArray(rxs))
+        setRoundExtensions((rxs as RoundExtension[]) ?? []);
       if (Array.isArray(ps)) {
         setPlayers((cur) => {
           const dbPlayers = ps as Player[];
@@ -490,7 +724,8 @@ export function useRoom(code: string | undefined, playerId?: string) {
             }
             return true;
           });
-          const nextPlayers = pending.length > 0 ? [...dbPlayers, ...pending] : dbPlayers;
+          const nextPlayers =
+            pending.length > 0 ? [...dbPlayers, ...pending] : dbPlayers;
           // Reconcilia: se IDs (set), contagem ou campos de jogo divergem, substitui.
           // Caso contrário, mantém referência para evitar re-render.
           if (cur.length !== nextPlayers.length) {
@@ -504,13 +739,14 @@ export function useRoom(code: string | undefined, playerId?: string) {
               return nextPlayers;
             }
             const old = cur.find((x) => x.id === p.id);
-            if (old && (
-              old.score !== p.score ||
-              old.writing_extensions !== p.writing_extensions ||
-              old.voting_extensions !== p.voting_extensions ||
-              old.kicked_at !== p.kicked_at ||
-              old.is_connected !== p.is_connected
-            )) {
+            if (
+              old &&
+              (old.score !== p.score ||
+                old.writing_extensions !== p.writing_extensions ||
+                old.voting_extensions !== p.voting_extensions ||
+                old.kicked_at !== p.kicked_at ||
+                old.is_connected !== p.is_connected)
+            ) {
               lastEventAtRef.current = Date.now();
               return nextPlayers;
             }
@@ -526,11 +762,10 @@ export function useRoom(code: string | undefined, playerId?: string) {
         // coordenador) sem refazer toda a árvore.
         lastEventAtRef.current = Date.now();
         setRoom((cur) =>
-          cur && (
-            cur.round_phase_ends_at !== data.round_phase_ends_at ||
+          cur &&
+          (cur.round_phase_ends_at !== data.round_phase_ends_at ||
             cur.current_coordinator !== data.current_coordinator ||
-            cur.host_id !== data.host_id
-          )
+            cur.host_id !== data.host_id)
             ? ({ ...cur, ...data } as Room)
             : cur,
         );
@@ -542,14 +777,25 @@ export function useRoom(code: string | undefined, playerId?: string) {
       lastEventAtRef.current = Date.now();
       reloadRef.current?.();
     }, 2500);
-    return () => { cancelled = true; clearInterval(t); };
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [room?.id]);
 
+  const reload = () => {
+    reloadRef.current?.();
+  };
 
-
-  const reload = () => { reloadRef.current?.(); };
-
-  return { room, players: playersWithPresence, definitions, votes, word, roundExtensions, loading, error, reload };
+  return {
+    room,
+    players: playersWithPresence,
+    definitions,
+    votes,
+    word,
+    roundExtensions,
+    loading,
+    error,
+    reload,
+  };
 }
-
-

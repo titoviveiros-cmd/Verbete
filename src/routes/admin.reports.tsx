@@ -1,4 +1,9 @@
-import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  useNavigate,
+  useSearch,
+} from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,7 +50,10 @@ function AdminReportsPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) { nav({ to: "/login" }); return; }
+    if (!user) {
+      nav({ to: "/login" });
+      return;
+    }
     (async () => {
       const { data } = await supabase
         .from("user_roles")
@@ -88,7 +96,11 @@ function AdminReportsPage() {
   };
 
   if (loading || isAdmin === null) {
-    return <div className="mobile-shell items-center justify-center"><Mascot mood="thinking" /></div>;
+    return (
+      <div className="mobile-shell items-center justify-center">
+        <Mascot mood="thinking" />
+      </div>
+    );
   }
 
   if (!isAdmin) {
@@ -99,7 +111,9 @@ function AdminReportsPage() {
         <p className="text-sm text-muted-foreground text-center max-w-xs">
           Esta área é exclusiva para moderadores do Verbete.
         </p>
-        <Link to="/" className="btn-pop bg-gradient-fun text-white text-sm">Voltar ao início</Link>
+        <Link to="/" className="btn-pop bg-gradient-fun text-white text-sm">
+          Voltar ao início
+        </Link>
       </div>
     );
   }
@@ -107,10 +121,16 @@ function AdminReportsPage() {
   return (
     <div className="mobile-shell pt-4 gap-3 overflow-y-auto pb-8">
       <div className="flex items-center justify-between">
-        <Link to={fromProfile ? "/profile" : "/"} className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1">
+        <Link
+          to={fromProfile ? "/profile" : "/"}
+          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+        >
           <span>←</span> {fromProfile ? "Voltar" : "Início"}
         </Link>
-        <button onClick={refresh} className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1">
+        <button
+          onClick={refresh}
+          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+        >
           Atualizar <span>🔄</span>
         </button>
       </div>
@@ -121,7 +141,8 @@ function AdminReportsPage() {
           <span>Moderação</span>
         </h1>
         <p className="text-xs text-muted-foreground mt-1">
-          {reports.length} denúncia{reports.length !== 1 ? "s" : ""} pendente{reports.length !== 1 ? "s" : ""}
+          {reports.length} denúncia{reports.length !== 1 ? "s" : ""} pendente
+          {reports.length !== 1 ? "s" : ""}
         </p>
       </header>
 
@@ -131,7 +152,9 @@ function AdminReportsPage() {
         <div className="sticker bg-mint/10 border border-mint/30 p-6 text-center">
           <div className="text-4xl mb-2">✨</div>
           <p className="text-sm font-display">Tudo limpo!</p>
-          <p className="text-xs text-muted-foreground mt-1">Nenhuma denúncia pendente.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Nenhuma denúncia pendente.
+          </p>
         </div>
       ) : (
         <ul className="space-y-2">
@@ -140,14 +163,18 @@ function AdminReportsPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {r.reason} · sala {r.room_code ?? "?"} · rodada {r.round ?? "?"}
+                    {r.reason} · sala {r.room_code ?? "?"} · rodada{" "}
+                    {r.round ?? "?"}
                   </p>
                   <p className="font-display text-sm mt-0.5 truncate">
                     👤 {r.offender_nickname ?? r.offender_player_id.slice(0, 8)}
                   </p>
                 </div>
                 <span className="text-[10px] text-muted-foreground shrink-0">
-                  {new Date(r.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                  {new Date(r.created_at).toLocaleString("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
                 </span>
               </div>
 
@@ -192,5 +219,3 @@ function AdminReportsPage() {
     </div>
   );
 }
-
-

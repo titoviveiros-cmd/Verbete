@@ -1,6 +1,12 @@
 export const BOT_NAMES = [
-  "TioBlefe", "MestreLero", "Dona Lupa", "Zé Tagarela",
-  "Profa. Trapaça", "Dr. Engano", "Vó Vera", "Caco Esperto",
+  "TioBlefe",
+  "MestreLero",
+  "Dona Lupa",
+  "Zé Tagarela",
+  "Profa. Trapaça",
+  "Dr. Engano",
+  "Vó Vera",
+  "Caco Esperto",
 ];
 
 // Pool ampliado (62 frases) — o antigo tinha 14 e repetia rápido quando a
@@ -71,7 +77,7 @@ export const BOT_FAKE_DEFINITIONS_TEMPLATES = [
 ];
 
 export function randomBotDef(seed: number) {
-  return BOT_FAKE_DEFINITIONS_TEMPLATES[seed % BOT_FAKE_DEFINITIONS_TEMPLATES.length];
+  return BOT_FAKE_DEFINITIONS_TEMPLATES[
+    seed % BOT_FAKE_DEFINITIONS_TEMPLATES.length
+  ];
 }
-
-

@@ -7,7 +7,12 @@ import { APP_HOST } from "@/lib/app-url";
 export interface ReplayCardData {
   word: string;
   truth: string;
-  fooled: { author: string; emoji: string; voters: { name: string; emoji: string }[]; text: string }[];
+  fooled: {
+    author: string;
+    emoji: string;
+    voters: { name: string; emoji: string }[];
+    text: string;
+  }[];
   truthHits: { name: string; emoji: string }[];
   roomCode: string;
 }
@@ -15,7 +20,14 @@ export interface ReplayCardData {
 const W = 1080;
 const H = 1350;
 
-function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lineH: number): number {
+function wrap(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxW: number,
+  lineH: number,
+): number {
   const words = text.split(" ");
   let line = "";
   let cy = y;
@@ -29,13 +41,17 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
       line = test;
     }
   }
-  if (line) { ctx.fillText(line, x, cy); cy += lineH; }
+  if (line) {
+    ctx.fillText(line, x, cy);
+    cy += lineH;
+  }
   return cy;
 }
 
 export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
   const canvas = document.createElement("canvas");
-  canvas.width = W; canvas.height = H;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext("2d")!;
 
   // Fundo
@@ -50,7 +66,11 @@ export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
   for (let i = 0; i < 14; i++) {
     ctx.font = `${48 + (i % 3) * 12}px sans-serif`;
     ctx.globalAlpha = 0.18;
-    ctx.fillText(confetti[i % confetti.length], (i * 137) % W, 40 + ((i * 211) % H));
+    ctx.fillText(
+      confetti[i % confetti.length],
+      (i * 137) % W,
+      40 + ((i * 211) % H),
+    );
   }
   ctx.globalAlpha = 1;
 
@@ -69,7 +89,11 @@ export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
   ctx.fillText("A palavra era…", 60, 210);
   ctx.fillStyle = "#FF4FA3";
   ctx.font = "bold 110px Georgia, serif";
-  ctx.fillText(data.word ? data.word.charAt(0).toUpperCase() + data.word.slice(1) : "", 60, 250);
+  ctx.fillText(
+    data.word ? data.word.charAt(0).toUpperCase() + data.word.slice(1) : "",
+    60,
+    250,
+  );
 
   // Verdade
   ctx.fillStyle = "#7CF0BD";
@@ -114,7 +138,14 @@ export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
     y += 38;
     ctx.fillStyle = "#ffffffdd";
     ctx.font = "26px system-ui, sans-serif";
-    wrap(ctx, data.truthHits.map((h) => h.emoji + " " + h.name).join(", "), 60, y, W - 120, 34);
+    wrap(
+      ctx,
+      data.truthHits.map((h) => h.emoji + " " + h.name).join(", "),
+      60,
+      y,
+      W - 120,
+      34,
+    );
   }
 
   // Footer
@@ -123,16 +154,26 @@ export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
   ctx.fillText(`jogue em ${APP_HOST}`, 60, H - 60);
 
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png", 0.95);
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      "image/png",
+      0.95,
+    );
   });
 }
 
-export async function shareReplayCard(data: ReplayCardData): Promise<"shared" | "downloaded" | "error"> {
+export async function shareReplayCard(
+  data: ReplayCardData,
+): Promise<"shared" | "downloaded" | "error"> {
   try {
     const blob = await generateReplayCard(data);
-    const file = new File([blob], `verbete-replay-${data.roomCode}.png`, { type: "image/png" });
+    const file = new File([blob], `verbete-replay-${data.roomCode}.png`, {
+      type: "image/png",
+    });
     const text = `Olha esse blefe no Verbete 🤥 a palavra era "${data.word}". Joga comigo: ${APP_HOST}`;
-    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    const nav = navigator as Navigator & {
+      canShare?: (d: ShareData) => boolean;
+    };
     if (nav.canShare && nav.canShare({ files: [file] })) {
       await navigator.share({ files: [file], text, title: "Verbete" });
       return "shared";
@@ -140,8 +181,11 @@ export async function shareReplayCard(data: ReplayCardData): Promise<"shared" | 
     // Fallback: força download
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = file.name;
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
     return "downloaded";
   } catch (e) {
@@ -149,5 +193,3 @@ export async function shareReplayCard(data: ReplayCardData): Promise<"shared" | 
     return "error";
   }
 }
-
-

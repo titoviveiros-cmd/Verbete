@@ -17,10 +17,7 @@ export const deleteAccount = createServerFn({ method: "POST" })
     const { userId } = context;
 
     // 1) Anonimiza histórico (mantém para estatísticas agregadas / antifraude)
-    await supabaseAdmin
-      .from("match_history")
-      .delete()
-      .eq("user_id", userId);
+    await supabaseAdmin.from("match_history").delete().eq("user_id", userId);
 
     // 2) Remove dados pessoais explícitos
     await Promise.all([
@@ -34,7 +31,9 @@ export const deleteAccount = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
     if (error) {
       console.error("[deleteAccount] auth.admin.deleteUser failed", error);
-      throw new Error("Não foi possível excluir a conta. Tente novamente em instantes.");
+      throw new Error(
+        "Não foi possível excluir a conta. Tente novamente em instantes.",
+      );
     }
 
     return { ok: true as const };
@@ -49,13 +48,14 @@ export const resetMyStats = createServerFn({ method: "POST" })
     const { userId } = context;
     // Usa o cliente autenticado para que auth.uid() esteja disponível dentro do RPC
     // (a função reset_user_stats valida auth.uid() = p_user_id).
-    const { error } = await context.supabase.rpc("reset_user_stats", { p_user_id: userId });
+    const { error } = await context.supabase.rpc("reset_user_stats", {
+      p_user_id: userId,
+    });
     if (error) {
       console.error("[resetMyStats] failed", error);
-      throw new Error("Não foi possível zerar as estatísticas. Tente novamente.");
+      throw new Error(
+        "Não foi possível zerar as estatísticas. Tente novamente.",
+      );
     }
     return { ok: true as const };
   });
-
-
-

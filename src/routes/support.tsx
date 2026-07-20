@@ -23,7 +23,7 @@ export const Route = createFileRoute("/support")({
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Como crio uma sala?",
-    a: "Na tela inicial toque em \"Criar sala\". Você recebe um código de 4 dígitos para compartilhar com os amigos.",
+    a: 'Na tela inicial toque em "Criar sala". Você recebe um código de 4 dígitos para compartilhar com os amigos.',
   },
   {
     q: "Preciso criar conta para jogar?",
@@ -43,7 +43,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Como excluo minha conta?",
-    a: "Acesse seu Perfil → Zona de perigo → \"Excluir conta\". A ação é permanente: removemos seu perfil e anonimizamos seu histórico de partidas.",
+    a: 'Acesse seu Perfil → Zona de perigo → "Excluir conta". A ação é permanente: removemos seu perfil e anonimizamos seu histórico de partidas.',
   },
   {
     q: "Posso jogar offline?",
@@ -63,7 +63,10 @@ function SupportPage() {
   return (
     <div className="mobile-shell">
       <header className="mb-6">
-        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          to="/"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           ← Voltar
         </Link>
         <h1 className="font-display text-3xl mt-2">Suporte</h1>
@@ -74,9 +77,7 @@ function SupportPage() {
 
       <section className="sticker p-4 mb-6">
         <h2 className="font-display text-lg mb-2">📧 Fale com a gente</h2>
-        <p className="text-sm mb-3">
-          Resposta em até 48h úteis.
-        </p>
+        <p className="text-sm mb-3">Resposta em até 48h úteis.</p>
         <a
           href="mailto:contato@verbete.app?subject=Suporte%20Verbete"
           className="btn-pop bg-gradient-fun text-white inline-block"
@@ -89,15 +90,16 @@ function SupportPage() {
         <h2 className="font-display text-xl mb-3">Perguntas frequentes</h2>
         <div className="space-y-2">
           {FAQ.map(({ q, a }, i) => (
-            <details
-              key={i}
-              className="sticker p-3 group"
-            >
+            <details key={i} className="sticker p-3 group">
               <summary className="font-display cursor-pointer list-none flex items-center justify-between gap-2">
                 <span className="flex-1">{q}</span>
-                <span className="text-muted-foreground group-open:rotate-90 transition">›</span>
+                <span className="text-muted-foreground group-open:rotate-90 transition">
+                  ›
+                </span>
               </summary>
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{a}</p>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                {a}
+              </p>
             </details>
           ))}
         </div>
@@ -107,17 +109,19 @@ function SupportPage() {
         <h2 className="font-display text-lg mb-2">🐛 Reportar um bug</h2>
         <p className="text-sm text-muted-foreground">
           Inclua na mensagem: modelo do aparelho, versão do iOS, código da sala
-          (se aplicável) e o que você estava fazendo quando o problema aconteceu.
-          Prints ajudam muito.
+          (se aplicável) e o que você estava fazendo quando o problema
+          aconteceu. Prints ajudam muito.
         </p>
       </section>
 
       <footer className="mt-8 text-center text-xs text-muted-foreground">
-        <Link to="/privacy" className="underline mr-3">Privacidade</Link>
-        <Link to="/terms" className="underline">Termos</Link>
+        <Link to="/privacy" className="underline mr-3">
+          Privacidade
+        </Link>
+        <Link to="/terms" className="underline">
+          Termos
+        </Link>
       </footer>
     </div>
   );
 }
-
-

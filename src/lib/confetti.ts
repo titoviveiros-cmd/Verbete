@@ -25,7 +25,11 @@ const WHITE = "#ffffff";
 const PALETTE = [PINK, MINT, SUN, PURPLE, WHITE];
 
 /** Pequeno burst no centro — usado em revelação / acerto. */
-export async function burst(opts?: { particleCount?: number; spread?: number; origin?: { x: number; y: number } }) {
+export async function burst(opts?: {
+  particleCount?: number;
+  spread?: number;
+  origin?: { x: number; y: number };
+}) {
   const c = await load();
   if (!c) return;
   try {
@@ -49,8 +53,22 @@ export async function sideCannons() {
   try {
     const end = Date.now() + 600;
     const frame = () => {
-      c({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors: PALETTE, disableForReducedMotion: true });
-      c({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors: PALETTE, disableForReducedMotion: true });
+      c({
+        particleCount: 4,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+        colors: PALETTE,
+        disableForReducedMotion: true,
+      });
+      c({
+        particleCount: 4,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+        colors: PALETTE,
+        disableForReducedMotion: true,
+      });
       if (Date.now() < end) requestAnimationFrame(frame);
     };
     frame();
@@ -64,14 +82,30 @@ export async function fireworks() {
   try {
     const duration = 2400;
     const end = Date.now() + duration;
-    const defaults = { startVelocity: 32, spread: 360, ticks: 60, zIndex: 9999, colors: PALETTE, disableForReducedMotion: true };
+    const defaults = {
+      startVelocity: 32,
+      spread: 360,
+      ticks: 60,
+      zIndex: 9999,
+      colors: PALETTE,
+      disableForReducedMotion: true,
+    };
     const interval = window.setInterval(() => {
-      if (Date.now() > end) { window.clearInterval(interval); return; }
+      if (Date.now() > end) {
+        window.clearInterval(interval);
+        return;
+      }
       const particleCount = 50;
-      c({ ...defaults, particleCount, origin: { x: Math.random() * 0.3 + 0.1, y: Math.random() - 0.2 } });
-      c({ ...defaults, particleCount, origin: { x: Math.random() * 0.3 + 0.6, y: Math.random() - 0.2 } });
+      c({
+        ...defaults,
+        particleCount,
+        origin: { x: Math.random() * 0.3 + 0.1, y: Math.random() - 0.2 },
+      });
+      c({
+        ...defaults,
+        particleCount,
+        origin: { x: Math.random() * 0.3 + 0.6, y: Math.random() - 0.2 },
+      });
     }, 220);
   } catch {}
 }
-
-

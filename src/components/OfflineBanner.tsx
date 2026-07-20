@@ -51,5 +51,3 @@ export function OfflineBanner() {
     </div>
   );
 }
-
-

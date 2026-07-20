@@ -5,7 +5,10 @@ export function getPlayerId(): string {
   if (typeof window === "undefined") return "ssr";
   let id = localStorage.getItem(KEY);
   if (!id) {
-    id = "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    id =
+      "p_" +
+      Math.random().toString(36).slice(2, 10) +
+      Date.now().toString(36).slice(-4);
     localStorage.setItem(KEY, id);
   }
   return id;
@@ -14,7 +17,10 @@ export function getPlayerId(): string {
 // S4: gera e persiste um NOVO id local. Usado quando o servidor responde
 // 'player_id_taken' (o id guardado pertence a outra identidade auth).
 export function regeneratePlayerId(): string {
-  const id = "p_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  const id =
+    "p_" +
+    Math.random().toString(36).slice(2, 10) +
+    Date.now().toString(36).slice(-4);
   if (typeof window !== "undefined") localStorage.setItem(KEY, id);
   return id;
 }
@@ -40,5 +46,3 @@ export function setStored<T>(key: string, val: T) {
   if (typeof window === "undefined") return;
   localStorage.setItem("verbete:" + key, JSON.stringify(val));
 }
-
-

@@ -14,7 +14,9 @@ const ReportInput = z.object({
   round: z.number().int().min(0).max(999).nullable().optional(),
   offenderPlayerId: z.string().trim().min(1).max(64),
   offenderNickname: z.string().trim().min(1).max(64).nullable().optional(),
-  reason: z.enum(["inappropriate", "spam", "harassment", "other"]).default("inappropriate"),
+  reason: z
+    .enum(["inappropriate", "spam", "harassment", "other"])
+    .default("inappropriate"),
 });
 
 export const reportDefinition = createServerFn({ method: "POST" })
@@ -125,11 +127,14 @@ export const resolveReport = createServerFn({ method: "POST" })
         banned_by: userId,
         expires_at: expiresAt,
       };
-      if (data.banScope !== "account") banRow.player_id = report.offender_player_id;
+      if (data.banScope !== "account")
+        banRow.player_id = report.offender_player_id;
       if (data.banScope !== "player" && report.offender_user_id)
         banRow.user_id = report.offender_user_id;
 
-      const { error: banErr } = await supabaseAdmin.from("banned_players").insert(banRow);
+      const { error: banErr } = await supabaseAdmin
+        .from("banned_players")
+        .insert(banRow);
       if (banErr) {
         console.error("[resolveReport] ban insert failed", banErr);
         throw new Error("Falha ao registrar o ban.");
@@ -154,5 +159,3 @@ export const resolveReport = createServerFn({ method: "POST" })
 
     return { ok: true as const };
   });
-
-

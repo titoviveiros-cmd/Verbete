@@ -19,24 +19,34 @@ function hourBucketIso(): string {
   return d.toISOString();
 }
 
-async function scoreSemanticSimilarity(word: string, truth: string, guess: string): Promise<number> {
+async function scoreSemanticSimilarity(
+  word: string,
+  truth: string,
+  guess: string,
+): Promise<number> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return 0;
   const system =
     'Você avalia equivalência semântica entre duas definições curtas (PT-BR) de uma palavra. Retorne APENAS JSON {"score": <inteiro 0-100>} representando o quanto a definição do jogador transmite o mesmo significado essencial da verdadeira. 100 = idêntico em significado (sinônimos / paráfrases contam). 80+ = essencialmente correto. 0 = sem relação. Ignore estilo, acentos, ordem, pontuação.';
   const user = `Palavra: ${word}\nDefinição verdadeira: "${truth}"\nDefinição do jogador: "${guess}"\n\nResponda só o JSON.`;
   try {
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "gemini-flash-lite-latest",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    });
+    const r = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gemini-flash-lite-latest",
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        }),
+      },
+    );
     if (!r.ok) return 0;
     const data = await r.json();
     const content: string = data?.choices?.[0]?.message?.content ?? "";
@@ -77,18 +87,25 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
     }
 
     // 2) Calcula a semelhança semântica via IA (fallback 0 se falhar).
-    const similarity = truth ? await scoreSemanticSimilarity(word, truth, data.guess) : 0;
+    const similarity = truth
+      ? await scoreSemanticSimilarity(word, truth, data.guess)
+      : 0;
 
     // 3) Registra via RPC de servidor (apenas service_role pode chamar).
-    const { data: result, error } = await supabaseAdmin.rpc("submit_daily_attempt_scored", {
-      p_user_id: userId,
-      p_guess: data.guess,
-      p_time_seconds: data.timeSeconds,
-      p_similarity: similarity,
-    });
+    const { data: result, error } = await supabaseAdmin.rpc(
+      "submit_daily_attempt_scored",
+      {
+        p_user_id: userId,
+        p_guess: data.guess,
+        p_time_seconds: data.timeSeconds,
+        p_similarity: similarity,
+      },
+    );
     if (error) {
       console.error("[submitDailyAttempt] rpc error", error);
-      throw new Error("Não foi possível registrar sua tentativa. Tente novamente.");
+      throw new Error(
+        "Não foi possível registrar sua tentativa. Tente novamente.",
+      );
     }
     return result as {
       already_played: boolean;
@@ -102,5 +119,3 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
       attempt?: { guess: string; is_correct: boolean; score: number };
     };
   });
-
-

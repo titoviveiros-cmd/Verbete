@@ -1,7 +1,17 @@
 // Filtro simples de texto: remove espaços extras, limita tamanho e censura palavrões básicos.
 const BLOCKED = [
-  "porra", "merda", "caralho", "puta", "fdp", "viado", "viad0",
-  "cuzao", "buceta", "bct", "arrombado", "filhodaputa",
+  "porra",
+  "merda",
+  "caralho",
+  "puta",
+  "fdp",
+  "viado",
+  "viad0",
+  "cuzao",
+  "buceta",
+  "bct",
+  "arrombado",
+  "filhodaputa",
 ];
 
 const LINK_RE = /https?:\/\/\S+/gi;
@@ -36,7 +46,11 @@ function leaksWord(normalizedText: string, normalizedWord: string): boolean {
 
 // Aceita opcionalmente a palavra da rodada para censurar tentativas de "colar a resposta".
 // Mantém retrocompatibilidade — quando word=undefined funciona igual à versão anterior.
-export function sanitizeDefinition(input: string, maxLen = 140, word?: string): string {
+export function sanitizeDefinition(
+  input: string,
+  maxLen = 140,
+  word?: string,
+): string {
   // Remove caracteres de controle e zero-width que poderiam disfarçar a palavra-alvo.
   let t = input
     .replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "")
@@ -73,7 +87,8 @@ export function sanitizeDefinition(input: string, maxLen = 140, word?: string): 
 export function humanizeMeaning(input: string, maxLen = 90): string {
   let t = normalizeForGame(input).replace(/\s+/g, " ").trim();
   // remove rótulos abreviados no início (até 3 grupos seguidos)
-  const abbrev = /^(?:\(?[a-z]{1,5}\.(?:[a-z]{1,5}\.)?\)?|\([^)]{1,30}\))(?:\s+|\s*[:;,-]\s*)/;
+  const abbrev =
+    /^(?:\(?[a-z]{1,5}\.(?:[a-z]{1,5}\.)?\)?|\([^)]{1,30}\))(?:\s+|\s*[:;,-]\s*)/;
   for (let i = 0; i < 3; i++) {
     const next = t.replace(abbrev, "");
     if (next === t) break;
@@ -90,7 +105,10 @@ export function humanizeMeaning(input: string, maxLen = 90): string {
 }
 
 export function sanitizeNickname(input: string): string {
-  return input.replace(/[^\p{L}\p{N} _-]/gu, "").trim().slice(0, 14) || "Anônimo";
+  return (
+    input
+      .replace(/[^\p{L}\p{N} _-]/gu, "")
+      .trim()
+      .slice(0, 14) || "Anônimo"
+  );
 }
-
-

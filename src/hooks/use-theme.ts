@@ -21,7 +21,9 @@ function applyTheme(t: Theme) {
   if (t === "light") root.classList.add("light");
   else root.classList.remove("light");
   const color = t === "light" ? "#fbf3e3" : "#1a0f2e";
-  let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+  let meta = document.querySelector(
+    'meta[name="theme-color"]',
+  ) as HTMLMetaElement | null;
   if (!meta) {
     meta = document.createElement("meta");
     meta.name = "theme-color";
@@ -34,17 +36,25 @@ function applyTheme(t: Theme) {
 function setThemeGlobal(t: Theme) {
   currentTheme = t;
   applyTheme(t);
-  try { localStorage.setItem(STORAGE_KEY, t); } catch {}
+  try {
+    localStorage.setItem(STORAGE_KEY, t);
+  } catch {}
   listeners.forEach((l) => l());
 }
 
 function subscribe(cb: () => void) {
   listeners.add(cb);
-  return () => { listeners.delete(cb); };
+  return () => {
+    listeners.delete(cb);
+  };
 }
 
-function getSnapshot(): Theme { return currentTheme; }
-function getServerSnapshot(): Theme { return "dark"; }
+function getSnapshot(): Theme {
+  return currentTheme;
+}
+function getServerSnapshot(): Theme {
+  return "dark";
+}
 
 // Aplica imediatamente (antes do React montar) para evitar flash.
 if (typeof window !== "undefined") {
@@ -60,5 +70,3 @@ export function useTheme() {
   const setTheme = (t: Theme) => setThemeGlobal(t);
   return { theme, toggle, setTheme };
 }
-
-

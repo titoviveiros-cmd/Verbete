@@ -22,7 +22,9 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">
+          Page not found
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           The page you're looking for doesn't exist or has been moved.
         </p>
@@ -50,7 +52,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           This page didn't load
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          Something went wrong on our end. You can try refreshing or head back
+          home.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -74,90 +77,138 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" },
-      { name: "theme-color", content: "#fbf3e3", media: "(prefers-color-scheme: light)" },
-      { name: "theme-color", content: "#1a0f2e" },
-      { name: "color-scheme", content: "dark" },
-      { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
-      { name: "apple-mobile-web-app-title", content: "Verbete" },
-      { title: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
-      { name: "description", content: "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português." },
-      { name: "author", content: "Verbete" },
-      { property: "og:title", content: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
-      { property: "og:description", content: "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português." },
-      { property: "og:type", content: "website" },
-      
-      { name: "twitter:title", content: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
-      { name: "twitter:description", content: "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português." },
-      { property: "og:image", content: `${APP_URL}/og-verbete.jpg` },
-      { property: "og:image:secure_url", content: `${APP_URL}/og-verbete.jpg` },
-      { property: "og:image:type", content: "image/jpeg" },
-      { property: "og:image:width", content: "1200" },
-      { property: "og:image:height", content: "630" },
-      { property: "og:image:alt", content: "Verbete — jogo multiplayer de blefe com palavras raras do português" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:image", content: `${APP_URL}/og-verbete.jpg` },
-      { name: "twitter:image:alt", content: "Verbete — jogo multiplayer de blefe com palavras raras do português" },
-      { property: "og:site_name", content: "Verbete" },
-      { property: "og:locale", content: "pt_BR" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      // Preload do CSS de fontes para que o browser comece a baixar Fredoka/Baloo
-      // antes de o parser chegar no <link rel="stylesheet">. Isso elimina o
-      // flash de fallback (system-ui) no primeiro paint em conexões 3G/4G.
-      {
-        rel: "preload",
-        as: "style",
-        href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700&display=swap",
-      },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700&display=swap",
-      },
-      { rel: "icon", type: "image/png", href: "/favicon.png" },
-      { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
-      { rel: "manifest", href: "/manifest.webmanifest" },
-    ],
-    scripts: [
-      {
-        type: "application/ld+json",
-        children: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          name: "Verbete",
-          url: `${APP_URL}`,
-          description: "Jogo multiplayer em tempo real de blefe com palavras raras do português.",
-          inLanguage: "pt-BR",
-        }),
-      },
-      {
-        type: "application/ld+json",
-        children: JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "Game",
-          name: "Verbete",
-          url: `${APP_URL}`,
-          genre: "Party / Word game",
-          numberOfPlayers: "4-12",
-          inLanguage: "pt-BR",
-        }),
-      },
-    ],
-  }),
-  shellComponent: RootShell,
-  component: RootComponent,
-  notFoundComponent: NotFoundComponent,
-  errorComponent: ErrorComponent,
-});
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
+  {
+    head: () => ({
+      meta: [
+        { charSet: "utf-8" },
+        {
+          name: "viewport",
+          content:
+            "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+        },
+        {
+          name: "theme-color",
+          content: "#fbf3e3",
+          media: "(prefers-color-scheme: light)",
+        },
+        { name: "theme-color", content: "#1a0f2e" },
+        { name: "color-scheme", content: "dark" },
+        { name: "apple-mobile-web-app-capable", content: "yes" },
+        { name: "mobile-web-app-capable", content: "yes" },
+        { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+        { name: "apple-mobile-web-app-title", content: "Verbete" },
+        { title: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
+        {
+          name: "description",
+          content:
+            "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português.",
+        },
+        { name: "author", content: "Verbete" },
+        {
+          property: "og:title",
+          content: "Verbete — Ganhar conhecimento nunca foi tão divertido!",
+        },
+        {
+          property: "og:description",
+          content:
+            "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português.",
+        },
+        { property: "og:type", content: "website" },
+
+        {
+          name: "twitter:title",
+          content: "Verbete — Ganhar conhecimento nunca foi tão divertido!",
+        },
+        {
+          name: "twitter:description",
+          content:
+            "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português.",
+        },
+        { property: "og:image", content: `${APP_URL}/og-verbete.jpg` },
+        {
+          property: "og:image:secure_url",
+          content: `${APP_URL}/og-verbete.jpg`,
+        },
+        { property: "og:image:type", content: "image/jpeg" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        {
+          property: "og:image:alt",
+          content:
+            "Verbete — jogo multiplayer de blefe com palavras raras do português",
+        },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:image", content: `${APP_URL}/og-verbete.jpg` },
+        {
+          name: "twitter:image:alt",
+          content:
+            "Verbete — jogo multiplayer de blefe com palavras raras do português",
+        },
+        { property: "og:site_name", content: "Verbete" },
+        { property: "og:locale", content: "pt_BR" },
+      ],
+      links: [
+        { rel: "stylesheet", href: appCss },
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        {
+          rel: "preconnect",
+          href: "https://fonts.gstatic.com",
+          crossOrigin: "anonymous",
+        },
+        // Preload do CSS de fontes para que o browser comece a baixar Fredoka/Baloo
+        // antes de o parser chegar no <link rel="stylesheet">. Isso elimina o
+        // flash de fallback (system-ui) no primeiro paint em conexões 3G/4G.
+        {
+          rel: "preload",
+          as: "style",
+          href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700&display=swap",
+        },
+        {
+          rel: "stylesheet",
+          href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700&display=swap",
+        },
+        { rel: "icon", type: "image/png", href: "/favicon.png" },
+        {
+          rel: "apple-touch-icon",
+          sizes: "180x180",
+          href: "/apple-touch-icon.png",
+        },
+        { rel: "manifest", href: "/manifest.webmanifest" },
+      ],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            name: "Verbete",
+            url: `${APP_URL}`,
+            description:
+              "Jogo multiplayer em tempo real de blefe com palavras raras do português.",
+            inLanguage: "pt-BR",
+          }),
+        },
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Game",
+            name: "Verbete",
+            url: `${APP_URL}`,
+            genre: "Party / Word game",
+            numberOfPlayers: "4-12",
+            inLanguage: "pt-BR",
+          }),
+        },
+      ],
+    }),
+    shellComponent: RootShell,
+    component: RootComponent,
+    notFoundComponent: NotFoundComponent,
+    errorComponent: ErrorComponent,
+  },
+);
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
@@ -181,17 +232,27 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  useEffect(() => { installAudioUnlock(); }, []);
+  useEffect(() => {
+    installAudioUnlock();
+  }, []);
   // S4: abre a sessão anônima já no boot para que o primeiro join/create
   // saia com auth.uid() e a identidade seja reivindicada de imediato.
-  useEffect(() => { void ensureAnonSession(); }, []);
+  useEffect(() => {
+    void ensureAnonSession();
+  }, []);
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
-      const btn = target.closest("button, [role='button']") as HTMLElement | null;
+      const btn = target.closest(
+        "button, [role='button']",
+      ) as HTMLElement | null;
       if (!btn) return;
-      if (btn.hasAttribute("disabled") || btn.getAttribute("aria-disabled") === "true") return;
+      if (
+        btn.hasAttribute("disabled") ||
+        btn.getAttribute("aria-disabled") === "true"
+      )
+        return;
       if (btn.closest("[data-no-sound]")) return;
       void playUITap();
       // Haptic feedback global — pulso curtinho em qualquer botão.
@@ -231,5 +292,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-
-

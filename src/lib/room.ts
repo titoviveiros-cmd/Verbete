@@ -1,13 +1,27 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession } from "./auth-session";
-import { sanitizeDefinition, sanitizeNickname, humanizeMeaning } from "./text-filter";
-import { BOT_NAMES, BOT_FAKE_DEFINITIONS_TEMPLATES, randomBotDef } from "./bot-names";
+import {
+  sanitizeDefinition,
+  sanitizeNickname,
+  humanizeMeaning,
+} from "./text-filter";
+import {
+  BOT_NAMES,
+  BOT_FAKE_DEFINITIONS_TEMPLATES,
+  randomBotDef,
+} from "./bot-names";
 import { randomAvatar, randomColor } from "./avatars";
 
 export type RoomStatus =
-  | "lobby" | "choosing" | "writing" | "shuffling"
-  | "voting" | "reveal" | "scoreboard" | "finished";
+  | "lobby"
+  | "choosing"
+  | "writing"
+  | "shuffling"
+  | "voting"
+  | "reveal"
+  | "scoreboard"
+  | "finished";
 
 export type RoomMode = "individual" | "teams";
 
@@ -61,11 +75,11 @@ export const TEAM_PRESETS: Record<string, Team[]> = {
     { id: "men", name: "Homens", color: "#3B82F6", emoji: "👨" },
     { id: "women", name: "Mulheres", color: "#EC4899", emoji: "👩" },
   ],
-  "ab": [
+  ab: [
     { id: "a", name: "Time A", color: "#FFD166", emoji: "🅰️" },
     { id: "b", name: "Time B", color: "#06D6A0", emoji: "🅱️" },
   ],
-  "abc": [
+  abc: [
     { id: "a", name: "Time A", color: "#FFD166", emoji: "🅐" },
     { id: "b", name: "Time B", color: "#06D6A0", emoji: "🅑" },
     { id: "c", name: "Time C", color: "#EF476F", emoji: "🅒" },
@@ -91,7 +105,8 @@ export interface Word {
   nivel?: string | null;
 }
 
-export type NivelFilter = "facil" | "medio" | "dificil" | "insano" | "aleatorio";
+export type NivelFilter =
+  "facil" | "medio" | "dificil" | "insano" | "aleatorio";
 
 export interface Definition {
   id: string;
@@ -107,7 +122,8 @@ export interface Definition {
   near_truth?: boolean;
 }
 
-export const isTruthDef = (d: Pick<Definition, "player_id">) => d.player_id === "__truth__";
+export const isTruthDef = (d: Pick<Definition, "player_id">) =>
+  d.player_id === "__truth__";
 
 export interface Vote {
   id: string;
@@ -121,16 +137,22 @@ function genCode(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-export async function createRoom(hostId: string, nickname: string, avatar: string, color: string) {
+export async function createRoom(
+  hostId: string,
+  nickname: string,
+  avatar: string,
+  color: string,
+) {
   // Single-RPC creation (rooms+player insert in one transaction). Falls back to legacy path on error.
   await ensureAnonSession();
   const cleanNick = sanitizeNickname(nickname);
-  const callCreate = (pid: string) => (supabase.rpc as any)("create_room_with_host", {
-    p_host_id: pid,
-    p_nickname: cleanNick,
-    p_avatar: avatar,
-    p_color: color,
-  });
+  const callCreate = (pid: string) =>
+    (supabase.rpc as any)("create_room_with_host", {
+      p_host_id: pid,
+      p_nickname: cleanNick,
+      p_avatar: avatar,
+      p_color: color,
+    });
   let { data, error } = await callCreate(hostId);
   // S4: id local pertence a outra identidade — gera um novo e tenta 1x.
   if (error && String(error.message ?? "").includes("player_id_taken")) {
@@ -139,31 +161,55 @@ export async function createRoom(hostId: string, nickname: string, avatar: strin
   if (!error && data) {
     const room = data as Room;
     // Amarra a identidade auth ao jogador do host (idempotente).
-    (supabase.rpc as any)("claim_player_identity", { p_player_id: room.host_id })
-      .then(() => {}, () => {});
+    (supabase.rpc as any)("claim_player_identity", {
+      p_player_id: room.host_id,
+    }).then(
+      () => {},
+      () => {},
+    );
     return room;
   }
 
   // Fallback (RPC unavailable)
   let code = genCode();
   for (let i = 0; i < 5; i++) {
-    const { data: existing } = await supabase.from("rooms").select("id").eq("code", code).maybeSingle();
+    const { data: existing } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("code", code)
+      .maybeSingle();
     if (!existing) break;
     code = genCode();
   }
   const { data: room, error: roomErr } = await supabase
-    .from("rooms").insert({ code, host_id: hostId, status: "lobby" }).select().single();
+    .from("rooms")
+    .insert({ code, host_id: hostId, status: "lobby" })
+    .select()
+    .single();
   if (roomErr || !room) throw roomErr ?? new Error("create_failed");
   await supabase.from("players").insert({
-    id: hostId, room_id: room.id, nickname: cleanNick, avatar, color,
+    id: hostId,
+    room_id: room.id,
+    nickname: cleanNick,
+    avatar,
+    color,
   });
   return room as unknown as Room;
 }
 
-export async function joinRoom(code: string, playerId: string, nickname: string, avatar: string, color: string) {
+export async function joinRoom(
+  code: string,
+  playerId: string,
+  nickname: string,
+  avatar: string,
+  color: string,
+) {
   await ensureAnonSession();
   const { data: room, error } = await supabase
-    .from("rooms").select("*").eq("code", code).maybeSingle();
+    .from("rooms")
+    .select("*")
+    .eq("code", code)
+    .maybeSingle();
   if (error) throw error;
   if (!room) throw new Error("Sala não encontrada");
 
@@ -175,20 +221,23 @@ export async function joinRoom(code: string, playerId: string, nickname: string,
     _user_id: authUserId,
   });
   if (banned === true) {
-    throw new Error("Esta conta ou dispositivo foi banido por violar as regras da comunidade.");
+    throw new Error(
+      "Esta conta ou dispositivo foi banido por violar as regras da comunidade.",
+    );
   }
 
   const cleanNick = sanitizeNickname(nickname);
 
   // Usa rejoin_room: se o jogador existir (mesmo kicked_at), preserva
   // a pontuação acumulada e zera apenas os contadores de penalidade.
-  const callRejoin = (pid: string) => (supabase.rpc as any)("rejoin_room", {
-    p_code: code,
-    p_player_id: pid,
-    p_nickname: cleanNick,
-    p_avatar: avatar,
-    p_color: color,
-  });
+  const callRejoin = (pid: string) =>
+    (supabase.rpc as any)("rejoin_room", {
+      p_code: code,
+      p_player_id: pid,
+      p_nickname: cleanNick,
+      p_avatar: avatar,
+      p_color: color,
+    });
   let effectiveId = playerId;
   let { error: rpcErr } = await callRejoin(playerId);
   // S4: o id local pertence a outra identidade auth — gera um novo e
@@ -200,12 +249,21 @@ export async function joinRoom(code: string, playerId: string, nickname: string,
   if (rpcErr) {
     // Fallback legado
     await supabase.from("players").upsert({
-      id: effectiveId, room_id: room.id, nickname: cleanNick, avatar, color, is_connected: true,
+      id: effectiveId,
+      room_id: room.id,
+      nickname: cleanNick,
+      avatar,
+      color,
+      is_connected: true,
     });
   }
   // Amarra a identidade auth ao jogador (idempotente; ignora sem sessão).
-  (supabase.rpc as any)("claim_player_identity", { p_player_id: effectiveId })
-    .then(() => {}, () => {});
+  (supabase.rpc as any)("claim_player_identity", {
+    p_player_id: effectiveId,
+  }).then(
+    () => {},
+    () => {},
+  );
   return room as unknown as Room;
 }
 
@@ -239,11 +297,18 @@ export async function migrateHost(
     .eq("host_id", expectedCurrentHostId)
     .select("id")
     .maybeSingle();
-  if (error) { console.error("migrateHost failed", error); return false; }
+  if (error) {
+    console.error("migrateHost failed", error);
+    return false;
+  }
   return !!data;
 }
 
-export async function kickPlayer(roomId: string, actorId: string, playerId: string) {
+export async function kickPlayer(
+  roomId: string,
+  actorId: string,
+  playerId: string,
+) {
   // Otimismo: remove o jogador da UI local de quem clicou sem esperar o
   // echo de realtime (~300–500ms). Se a operação falhar, o próximo
   // postgres_changes/poll restaura o registro automaticamente.
@@ -298,7 +363,9 @@ export async function addBot(roomId: string, index: number) {
   // (PostgrestBuilder é "thenable" — `void builder` NÃO executa).
   const rollbackOptimisticBot = () => {
     if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent("player:optimistic-remove", { detail: { playerId: id } }));
+    window.dispatchEvent(
+      new CustomEvent("player:optimistic-remove", { detail: { playerId: id } }),
+    );
   };
   supabase
     .from("players")
@@ -317,7 +384,10 @@ export async function setWinCondition(
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
-        detail: { roomId, patch: { win_condition: condition, win_target: target } },
+        detail: {
+          roomId,
+          patch: { win_condition: condition, win_target: target },
+        },
       }),
     );
   }
@@ -326,9 +396,12 @@ export async function setWinCondition(
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { win_condition: condition, win_target: target },
-  }).then(({ error }: { error: unknown }) => {
-    if (error) console.error("host_update_room_config" + " failed", error);
-  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
+  }).then(
+    ({ error }: { error: unknown }) => {
+      if (error) console.error("host_update_room_config" + " failed", error);
+    },
+    (e: unknown) => console.error("host_update_room_config" + " failed", e),
+  );
 }
 
 // ---------- Game flow (driven by host browser) ----------
@@ -364,23 +437,34 @@ export async function fetchThreeWords(
   let globalPool: Word[] = [];
   if (needed > 0) {
     // RPC segura: devolve apenas colunas não-reveladoras (sem meaning).
-    const { data, error } = await (supabase.rpc as any)("get_random_word_prompts", {
-      exclude_ids: excludeIds,
-      min_rarity: 2,
-      lim: needed,
-      p_categories: categories,
-      p_nivel: nivel,
-    });
+    const { data, error } = await (supabase.rpc as any)(
+      "get_random_word_prompts",
+      {
+        exclude_ids: excludeIds,
+        min_rarity: 2,
+        lim: needed,
+        p_categories: categories,
+        p_nivel: nivel,
+      },
+    );
     if (!error && data && data.length >= needed) {
       globalPool = data as Word[];
     } else if (categories.length > 0 || nivel !== "aleatorio") {
-      const { data: any3 } = await (supabase.rpc as any)("get_random_word_prompts", {
-        exclude_ids: excludeIds, min_rarity: 2, lim: needed,
-      });
+      const { data: any3 } = await (supabase.rpc as any)(
+        "get_random_word_prompts",
+        {
+          exclude_ids: excludeIds,
+          min_rarity: 2,
+          lim: needed,
+        },
+      );
       if (any3) globalPool = any3 as Word[];
     }
     if (globalPool.length < needed) {
-      let q = supabase.from("words").select("id,word,category,rarity,nivel,classe,pronuncia").limit(120);
+      let q = supabase
+        .from("words")
+        .select("id,word,category,rarity,nivel,classe,pronuncia")
+        .limit(120);
       if (excludeIds.length) q = q.not("id", "in", `(${excludeIds.join(",")})`);
       if (categories.length) q = q.in("category", categories);
       const { data: anyN } = await q;
@@ -412,13 +496,23 @@ export async function fetchRoomWords(roomId: string): Promise<RoomWord[]> {
   return (data as RoomWord[]) ?? [];
 }
 
-export async function addRoomWord(roomId: string, playerId: string, word: string, meaning: string) {
+export async function addRoomWord(
+  roomId: string,
+  playerId: string,
+  word: string,
+  meaning: string,
+) {
   const cleanWord = word.trim().slice(0, 40);
   const cleanMeaning = meaning.trim().slice(0, 220);
   if (!cleanWord || !cleanMeaning) return null;
   const { data, error } = await supabase
     .from("room_words")
-    .insert({ room_id: roomId, created_by: playerId, word: cleanWord, meaning: cleanMeaning })
+    .insert({
+      room_id: roomId,
+      created_by: playerId,
+      word: cleanWord,
+      meaning: cleanMeaning,
+    })
     .select()
     .single();
   if (error) return null;
@@ -429,7 +523,11 @@ export async function deleteRoomWord(id: string) {
   await supabase.from("room_words").delete().eq("id", id);
 }
 
-export async function setNivel(roomId: string, actorId: string, nivel: NivelFilter) {
+export async function setNivel(
+  roomId: string,
+  actorId: string,
+  nivel: NivelFilter,
+) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -442,12 +540,19 @@ export async function setNivel(roomId: string, actorId: string, nivel: NivelFilt
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { nivel },
-  }).then(({ error }: { error: unknown }) => {
-    if (error) console.error("host_update_room_config" + " failed", error);
-  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
+  }).then(
+    ({ error }: { error: unknown }) => {
+      if (error) console.error("host_update_room_config" + " failed", error);
+    },
+    (e: unknown) => console.error("host_update_room_config" + " failed", e),
+  );
 }
 
-export async function setCategories(roomId: string, actorId: string, categories: string[]) {
+export async function setCategories(
+  roomId: string,
+  actorId: string,
+  categories: string[],
+) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -460,9 +565,12 @@ export async function setCategories(roomId: string, actorId: string, categories:
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { categories },
-  }).then(({ error }: { error: unknown }) => {
-    if (error) console.error("host_update_room_config" + " failed", error);
-  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
+  }).then(
+    ({ error }: { error: unknown }) => {
+      if (error) console.error("host_update_room_config" + " failed", error);
+    },
+    (e: unknown) => console.error("host_update_room_config" + " failed", e),
+  );
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -475,7 +583,11 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export async function startGame(room: Room, players: Player[]) {
-  const resetPlayers = players.map((p) => ({ ...p, score: 0, coordinator_count: 0 }));
+  const resetPlayers = players.map((p) => ({
+    ...p,
+    score: 0,
+    coordinator_count: 0,
+  }));
   const next = pickNextCoordinator(resetPlayers, null);
   // Otimismo: já transita a sala para "choosing" localmente para a UI sair
   // do lobby instantaneamente, enquanto a RPC (autoritativa) roda o reset
@@ -498,7 +610,10 @@ export async function startGame(room: Room, players: Player[]) {
   await (supabase.rpc as any)("start_game", { p_room_id: room.id });
 }
 
-function pickNextCoordinator(players: Player[], lastCoord: string | null): Player {
+function pickNextCoordinator(
+  players: Player[],
+  lastCoord: string | null,
+): Player {
   // Prefer players with the lowest coordinator_count, exclude last
   const candidates = players.filter((p) => p.id !== lastCoord);
   const pool = candidates.length > 0 ? candidates : players;
@@ -507,7 +622,11 @@ function pickNextCoordinator(players: Player[], lastCoord: string | null): Playe
   return tier[Math.floor(Math.random() * tier.length)];
 }
 
-export async function chooseWord(roomId: string, wordId: string, durationSec = 60) {
+export async function chooseWord(
+  roomId: string,
+  wordId: string,
+  durationSec = 60,
+) {
   const ends = new Date(Date.now() + durationSec * 1000).toISOString();
   // Otimismo: transita para "writing" imediatamente para o coordenador e
   // demais clientes que estiverem ouvindo o evento. A RPC `choose_word` é
@@ -536,7 +655,9 @@ export async function chooseWord(roomId: string, wordId: string, durationSec = 6
 }
 
 export class DuplicateDefinitionError extends Error {
-  constructor(message = "Já existe uma definição igual a essa nesta rodada. Reescreva com suas próprias palavras.") {
+  constructor(
+    message = "Já existe uma definição igual a essa nesta rodada. Reescreva com suas próprias palavras.",
+  ) {
     super(message);
     this.name = "DuplicateDefinitionError";
   }
@@ -551,7 +672,14 @@ function normalizeDefText(s: string): string {
     .trim();
 }
 
-export async function submitDefinition(roomId: string, round: number, playerId: string, text: string, isTruth = false, word?: string) {
+export async function submitDefinition(
+  roomId: string,
+  round: number,
+  playerId: string,
+  text: string,
+  isTruth = false,
+  word?: string,
+) {
   // Passa a palavra-alvo para o sanitizer detectar tentativas de "colar a resposta"
   // mesmo com acento/maiúscula/separadores que sobreviveriam à normalização básica.
   const clean = sanitizeDefinition(text, 140, isTruth ? undefined : word);
@@ -569,8 +697,13 @@ export async function submitDefinition(roomId: string, round: number, playerId: 
         detail: {
           roomId,
           definition: {
-            id: pendingId, room_id: roomId, round, player_id: playerId,
-            text: clean, letter: null, is_truth: false,
+            id: pendingId,
+            room_id: roomId,
+            round,
+            player_id: playerId,
+            text: clean,
+            letter: null,
+            is_truth: false,
           },
         },
       }),
@@ -579,20 +712,30 @@ export async function submitDefinition(roomId: string, round: number, playerId: 
   try {
     if (isTruth) {
       // Definição verdadeira (chamada pelo host na transição p/ votação)
-      const { data, error } = await (supabase.rpc as any)("insert_truth_definition", {
-        p_room_id: roomId, p_round: round, p_text: clean,
-      });
+      const { data, error } = await (supabase.rpc as any)(
+        "insert_truth_definition",
+        {
+          p_room_id: roomId,
+          p_round: round,
+          p_text: clean,
+        },
+      );
       if (error) throw error;
       if (data && (data as any).ok === false) {
-        throw new Error(`insert_truth_definition rejected: ${(data as any).reason}`);
+        throw new Error(
+          `insert_truth_definition rejected: ${(data as any).reason}`,
+        );
       }
     } else {
       const { data, error } = await (supabase.rpc as any)("submit_definition", {
-        p_room_id: roomId, p_player_id: playerId, p_text: clean,
+        p_room_id: roomId,
+        p_player_id: playerId,
+        p_text: clean,
       });
       if (error) throw error;
       if (data && (data as any).ok === false) {
-        if ((data as any).reason === "duplicate_definition") throw new DuplicateDefinitionError();
+        if ((data as any).reason === "duplicate_definition")
+          throw new DuplicateDefinitionError();
         throw new Error(`submit_definition rejected: ${(data as any).reason}`);
       }
       // Guarda o id da PRÓPRIA definição: na votação as cédulas chegam sem
@@ -619,8 +762,8 @@ export async function submitDefinition(roomId: string, round: number, playerId: 
 // Personas pseudo-fixas por bot: cada apelido herda sempre o mesmo estilo,
 // para que "Profa. Trapaça" sempre escreva técnico, "TioBlefe" gíria etc.
 const BOT_PERSONA_BY_NAME: Record<string, string> = {
-  "TioBlefe": "giria",
-  "MestreLero": "poetico",
+  TioBlefe: "giria",
+  MestreLero: "poetico",
   "Dona Lupa": "formal",
   "Zé Tagarela": "regional",
   "Profa. Trapaça": "tecnico",
@@ -628,13 +771,25 @@ const BOT_PERSONA_BY_NAME: Record<string, string> = {
   "Vó Vera": "pratico",
   "Caco Esperto": "giria",
 };
-const PERSONA_POOL = ["formal", "giria", "tecnico", "regional", "poetico", "pratico"];
+const PERSONA_POOL = [
+  "formal",
+  "giria",
+  "tecnico",
+  "regional",
+  "poetico",
+  "pratico",
+];
 function personaFor(bot: Player, idx: number): string {
-  return BOT_PERSONA_BY_NAME[bot.nickname] ?? PERSONA_POOL[idx % PERSONA_POOL.length];
+  return (
+    BOT_PERSONA_BY_NAME[bot.nickname] ?? PERSONA_POOL[idx % PERSONA_POOL.length]
+  );
 }
 
 export async function botSubmitDefinitions(
-  roomId: string, round: number, bots: Player[], word?: Word | null,
+  roomId: string,
+  round: number,
+  bots: Player[],
+  word?: Word | null,
 ) {
   if (bots.length === 0) return;
   // Delay curto: a chamada de IA acima já leva 1-3s; somado a um atraso
@@ -651,7 +806,8 @@ export async function botSubmitDefinitions(
         body: { word_id: word.id, count: bots.length, personas },
       });
       const arr = (data as any)?.definitions;
-      if (Array.isArray(arr)) aiDefs = arr.filter((s) => typeof s === "string" && s.length > 5);
+      if (Array.isArray(arr))
+        aiDefs = arr.filter((s) => typeof s === "string" && s.length > 5);
     } catch (e) {
       console.warn("bot-definitions AI failed, using fallback", e);
     }
@@ -661,7 +817,12 @@ export async function botSubmitDefinitions(
     // Dedup: bots NUNCA devem dar a mesma resposta (entre si, igual à verdade,
     // ou igual a uma definição já enviada por qualquer outro jogador humano).
     const norm = (s: string) =>
-      s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
     const used = new Set<string>();
     if (word?.meaning) used.add(norm(humanizeMeaning(word.meaning)));
 
@@ -684,12 +845,17 @@ export async function botSubmitDefinitions(
     }
 
     // Pool de fallback embaralhado para evitar colisões aleatórias.
-    const fallbackPool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(() => Math.random() - 0.5);
+    const fallbackPool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
+      () => Math.random() - 0.5,
+    );
     let fbIdx = 0;
     const nextFallback = (): string => {
       for (let k = 0; k < fallbackPool.length; k++) {
         const cand = fallbackPool[(fbIdx + k) % fallbackPool.length];
-        if (!used.has(norm(cand))) { fbIdx = (fbIdx + k + 1) % fallbackPool.length; return cand; }
+        if (!used.has(norm(cand))) {
+          fbIdx = (fbIdx + k + 1) % fallbackPool.length;
+          return cand;
+        }
       }
       // todos usados — gera variação numérica para garantir unicidade
       return `${fallbackPool[fbIdx++ % fallbackPool.length]} (${Math.floor(Math.random() * 999)})`;
@@ -714,15 +880,29 @@ export async function botSubmitDefinitions(
       p_room_id: roomId,
       p_round: round,
       p_rows: rows,
-    }).then(() => {}, () => {});
+    }).then(
+      () => {},
+      () => {},
+    );
   }, delay);
 }
 
 // Gera UMA definição falsa no mesmo estilo dos bots, para o jogador humano
 // usar como "auto" caso não queira digitar. Usa a edge function de bots
 // (mesma IA + mesmas regras gramaticais), com fallback local.
-export async function generateAiDefinitionForPlayer(word: Word, roomId?: string, round?: number): Promise<string> {
-  const personas = ["formal", "giria", "tecnico", "regional", "poetico", "pratico"];
+export async function generateAiDefinitionForPlayer(
+  word: Word,
+  roomId?: string,
+  round?: number,
+): Promise<string> {
+  const personas = [
+    "formal",
+    "giria",
+    "tecnico",
+    "regional",
+    "poetico",
+    "pratico",
+  ];
   const persona = personas[Math.floor(Math.random() * personas.length)];
 
   // Evita colisão com definições já enviadas na rodada: sem a chave de IA,
@@ -732,12 +912,17 @@ export async function generateAiDefinitionForPlayer(word: Word, roomId?: string,
   if (roomId && round != null) {
     try {
       const { data: existing } = await supabase
-        .from("definitions").select("text").eq("room_id", roomId).eq("round", round);
+        .from("definitions")
+        .select("text")
+        .eq("room_id", roomId)
+        .eq("round", round);
       for (const row of existing ?? []) {
         const t = (row as { text?: string }).text;
         if (t) used.add(normalizeDefText(t));
       }
-    } catch { /* dedup é melhor-esforço */ }
+    } catch {
+      /* dedup é melhor-esforço */
+    }
   }
 
   try {
@@ -745,7 +930,11 @@ export async function generateAiDefinitionForPlayer(word: Word, roomId?: string,
       body: { word_id: word.id, count: 1, personas: [persona] },
     });
     const arr = (data as any)?.definitions;
-    const raw = Array.isArray(arr) ? arr.find((s: unknown) => typeof s === "string" && (s as string).length > 5) : null;
+    const raw = Array.isArray(arr)
+      ? arr.find(
+          (s: unknown) => typeof s === "string" && (s as string).length > 5,
+        )
+      : null;
     if (raw) {
       const clean = sanitizeDefinition(raw as string, 140, word.word);
       if (!used.has(normalizeDefText(clean))) return clean;
@@ -765,7 +954,9 @@ export async function startShuffling(roomId: string): Promise<boolean> {
   // Guarda atômica: a RPC só promove se ainda estiver em "writing". A UI
   // otimista só roda DEPOIS do retorno real para não pular a
   // penalidade/prorrogação quando ainda há humano sem definição.
-  const { data, error } = await (supabase.rpc as any)("start_shuffling", { p_room_id: roomId });
+  const { data, error } = await (supabase.rpc as any)("start_shuffling", {
+    p_room_id: roomId,
+  });
   if (error || !(data as any)?.ok) return false;
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -777,7 +968,12 @@ export async function startShuffling(roomId: string): Promise<boolean> {
   return true;
 }
 
-export async function startVoting(roomId: string, _round: number, _word: Word, _defs: Definition[]) {
+export async function startVoting(
+  roomId: string,
+  _round: number,
+  _word: Word,
+  _defs: Definition[],
+) {
   // `advance_writing_to_voting` é a única fonte de verdade: insere a
   // definição verdadeira se faltar, embaralha as letras e abre a votação —
   // tudo atomicamente sob lock de linha, e ela mesma re-checa se ainda
@@ -785,10 +981,17 @@ export async function startVoting(roomId: string, _round: number, _word: Word, _
   // substitui o polling de 8x250ms que existia aqui antes). Os parâmetros
   // round/word/defs continuam na assinatura só para não obrigar os
   // call-sites (Shuffling.tsx) a mudar; o estado real vem sempre do banco.
-  await (supabase.rpc as any)("advance_writing_to_voting", { p_room_id: roomId });
+  await (supabase.rpc as any)("advance_writing_to_voting", {
+    p_room_id: roomId,
+  });
 }
 
-export async function castVote(roomId: string, round: number, voterId: string, definitionId: string) {
+export async function castVote(
+  roomId: string,
+  round: number,
+  voterId: string,
+  definitionId: string,
+) {
   // Otimismo: injeta o voto na UI local com id sintético
   // (`pending_${voter}_${round}`). O reducer dedupica por (voter_id, round)
   // quando o INSERT real chega via realtime.
@@ -799,8 +1002,11 @@ export async function castVote(roomId: string, round: number, voterId: string, d
         detail: {
           roomId,
           vote: {
-            id: pendingId, room_id: roomId, round,
-            voter_id: voterId, definition_id: definitionId,
+            id: pendingId,
+            room_id: roomId,
+            round,
+            voter_id: voterId,
+            definition_id: definitionId,
           },
         },
       }),
@@ -828,7 +1034,12 @@ export async function castVote(roomId: string, round: number, voterId: string, d
   }
 }
 
-export async function botsVote(roomId: string, round: number, bots: Player[], defs: Definition[]) {
+export async function botsVote(
+  roomId: string,
+  round: number,
+  bots: Player[],
+  defs: Definition[],
+) {
   if (bots.length === 0) return;
   const delay = 900 + Math.random() * 1400;
   setTimeout(() => {
@@ -845,12 +1056,19 @@ export async function botsVote(roomId: string, round: number, bots: Player[], de
       p_room_id: roomId,
       p_round: round,
       p_votes: rows,
-    }).then(() => {}, () => {});
+    }).then(
+      () => {},
+      () => {},
+    );
   }, delay);
 }
 
 export async function revealAndScore(
-  room: Room, _players: Player[], _defs: Definition[], _votes: Vote[], _coordinatorId: string,
+  room: Room,
+  _players: Player[],
+  _defs: Definition[],
+  _votes: Vote[],
+  _coordinatorId: string,
 ): Promise<boolean> {
   // `advance_voting_to_reveal` é a única fonte de verdade agora: reavalia do
   // zero (sob lock de linha) se ainda falta humano sem voto — se faltar, é
@@ -860,10 +1078,22 @@ export async function revealAndScore(
   // não pontua duas vezes; ela só termina de mover o status pra "reveal".
   // A pontuação-base E o bônus de similaridade semântica (IA) são aplicados
   // atomicamente dentro da RPC — não há mais lógica de score aqui no client.
-  await (supabase.rpc as any)("advance_voting_to_reveal", { p_room_id: room.id });
-  const { data } = await supabase.from("rooms").select("status,current_round").eq("id", room.id).maybeSingle();
-  const current = data as { status?: RoomStatus; current_round?: number } | null;
-  return current?.current_round === room.current_round && current?.status === "reveal";
+  await (supabase.rpc as any)("advance_voting_to_reveal", {
+    p_room_id: room.id,
+  });
+  const { data } = await supabase
+    .from("rooms")
+    .select("status,current_round")
+    .eq("id", room.id)
+    .maybeSingle();
+  const current = data as {
+    status?: RoomStatus;
+    current_round?: number;
+  } | null;
+  return (
+    current?.current_round === room.current_round &&
+    current?.status === "reveal"
+  );
 }
 
 export async function goToScoreboard(roomId: string) {
@@ -895,12 +1125,23 @@ export async function restartGame(roomId: string) {
   const { error } = await supabase.rpc("reset_room", { p_room_id: roomId });
   if (!error) return;
   // Fallback (RPC unavailable): legacy sequential reset
-  const { data: ps } = await supabase.from("players").select("id").eq("room_id", roomId);
+  const { data: ps } = await supabase
+    .from("players")
+    .select("id")
+    .eq("room_id", roomId);
   if (ps) {
     await Promise.all(
       ps.map((p) =>
-        supabase.from("players").update({ score: 0, coordinator_count: 0, writing_extensions: 0, voting_extensions: 0 }).eq("id", p.id)
-      )
+        supabase
+          .from("players")
+          .update({
+            score: 0,
+            coordinator_count: 0,
+            writing_extensions: 0,
+            voting_extensions: 0,
+          })
+          .eq("id", p.id),
+      ),
     );
   }
   await Promise.all([
@@ -909,10 +1150,16 @@ export async function restartGame(roomId: string) {
     supabase.from("rounds").delete().eq("room_id", roomId),
   ]);
   // IMPORTANT: do NOT clear used_word_ids — palavras já usadas continuam excluídas mesmo após reiniciar
-  await supabase.from("rooms").update({
-    status: "lobby", current_round: 0,
-    current_coordinator: null, current_word_id: null, round_phase_ends_at: null,
-  }).eq("id", roomId);
+  await supabase
+    .from("rooms")
+    .update({
+      status: "lobby",
+      current_round: 0,
+      current_coordinator: null,
+      current_word_id: null,
+      round_phase_ends_at: null,
+    })
+    .eq("id", roomId);
 }
 
 // ============================================================
@@ -927,9 +1174,18 @@ export interface RoomMessage {
   created_at: string;
 }
 
-export const CHAT_ENABLED_STATUSES: RoomStatus[] = ["lobby", "reveal", "scoreboard", "finished"];
+export const CHAT_ENABLED_STATUSES: RoomStatus[] = [
+  "lobby",
+  "reveal",
+  "scoreboard",
+  "finished",
+];
 
-export async function sendRoomMessage(roomId: string, playerId: string, text: string): Promise<{ ok: boolean; reason?: string }> {
+export async function sendRoomMessage(
+  roomId: string,
+  playerId: string,
+  text: string,
+): Promise<{ ok: boolean; reason?: string }> {
   const clean = sanitizeDefinition(text, 200);
   if (!clean) return { ok: false, reason: "empty" };
   const { data, error } = await (supabase.rpc as any)("send_room_message", {
@@ -941,7 +1197,10 @@ export async function sendRoomMessage(roomId: string, playerId: string, text: st
   return (data as { ok: boolean; reason?: string }) ?? { ok: false };
 }
 
-export async function fetchRoomMessages(roomId: string, limit = 50): Promise<RoomMessage[]> {
+export async function fetchRoomMessages(
+  roomId: string,
+  limit = 50,
+): Promise<RoomMessage[]> {
   // Cast: room_messages ainda não existe nos tipos gerados do Supabase
   // (src/integrations/supabase/types.ts é do schema antigo). Regenerar os
   // tipos após aplicar as migrations remove a necessidade do cast.
@@ -957,7 +1216,12 @@ export async function fetchRoomMessages(roomId: string, limit = 50): Promise<Roo
 // Partida rápida (salas públicas): entra num lobby público com vaga
 // ou cria um novo, tornando o chamador host. Tudo server-side.
 // ============================================================
-export async function joinPublicRoom(playerId: string, nickname: string, avatar: string, color: string): Promise<Room> {
+export async function joinPublicRoom(
+  playerId: string,
+  nickname: string,
+  avatar: string,
+  color: string,
+): Promise<Room> {
   const cleanNick = sanitizeNickname(nickname);
   const { data, error } = await (supabase.rpc as any)("join_public_room", {
     p_player_id: playerId,
@@ -967,7 +1231,9 @@ export async function joinPublicRoom(playerId: string, nickname: string, avatar:
   });
   if (error) {
     if (String(error.message ?? "").includes("player_banned")) {
-      throw new Error("Esta conta ou dispositivo foi banido por violar as regras da comunidade.");
+      throw new Error(
+        "Esta conta ou dispositivo foi banido por violar as regras da comunidade.",
+      );
     }
     throw error;
   }
@@ -975,7 +1241,11 @@ export async function joinPublicRoom(playerId: string, nickname: string, avatar:
   return data as Room;
 }
 
-export async function sendReaction(roomId: string, playerId: string, emoji: string) {
+export async function sendReaction(
+  roomId: string,
+  playerId: string,
+  emoji: string,
+) {
   // RPC com rate-limit servidor-side (800ms por jogador) e validação de pertencimento à sala.
   await (supabase.rpc as any)("send_reaction", {
     p_room_id: roomId,
@@ -987,7 +1257,12 @@ export async function sendReaction(roomId: string, playerId: string, emoji: stri
 // ============================================================
 // Times / modo de jogo
 // ============================================================
-export async function setRoomMode(roomId: string, actorId: string, mode: RoomMode, teams: Team[] = []) {
+export async function setRoomMode(
+  roomId: string,
+  actorId: string,
+  mode: RoomMode,
+  teams: Team[] = [],
+) {
   const nextTeams = mode === "teams" ? teams : [];
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -997,7 +1272,9 @@ export async function setRoomMode(roomId: string, actorId: string, mode: RoomMod
     );
     if (mode === "individual") {
       window.dispatchEvent(
-        new CustomEvent("players:optimistic-clear-team", { detail: { roomId } }),
+        new CustomEvent("players:optimistic-clear-team", {
+          detail: { roomId },
+        }),
       );
     }
   }
@@ -1007,12 +1284,19 @@ export async function setRoomMode(roomId: string, actorId: string, mode: RoomMod
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { mode, teams: nextTeams },
-  }).then(({ error }: { error: unknown }) => {
-    if (error) console.error("host_update_room_config" + " failed", error);
-  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
+  }).then(
+    ({ error }: { error: unknown }) => {
+      if (error) console.error("host_update_room_config" + " failed", error);
+    },
+    (e: unknown) => console.error("host_update_room_config" + " failed", e),
+  );
 }
 
-export async function setRoomTeams(roomId: string, actorId: string, teams: Team[]) {
+export async function setRoomTeams(
+  roomId: string,
+  actorId: string,
+  teams: Team[],
+) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -1025,9 +1309,12 @@ export async function setRoomTeams(roomId: string, actorId: string, teams: Team[
     p_room_id: roomId,
     p_actor_id: actorId,
     p_patch: { teams },
-  }).then(({ error }: { error: unknown }) => {
-    if (error) console.error("host_update_room_config" + " failed", error);
-  }, (e: unknown) => console.error("host_update_room_config" + " failed", e));
+  }).then(
+    ({ error }: { error: unknown }) => {
+      if (error) console.error("host_update_room_config" + " failed", error);
+    },
+    (e: unknown) => console.error("host_update_room_config" + " failed", e),
+  );
 }
 
 export async function assignPlayerToTeam(
@@ -1049,16 +1336,26 @@ export async function assignPlayerToTeam(
     p_actor_id: actorId,
     p_player_id: playerId,
     p_team_id: teamId ?? "",
-  }).then(({ error }: { error: unknown }) => {
-    if (error) console.error("assign_player_team" + " failed", error);
-  }, (e: unknown) => console.error("assign_player_team" + " failed", e));
+  }).then(
+    ({ error }: { error: unknown }) => {
+      if (error) console.error("assign_player_team" + " failed", error);
+    },
+    (e: unknown) => console.error("assign_player_team" + " failed", e),
+  );
 }
 
-export async function autoBalanceTeams(roomId: string, actorId: string, players: Player[], teams: Team[]) {
+export async function autoBalanceTeams(
+  roomId: string,
+  actorId: string,
+  players: Player[],
+  teams: Team[],
+) {
   if (!teams.length) return;
   // Distribui em round-robin pelos times (ordem aleatória)
   const shuffled = [...players].sort(() => Math.random() - 0.5);
-  shuffled.forEach((p, i) => assignPlayerToTeam(roomId, actorId, p.id, teams[i % teams.length].id));
+  shuffled.forEach((p, i) =>
+    assignPlayerToTeam(roomId, actorId, p.id, teams[i % teams.length].id),
+  );
 }
 
 export function computeTeamScores(players: Player[], teams: Team[]) {
@@ -1083,7 +1380,7 @@ export function computeTeamScores(players: Player[], teams: Team[]) {
 //     chamador deve seguir o fluxo normal (startShuffling).
 // ============================================================
 export async function applyWritingTimeoutOrAdvance(
-  roomId: string
+  roomId: string,
 ): Promise<{ extended: boolean; kickedIds: string[] }> {
   const { data, error } = await supabase.rpc("extend_writing_or_advance", {
     p_room_id: roomId,
@@ -1108,9 +1405,12 @@ export async function applyWritingTimeoutOrAdvance(
 //   - Se ninguém precisou de prorrogação, retorna { extended: false } e o
 //     chamador deve seguir o fluxo normal (revealAndScore).
 // ============================================================
-export async function applyVotingTimeoutOrAdvance(
-  roomId: string
-): Promise<{ action: string; extended: boolean; advanced: boolean; kickedIds: string[] }> {
+export async function applyVotingTimeoutOrAdvance(roomId: string): Promise<{
+  action: string;
+  extended: boolean;
+  advanced: boolean;
+  kickedIds: string[];
+}> {
   const { data, error } = await supabase.rpc("extend_voting_or_advance", {
     p_room_id: roomId,
   });
@@ -1126,7 +1426,3 @@ export async function applyVotingTimeoutOrAdvance(
     kickedIds: payload.kicked ?? [],
   };
 }
-
-
-
-

@@ -2,18 +2,48 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
-  botSubmitDefinitions, generateAiDefinitionForPlayer, startShuffling, submitDefinition, applyWritingTimeoutOrAdvance,
+  botSubmitDefinitions,
+  generateAiDefinitionForPlayer,
+  startShuffling,
+  submitDefinition,
+  applyWritingTimeoutOrAdvance,
   DuplicateDefinitionError,
-  type Definition, type Player, type Room, type Word,
+  type Definition,
+  type Player,
+  type Room,
+  type Word,
 } from "@/lib/room";
 import { supabase } from "@/integrations/supabase/client";
 import { Mascot } from "@/components/Mascot";
 import { playSubmit, playUITap } from "@/lib/sound";
-import { WordCard, ProgressBar, PendingList, TimerBar } from "@/components/room/shared";
+import {
+  WordCard,
+  ProgressBar,
+  PendingList,
+  TimerBar,
+} from "@/components/room/shared";
 import type { RoundExtension } from "@/hooks/use-room";
 
-export function WriteDefinition({ room, players, word, me, isCoordinator, definitions, roundExtensions, isHost, isDeputy }: {
-  room: Room; players: Player[]; word: Word; me: Player; isCoordinator: boolean; definitions: Definition[]; roundExtensions: RoundExtension[]; isHost: boolean; isDeputy: boolean;
+export function WriteDefinition({
+  room,
+  players,
+  word,
+  me,
+  isCoordinator,
+  definitions,
+  roundExtensions,
+  isHost,
+  isDeputy,
+}: {
+  room: Room;
+  players: Player[];
+  word: Word;
+  me: Player;
+  isCoordinator: boolean;
+  definitions: Definition[];
+  roundExtensions: RoundExtension[];
+  isHost: boolean;
+  isDeputy: boolean;
 }) {
   const [text, setText] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -30,21 +60,31 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
       const { sanitizeDefinition } = await import("@/lib/text-filter");
-      const { BOT_FAKE_DEFINITIONS_TEMPLATES } = await import("@/lib/bot-names");
+      const { BOT_FAKE_DEFINITIONS_TEMPLATES } =
+        await import("@/lib/bot-names");
       let out: string[] = [];
       try {
         const { data } = await supabase.functions.invoke("bot-definitions", {
-          body: { word_id: word.id, count: 3, personas: ["conciso", "contextual", "comparativo"] },
+          body: {
+            word_id: word.id,
+            count: 3,
+            personas: ["conciso", "contextual", "comparativo"],
+          },
         });
-        const arr = (data as { definitions?: unknown[] } | null)?.definitions ?? [];
+        const arr =
+          (data as { definitions?: unknown[] } | null)?.definitions ?? [];
         out = arr
           .filter((s): s is string => typeof s === "string" && s.length > 5)
           .map((s) => sanitizeDefinition(s, 140, word.word))
           .filter((s, i, a) => s.length > 0 && a.indexOf(s) === i)
           .slice(0, 3);
-      } catch { /* fallback abaixo */ }
+      } catch {
+        /* fallback abaixo */
+      }
       if (out.length < 3) {
-        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(() => Math.random() - 0.5);
+        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
+          () => Math.random() - 0.5,
+        );
         for (const fb of pool) {
           if (out.length >= 3) break;
           const s = sanitizeDefinition(fb, 140, word.word);
@@ -53,19 +93,31 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
       }
       if (alive) setSuggestions(out);
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [room.id, room.current_round, isCoordinator, word.id]);
-  const myDef = useMemo(() => definitions.find((d) => d.player_id === me?.id), [definitions, me?.id]);
+  const myDef = useMemo(
+    () => definitions.find((d) => d.player_id === me?.id),
+    [definitions, me?.id],
+  );
   const writers = useMemo(
-    () => players.filter((p) => p.id !== room.current_coordinator && !p.kicked_at),
+    () =>
+      players.filter((p) => p.id !== room.current_coordinator && !p.kicked_at),
     [players, room.current_coordinator],
   );
-  const submittedIds = useMemo(() => new Set(definitions.map((d) => d.player_id)), [definitions]);
+  const submittedIds = useMemo(
+    () => new Set(definitions.map((d) => d.player_id)),
+    [definitions],
+  );
   const submittedCount = useMemo(
     () => writers.reduce((n, w) => n + (submittedIds.has(w.id) ? 1 : 0), 0),
     [writers, submittedIds],
   );
-  const pending = useMemo(() => writers.filter((p) => !submittedIds.has(p.id)), [writers, submittedIds]);
+  const pending = useMemo(
+    () => writers.filter((p) => !submittedIds.has(p.id)),
+    [writers, submittedIds],
+  );
   const allSubmitted = submittedCount >= writers.length;
 
   const botsTriggeredRef = useRef(false);
@@ -95,12 +147,22 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
         // do timeout — o que é o bug que esta verificação previne.
         try {
           // S1: recontagem via RPC phase-aware (SELECT direto foi revogado).
-          const { data: sync } = await supabase.rpc("get_round_sync" as never, { p_room_id: room.id } as never);
-          const serverDefs = (sync as { definitions?: { round: number }[] } | null)?.definitions ?? [];
-          const count = serverDefs.filter((d) => d.round === roundAtCheck).length;
+          const { data: sync } = await supabase.rpc(
+            "get_round_sync" as never,
+            { p_room_id: room.id } as never,
+          );
+          const serverDefs =
+            (sync as { definitions?: { round: number }[] } | null)
+              ?.definitions ?? [];
+          const count = serverDefs.filter(
+            (d) => d.round === roundAtCheck,
+          ).length;
           if (count < expectedDefs) return; // alguém ainda falta — deixa o timer/RPC cuidar
         } catch (e) {
-          console.warn("allSubmitted recount failed, falling back to advance", e);
+          console.warn(
+            "allSubmitted recount failed, falling back to advance",
+            e,
+          );
         }
         startShuffling(room.id);
       }, delay);
@@ -113,7 +175,12 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const remaining = room.round_phase_ends_at ? Math.max(0, Math.floor((new Date(room.round_phase_ends_at).getTime() - now) / 1000)) : 0;
+  const remaining = room.round_phase_ends_at
+    ? Math.max(
+        0,
+        Math.floor((new Date(room.round_phase_ends_at).getTime() - now) / 1000),
+      )
+    : 0;
 
   const timeoutHandledRef = useRef<string | null>(null);
   useEffect(() => {
@@ -135,9 +202,15 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
       }, delay);
       return () => clearTimeout(t);
     }
-  }, [remaining, isHost, isDeputy, room.id, room.current_round, room.round_phase_ends_at]);
+  }, [
+    remaining,
+    isHost,
+    isDeputy,
+    room.id,
+    room.current_round,
+    room.round_phase_ends_at,
+  ]);
 
-  
   // Fonte de verdade do banner: round_extensions (assinado em tempo real).
   // Não dependemos do contador acumulado players.writing_extensions porque ele
   // pode chegar com atraso no realtime do próprio jogador penalizado.
@@ -153,9 +226,10 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
     return m;
   }, [roundExtensions, room.current_round]);
   const extensionAlerts = useMemo(
-    () => pending
-      .map((p) => ({ player: p, attempt: roundExtMap.get(p.id) ?? 0 }))
-      .filter((x) => x.attempt > 0),
+    () =>
+      pending
+        .map((p) => ({ player: p, attempt: roundExtMap.get(p.id) ?? 0 }))
+        .filter((x) => x.attempt > 0),
     [pending, roundExtMap],
   );
   const activeExtension = useMemo(
@@ -170,7 +244,14 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
     void playSubmit();
     setSubmitted(true);
     try {
-      await submitDefinition(room.id, room.current_round, me.id, text, false, word.word);
+      await submitDefinition(
+        room.id,
+        room.current_round,
+        me.id,
+        text,
+        false,
+        word.word,
+      );
     } catch (e) {
       console.error("submitDefinition failed", e);
       setSubmitted(false);
@@ -186,7 +267,11 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
     if (!word || aiLoading || submitted || myDef) return;
     setAiLoading(true);
     try {
-      const generated = await generateAiDefinitionForPlayer(word, room.id, room.current_round);
+      const generated = await generateAiDefinitionForPlayer(
+        word,
+        room.id,
+        room.current_round,
+      );
       setText(generated.slice(0, 140));
     } catch (e) {
       console.error("generateAiDefinitionForPlayer failed", e);
@@ -198,11 +283,20 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
 
   if (isCoordinator) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center gap-5 pt-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="flex-1 flex flex-col items-center gap-5 pt-4"
+      >
         <WordCard word={word} />
         <Mascot mood="excited" size={100} />
-        <p className="text-center font-display text-mint text-xl">Você é o coordenador!</p>
-        <p className="text-center text-base text-muted-foreground">Os jogadores estão escrevendo suas definições…</p>
+        <p className="text-center font-display text-mint text-xl">
+          Você é o coordenador!
+        </p>
+        <p className="text-center text-base text-muted-foreground">
+          Os jogadores estão escrevendo suas definições…
+        </p>
         <ProgressBar current={submittedCount} total={writers.length} />
         <PendingList pending={pending} />
         <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
@@ -210,8 +304,23 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
           const seconds = attempt >= 2 ? 15 : 20;
           const pointsLost = attempt;
           return (
-            <div key={p.id} className={"rounded-xl px-3 py-2 text-center font-display text-xs border " + (attempt >= 2 ? "bg-destructive/15 border-destructive text-destructive" : "bg-sun/15 border-sun text-sun")}>
-              ⏰ {p.avatar} <b>{p.nickname}</b> perdeu <b>{pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}</b>. {attempt >= 2 ? `Última prorrogação: ${seconds}s para enviar ou será eliminado(a) da partida.` : `Nova oportunidade: +${seconds}s para enviar. Se perder novamente na próxima prorrogação, será eliminado(a) da partida.`}
+            <div
+              key={p.id}
+              className={
+                "rounded-xl px-3 py-2 text-center font-display text-xs border " +
+                (attempt >= 2
+                  ? "bg-destructive/15 border-destructive text-destructive"
+                  : "bg-sun/15 border-sun text-sun")
+              }
+            >
+              ⏰ {p.avatar} <b>{p.nickname}</b> perdeu{" "}
+              <b>
+                {pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}
+              </b>
+              .{" "}
+              {attempt >= 2
+                ? `Última prorrogação: ${seconds}s para enviar ou será eliminado(a) da partida.`
+                : `Nova oportunidade: +${seconds}s para enviar. Se perder novamente na próxima prorrogação, será eliminado(a) da partida.`}
             </div>
           );
         })}
@@ -220,7 +329,12 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col gap-4 pt-2">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col gap-4 pt-2"
+    >
       <WordCard word={word} />
       <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
       {extensionAlerts.map(({ player: p, attempt }) => {
@@ -240,7 +354,19 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
                 : "bg-sun/15 border-sun text-sun")
             }
           >
-            ⏰ {isSelf ? "Você" : <>{p.avatar} <b>{p.nickname}</b></>} perdeu <b>{pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}</b>.{" "}
+            ⏰{" "}
+            {isSelf ? (
+              "Você"
+            ) : (
+              <>
+                {p.avatar} <b>{p.nickname}</b>
+              </>
+            )}{" "}
+            perdeu{" "}
+            <b>
+              {pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}
+            </b>
+            .{" "}
             {finalChance
               ? `Última prorrogação: ${seconds}s para enviar${isSelf ? " ou você será eliminado(a) da partida" : " ou será eliminado(a) da partida"}.`
               : `Nova oportunidade: +${seconds}s para enviar. Se ${isSelf ? "você perder" : "perder"} novamente na próxima prorrogação, será eliminado(a) da partida.`}
@@ -263,7 +389,11 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
               value={text}
               onChange={(e) => setText(e.target.value.slice(0, 140))}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
                   e.preventDefault();
                   if (text.trim().length >= 1) handleSubmit();
                 }
@@ -273,10 +403,21 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
               className="w-full min-h-[118px] bg-input rounded-2xl px-4 py-4 font-body text-base leading-relaxed border border-white/10 outline-none focus:ring-4 focus:ring-pink/40 resize-none"
             />
 
-
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span className={text.length > 120 ? "text-pink" : text.length > 90 ? "text-sun" : ""}>{text.length}/140</span>
-              <span>{submittedCount}/{writers.length} enviaram</span>
+              <span
+                className={
+                  text.length > 120
+                    ? "text-pink"
+                    : text.length > 90
+                      ? "text-sun"
+                      : ""
+                }
+              >
+                {text.length}/140
+              </span>
+              <span>
+                {submittedCount}/{writers.length} enviaram
+              </span>
             </div>
 
             {/* Frases prontas: um toque preenche o campo (pedido de playtest —
@@ -287,7 +428,10 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
                   <button
                     key={s}
                     type="button"
-                    onClick={() => { void playUITap(); setText(s.slice(0, 140)); }}
+                    onClick={() => {
+                      void playUITap();
+                      setText(s.slice(0, 140));
+                    }}
                     className="text-left text-[12px] leading-snug px-2.5 py-1.5 rounded-xl bg-card/70 border border-white/15 hover:border-pink/50 active:scale-[0.98] transition"
                   >
                     💡 {s}
@@ -297,29 +441,48 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
             )}
             {pending.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">faltam:</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
+                  faltam:
+                </span>
                 {pending.map((p) => (
-                  <span key={p.id} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/60 border border-white/10">
+                  <span
+                    key={p.id}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/60 border border-white/10"
+                  >
                     <span className="text-sm leading-none">{p.avatar}</span>
-                    <span className="text-[11px] text-foreground/80 max-w-[80px] truncate">{p.nickname}</span>
+                    <span className="text-[11px] text-foreground/80 max-w-[80px] truncate">
+                      {p.nickname}
+                    </span>
                   </span>
                 ))}
               </div>
             )}
             <button
               type="button"
-              onPointerDown={(e) => { e.preventDefault(); }}
-              onClick={() => { void playUITap("primary"); handleSubmit(); }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+              }}
+              onClick={() => {
+                void playUITap("primary");
+                handleSubmit();
+              }}
               disabled={text.trim().length < 1}
-              className="btn-pop bg-gradient-fun text-white text-lg !py-2.5 disabled:opacity-50">
+              className="btn-pop bg-gradient-fun text-white text-lg !py-2.5 disabled:opacity-50"
+            >
               ✍️ Enviar definição
             </button>
             <button
               type="button"
-              onPointerDown={(e) => { e.preventDefault(); }}
-              onClick={() => { void playUITap("secondary"); handleAiGenerate(); }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+              }}
+              onClick={() => {
+                void playUITap("secondary");
+                handleAiGenerate();
+              }}
               disabled={aiLoading}
-              className="btn-pop bg-card border border-pink/40 text-pink text-sm !py-2 disabled:opacity-50">
+              className="btn-pop bg-card border border-pink/40 text-pink text-sm !py-2 disabled:opacity-50"
+            >
               {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
             </button>
             <p className="text-center text-[11px] text-mint font-display bg-mint/10 rounded-xl py-1.5 px-3 border border-mint/30">
@@ -333,5 +496,3 @@ export function WriteDefinition({ room, players, word, me, isCoordinator, defini
 }
 
 export default WriteDefinition;
-
-

@@ -4,7 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type DailyWord = { id: string; word: string; category: string | null };
 export type DailyChallenge = {
-  challenge: { id: string; challenge_date: string; challenge_hour: string; word_id: string };
+  challenge: {
+    id: string;
+    challenge_date: string;
+    challenge_hour: string;
+    word_id: string;
+  };
   word: DailyWord;
 };
 
@@ -35,14 +40,18 @@ export type DailyReview = {
   word?: string;
 };
 
-export async function fetchTodayAttempt(_userId?: string): Promise<DailyReview> {
+export async function fetchTodayAttempt(
+  _userId?: string,
+): Promise<DailyReview> {
   const { data, error } = await supabase.rpc("get_my_daily_review");
   if (error) return { played: false };
   return (data as DailyReview) ?? { played: false };
 }
 
 export async function fetchDailyLeaderboard(limit = 20) {
-  const { data } = await supabase.rpc("get_daily_leaderboard", { p_limit: limit });
+  const { data } = await supabase.rpc("get_daily_leaderboard", {
+    p_limit: limit,
+  });
   if (!data?.length) return [];
   const ids = Array.from(new Set(data.map((d: any) => d.user_id)));
   const { data: profiles } = await supabase
@@ -50,15 +59,25 @@ export async function fetchDailyLeaderboard(limit = 20) {
     .select("user_id, display_name, avatar, color")
     .in("user_id", ids);
   const byId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
-  return (data as any[]).map((d) => ({ ...d, profile: byId.get(d.user_id) ?? null }));
+  return (data as any[]).map((d) => ({
+    ...d,
+    profile: byId.get(d.user_id) ?? null,
+  }));
 }
 
 export type Achievement = {
-  code: string; name: string; description: string; emoji: string; rarity: string;
+  code: string;
+  name: string;
+  description: string;
+  emoji: string;
+  rarity: string;
 };
 
 export async function fetchAllAchievements(): Promise<Achievement[]> {
-  const { data } = await supabase.from("achievements").select("*").order("rarity");
+  const { data } = await supabase
+    .from("achievements")
+    .select("*")
+    .order("rarity");
   return (data as Achievement[]) ?? [];
 }
 
@@ -85,6 +104,3 @@ export function formatHMS(ms: number) {
   const s = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-
-
-

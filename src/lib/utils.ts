@@ -26,5 +26,3 @@ export function scrollbarClip(
     maxWidth: `calc(100% + ${clip})`,
   };
 }
-
-

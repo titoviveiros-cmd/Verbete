@@ -16,9 +16,25 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // Onboarding só carrega quando o jogador abre a ajuda.
-const Onboarding = lazy(() => import("@/components/Onboarding").then((m) => ({ default: m.Onboarding })));
+const Onboarding = lazy(() =>
+  import("@/components/Onboarding").then((m) => ({ default: m.Onboarding })),
+);
 
-export function TopBar({ code, round, status, isHost, onReset, onReload }: { code: string; round: number; status: string; isHost?: boolean; onReset?: () => void; onReload?: () => void }) {
+export function TopBar({
+  code,
+  round,
+  status,
+  isHost,
+  onReset,
+  onReload,
+}: {
+  code: string;
+  round: number;
+  status: string;
+  isHost?: boolean;
+  onReset?: () => void;
+  onReload?: () => void;
+}) {
   const navigate = useNavigate();
   const [showLeave, setShowLeave] = useState(false);
   const canReset = isHost && status !== "lobby";
@@ -30,31 +46,66 @@ export function TopBar({ code, round, status, isHost, onReset, onReload }: { cod
     onReload();
     setTimeout(() => setSpinning(false), 700);
   };
-  const btn = "shrink-0 opacity-70 hover:opacity-100 text-sm w-7 h-7 flex items-center justify-center rounded-full bg-card/50 border border-white/10 transition";
+  const btn =
+    "shrink-0 opacity-70 hover:opacity-100 text-sm w-7 h-7 flex items-center justify-center rounded-full bg-card/50 border border-white/10 transition";
   return (
     <div className="flex items-start justify-between mb-3 gap-2">
       <div className="text-xs shrink-0">
-        <p className="text-muted-foreground uppercase tracking-wider font-display">Código:</p>
+        <p className="text-muted-foreground uppercase tracking-wider font-display">
+          Código:
+        </p>
         <div className="flex items-center gap-1.5">
-          <p className="font-display text-xl tracking-[0.25em] text-sun leading-none">{code}</p>
+          <p className="font-display text-xl tracking-[0.25em] text-sun leading-none">
+            {code}
+          </p>
           <LatencyIndicator code={code} />
         </div>
       </div>
       <div className="flex-1 min-w-0 flex flex-wrap items-center justify-end gap-1.5">
-        <button onClick={() => setShowLeave(true)} className={btn} title="Sair da sala" aria-label="Sair da sala">🚪</button>
+        <button
+          onClick={() => setShowLeave(true)}
+          className={btn}
+          title="Sair da sala"
+          aria-label="Sair da sala"
+        >
+          🚪
+        </button>
         <SoundToggle />
         <ThemeToggle />
-        <button onClick={() => setShowHelp(true)} className={btn} title="Como jogar" aria-label="Como jogar">❔</button>
+        <button
+          onClick={() => setShowHelp(true)}
+          className={btn}
+          title="Como jogar"
+          aria-label="Como jogar"
+        >
+          ❔
+        </button>
         {onReload && (
-          <button onClick={handleReload} className={btn + (spinning ? " animate-spin" : "")} title="Atualizar sala" aria-label="Atualizar sala">🔄</button>
+          <button
+            onClick={handleReload}
+            className={btn + (spinning ? " animate-spin" : "")}
+            title="Atualizar sala"
+            aria-label="Atualizar sala"
+          >
+            🔄
+          </button>
         )}
         {canReset && (
-          <button onClick={onReset} className={btn} title="Resetar jogo" aria-label="Resetar jogo">♻️</button>
+          <button
+            onClick={onReset}
+            className={btn}
+            title="Resetar jogo"
+            aria-label="Resetar jogo"
+          >
+            ♻️
+          </button>
         )}
       </div>
       {round > 0 && (
         <div className="text-right text-xs shrink-0">
-          <p className="text-muted-foreground uppercase tracking-wider font-display">Rodada</p>
+          <p className="text-muted-foreground uppercase tracking-wider font-display">
+            Rodada
+          </p>
           <p className="font-display text-xl text-pink leading-none">{round}</p>
         </div>
       )}
@@ -75,12 +126,12 @@ export function TopBar({ code, round, status, isHost, onReset, onReload }: { cod
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Ficar na sala</AlertDialogCancel>
-            <AlertDialogAction onClick={() => navigate({ to: "/" })}>Sair</AlertDialogAction>
+            <AlertDialogAction onClick={() => navigate({ to: "/" })}>
+              Sair
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
   );
 }
-
-

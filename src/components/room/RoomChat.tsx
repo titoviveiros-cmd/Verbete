@@ -7,14 +7,26 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  CHAT_ENABLED_STATUSES, fetchRoomMessages, sendRoomMessage,
-  type Player, type RoomMessage, type RoomStatus,
+  CHAT_ENABLED_STATUSES,
+  fetchRoomMessages,
+  sendRoomMessage,
+  type Player,
+  type RoomMessage,
+  type RoomStatus,
 } from "@/lib/room";
 import { playUITap } from "@/lib/sound";
 import { scrollbarClip } from "@/lib/utils";
 
-export function RoomChat({ roomId, status, playerId, players }: {
-  roomId: string; status: RoomStatus; playerId: string; players: Player[];
+export function RoomChat({
+  roomId,
+  status,
+  playerId,
+  players,
+}: {
+  roomId: string;
+  status: RoomStatus;
+  playerId: string;
+  players: Player[];
 }) {
   const enabled = CHAT_ENABLED_STATUSES.includes(status);
   const [open, setOpen] = useState(false);
@@ -24,24 +36,40 @@ export function RoomChat({ roomId, status, playerId, players }: {
   const [unread, setUnread] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
   const openRef = useRef(open);
-  useEffect(() => { openRef.current = open; if (open) setUnread(0); }, [open]);
+  useEffect(() => {
+    openRef.current = open;
+    if (open) setUnread(0);
+  }, [open]);
 
   useEffect(() => {
     let alive = true;
-    void fetchRoomMessages(roomId).then((ms) => { if (alive) setMessages(ms); });
+    void fetchRoomMessages(roomId).then((ms) => {
+      if (alive) setMessages(ms);
+    });
     const ch = supabase
       .channel(`room-chat:${roomId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "room_messages", filter: `room_id=eq.${roomId}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "room_messages",
+          filter: `room_id=eq.${roomId}`,
+        },
         (p) => {
           const msg = p.new as RoomMessage;
-          setMessages((cur) => (cur.some((m) => m.id === msg.id) ? cur : [...cur, msg]));
-          if (!openRef.current && msg.player_id !== playerId) setUnread((n) => n + 1);
+          setMessages((cur) =>
+            cur.some((m) => m.id === msg.id) ? cur : [...cur, msg],
+          );
+          if (!openRef.current && msg.player_id !== playerId)
+            setUnread((n) => n + 1);
         },
       )
       .subscribe();
-    return () => { alive = false; void supabase.removeChannel(ch); };
+    return () => {
+      alive = false;
+      void supabase.removeChannel(ch);
+    };
   }, [roomId, playerId]);
 
   // Auto-scroll para a última mensagem
@@ -67,7 +95,10 @@ export function RoomChat({ roomId, status, playerId, players }: {
     <>
       {/* Botão flutuante */}
       <button
-        onClick={() => { void playUITap(); setOpen((o) => !o); }}
+        onClick={() => {
+          void playUITap();
+          setOpen((o) => !o);
+        }}
         aria-label={open ? "Fechar chat" : "Abrir chat"}
         className="fixed z-[60] w-12 h-12 rounded-full bg-gradient-fun text-white text-xl shadow-pop border-2 border-white/25 flex items-center justify-center"
         style={{
@@ -107,7 +138,11 @@ export function RoomChat({ roomId, status, playerId, players }: {
               </span>
             </div>
 
-            <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 py-2 space-y-1.5" style={scrollbarClip("0.75rem")}>
+            <div
+              ref={listRef}
+              className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 py-2 space-y-1.5"
+              style={scrollbarClip("0.75rem")}
+            >
               {messages.length === 0 && (
                 <p className="text-center text-xs text-muted-foreground italic pt-6">
                   Nenhuma mensagem ainda — puxa assunto! 😄
@@ -119,19 +154,33 @@ export function RoomChat({ roomId, status, playerId, players }: {
                 const avatar = (
                   <span
                     className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-base border border-white/20"
-                    style={{ background: p?.color ? `${p.color}33` : "rgba(255,255,255,0.08)" }}
+                    style={{
+                      background: p?.color
+                        ? `${p.color}33`
+                        : "rgba(255,255,255,0.08)",
+                    }}
                     title={p?.nickname}
                   >
                     {p?.avatar ?? "👤"}
                   </span>
                 );
                 return (
-                  <div key={m.id} className={"flex items-end gap-1.5 " + (mine ? "justify-end" : "justify-start")}>
+                  <div
+                    key={m.id}
+                    className={
+                      "flex items-end gap-1.5 " +
+                      (mine ? "justify-end" : "justify-start")
+                    }
+                  >
                     {!mine && avatar}
-                    <div className={
-                      "max-w-[78%] rounded-2xl px-2.5 py-1.5 text-sm leading-snug " +
-                      (mine ? "bg-pink/25 border border-pink/30" : "bg-white/8 border border-white/10")
-                    }>
+                    <div
+                      className={
+                        "max-w-[78%] rounded-2xl px-2.5 py-1.5 text-sm leading-snug " +
+                        (mine
+                          ? "bg-pink/25 border border-pink/30"
+                          : "bg-white/8 border border-white/10")
+                      }
+                    >
                       {!mine && (
                         <span className="block text-[10px] font-display text-sun leading-none mb-0.5">
                           {p?.nickname ?? "Jogador"}
@@ -149,7 +198,10 @@ export function RoomChat({ roomId, status, playerId, players }: {
               {enabled ? (
                 <form
                   className="flex gap-1.5"
-                  onSubmit={(e) => { e.preventDefault(); void submit(); }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void submit();
+                  }}
                 >
                   <input
                     value={draft}

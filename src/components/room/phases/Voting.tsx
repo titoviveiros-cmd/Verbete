@@ -1,8 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  applyVotingTimeoutOrAdvance, botsVote, castVote, revealAndScore,
-  type Definition, type Player, type Room, type Vote, type Word,
+  applyVotingTimeoutOrAdvance,
+  botsVote,
+  castVote,
+  revealAndScore,
+  type Definition,
+  type Player,
+  type Room,
+  type Vote,
+  type Word,
 } from "@/lib/room";
 import { playVoteCast } from "@/lib/sound";
 import { getStored } from "@/lib/player-id";
@@ -12,18 +19,42 @@ import { scrollbarClip } from "@/lib/utils";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDeputy, roundExtensions }: {
-  room: Room; players: Player[]; word: Word; definitions: Definition[]; votes: Vote[]; me: Player; isHost: boolean; isDeputy: boolean; roundExtensions: RoundExtension[];
+function VotingImpl({
+  room,
+  players,
+  word,
+  definitions,
+  votes,
+  me,
+  isHost,
+  isDeputy,
+  roundExtensions,
+}: {
+  room: Room;
+  players: Player[];
+  word: Word;
+  definitions: Definition[];
+  votes: Vote[];
+  me: Player;
+  isHost: boolean;
+  isDeputy: boolean;
+  roundExtensions: RoundExtension[];
 }) {
   const ordered = useMemo(
-    () => [...definitions].sort((a, b) => (a.letter ?? "Z").localeCompare(b.letter ?? "Z")),
+    () =>
+      [...definitions].sort((a, b) =>
+        (a.letter ?? "Z").localeCompare(b.letter ?? "Z"),
+      ),
     [definitions],
   );
   const roundVotes = useMemo(
     () => votes.filter((v) => v.round === room.current_round),
     [votes, room.current_round],
   );
-  const myVote = useMemo(() => roundVotes.find((v) => v.voter_id === me?.id), [roundVotes, me?.id]);
+  const myVote = useMemo(
+    () => roundVotes.find((v) => v.voter_id === me?.id),
+    [roundVotes, me?.id],
+  );
   // S1: cédulas chegam sem autor — a própria definição é identificada pelo
   // id devolvido no envio (persistido em `mydef:<sala>:<rodada>`).
   const myDefId = useMemo(
@@ -31,12 +62,24 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
     [room.id, room.current_round],
   );
   const myDef = useMemo(
-    () => definitions.find((d) => d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id)),
+    () =>
+      definitions.find(
+        (d) =>
+          d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id),
+      ),
     [definitions, myDefId, me?.id],
   );
   const [now, setNow] = useState(Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const remaining = room.round_phase_ends_at ? Math.max(0, Math.floor((new Date(room.round_phase_ends_at).getTime() - now) / 1000)) : 0;
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const remaining = room.round_phase_ends_at
+    ? Math.max(
+        0,
+        Math.floor((new Date(room.round_phase_ends_at).getTime() - now) / 1000),
+      )
+    : 0;
 
   // Coordenador TAMBÉM vota — todos os jogadores precisam votar para avançar.
   const voters = useMemo(() => players.filter((p) => !p.kicked_at), [players]);
@@ -61,7 +104,9 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
     // mount a lista ainda pode ser o shape da fase de escrita (sem
     // letras) ou estar vazia; disparar cedo fazia bots "não votarem" e a
     // rodada esperar o timer inteiro.
-    const ballot = definitions.filter((d) => d.letter && d.round === room.current_round);
+    const ballot = definitions.filter(
+      (d) => d.letter && d.round === room.current_round,
+    );
     if (!ballot.length) return;
     botsVotedRef.current = true;
     botsVote(room.id, room.current_round, bots, ballot);
@@ -88,8 +133,17 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
       // propagado e devolver false. Tentamos algumas vezes antes de desistir.
       for (let tries = 0; tries < 5 && !cancelled; tries++) {
         try {
-          const revealed = await revealAndScore(room, players, definitions, snapshot, room.current_coordinator!);
-          if (revealed) { revealFiredRef.current = room.current_round; return; }
+          const revealed = await revealAndScore(
+            room,
+            players,
+            definitions,
+            snapshot,
+            room.current_coordinator!,
+          );
+          if (revealed) {
+            revealFiredRef.current = room.current_round;
+            return;
+          }
         } catch (e) {
           console.error("revealAndScore failed", e);
         }
@@ -97,9 +151,19 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
       }
       revealInFlightRef.current = false;
     };
-    if (delay === 0) { void fire(); return () => { cancelled = true; }; }
-    const t = setTimeout(() => { void fire(); }, delay);
-    return () => { cancelled = true; clearTimeout(t); };
+    if (delay === 0) {
+      void fire();
+      return () => {
+        cancelled = true;
+      };
+    }
+    const t = setTimeout(() => {
+      void fire();
+    }, delay);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [allVoted, isHost, isDeputy, room.current_round]);
 
   // Quando o tempo zera sem todos terem votado, host/deputy chama a RPC que
@@ -124,13 +188,20 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
           const msUntilBackendGrace = endsAt + 2300 - Date.now();
           if (msUntilBackendGrace > 0) await wait(msUntilBackendGrace);
           for (let tries = 0; tries < 4; tries++) {
-            const { action, extended, advanced } = await applyVotingTimeoutOrAdvance(room.id);
+            const { action, extended, advanced } =
+              await applyVotingTimeoutOrAdvance(room.id);
             if (extended) return; // sala recebeu +20s/+15s, timer reinicia
             if (advanced) {
               if (revealFiredRef.current === room.current_round) return;
               if (revealInFlightRef.current) return;
               revealInFlightRef.current = true;
-              const revealed = await revealAndScore(room, players, definitions, snapshot, room.current_coordinator!);
+              const revealed = await revealAndScore(
+                room,
+                players,
+                definitions,
+                snapshot,
+                room.current_coordinator!,
+              );
               if (revealed) revealFiredRef.current = room.current_round;
               else revealInFlightRef.current = false;
               return;
@@ -162,43 +233,65 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
       }
       if (revealInFlightRef.current) return;
       revealInFlightRef.current = true;
-      const revealed = await revealAndScore(room, players, definitions, roundVotes, room.current_coordinator!);
+      const revealed = await revealAndScore(
+        room,
+        players,
+        definitions,
+        roundVotes,
+        room.current_coordinator!,
+      );
       if (revealed) revealFiredRef.current = room.current_round;
       else revealInFlightRef.current = false;
     }, 9000);
     return () => clearTimeout(t);
-  }, [remaining, allVoted, isHost, isDeputy, room.id, room.current_round, room.round_phase_ends_at, pending.length]);
+  }, [
+    remaining,
+    allVoted,
+    isHost,
+    isDeputy,
+    room.id,
+    room.current_round,
+    room.round_phase_ends_at,
+    pending.length,
+  ]);
 
   const [optimisticVoteId, setOptimisticVoteId] = useState<string | null>(null);
   useEffect(() => {
     if (myVote) setOptimisticVoteId(null);
   }, [myVote?.id]);
-  useEffect(() => { setOptimisticVoteId(null); }, [room.current_round]);
+  useEffect(() => {
+    setOptimisticVoteId(null);
+  }, [room.current_round]);
 
   const effectiveVoteDefId = myVote?.definition_id ?? optimisticVoteId;
   const hasVoted = !!effectiveVoteDefId;
 
-  const handleVote = useCallback(async (defId: string) => {
-    if (hasVoted || (myDef && myDef.id === defId)) return;
-    void playVoteCast();
-    setOptimisticVoteId(defId);
-    try {
-      await castVote(room.id, room.current_round, me.id, defId);
-    } catch (e) {
-      console.error("castVote failed", e);
-      setOptimisticVoteId(null);
-      // Feedback explícito: com o lock server-side, voto na virada do
-      // timer é rejeitado — sem este aviso o jogador achava que tinha
-      // votado e estranhava o placar.
-      const msg = String((e as Error)?.message ?? "");
-      const { toast } = await import("sonner");
-      if (msg.includes("wrong_phase")) {
-        toast.error("⏰ O tempo acabou antes do seu voto — ele não contou nesta rodada.");
-      } else {
-        toast.error("Não foi possível registrar seu voto. Tente de novo.");
+  const handleVote = useCallback(
+    async (defId: string) => {
+      if (hasVoted || (myDef && myDef.id === defId)) return;
+      void playVoteCast();
+      setOptimisticVoteId(defId);
+      try {
+        await castVote(room.id, room.current_round, me.id, defId);
+      } catch (e) {
+        console.error("castVote failed", e);
+        setOptimisticVoteId(null);
+        // Feedback explícito: com o lock server-side, voto na virada do
+        // timer é rejeitado — sem este aviso o jogador achava que tinha
+        // votado e estranhava o placar.
+        const msg = String((e as Error)?.message ?? "");
+        const { toast } = await import("sonner");
+        if (msg.includes("wrong_phase")) {
+          toast.error(
+            "⏰ O tempo acabou antes do seu voto — ele não contou nesta rodada.",
+          );
+        } else {
+          toast.error("Não foi possível registrar seu voto. Tente de novo.");
+        }
       }
-    }
-  }, [hasVoted, myDef, room.id, room.current_round, me?.id]);
+    },
+    [hasVoted, myDef, room.id, room.current_round, me?.id],
+  );
 
   const urgent = remaining <= 10;
   const critical = remaining > 0 && remaining <= 3;
@@ -213,7 +306,11 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
     baselineVotingExtRef.current = map;
   }
   const deltaExt = (p: Player) =>
-    Math.max(0, (p.voting_extensions ?? 0) - (baselineVotingExtRef.current.get(p.id) ?? (p.voting_extensions ?? 0)));
+    Math.max(
+      0,
+      (p.voting_extensions ?? 0) -
+        (baselineVotingExtRef.current.get(p.id) ?? p.voting_extensions ?? 0),
+    );
   const activeExtension = useMemo(
     () => voters.reduce((max, p) => Math.max(max, deltaExt(p)), 0),
     [voters, room.current_round],
@@ -222,7 +319,12 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
   const myExt = me ? deltaExt(me) : 0;
   const showExtBanner = !myVote && myExt > 0;
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden w-full max-w-full">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden w-full max-w-full"
+    >
       {/* Halo de urgência nos últimos 3s — vinheta vermelha pulsante */}
       {critical && (
         <motion.div
@@ -232,33 +334,72 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
           animate={{ opacity: [0.0, 0.55, 0.0] }}
           transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
           style={{
-            boxShadow: "inset 0 0 80px 20px color-mix(in oklab, var(--destructive) 55%, transparent)",
+            boxShadow:
+              "inset 0 0 80px 20px color-mix(in oklab, var(--destructive) 55%, transparent)",
           }}
         />
       )}
       <div className="shrink-0 flex items-center gap-2 rounded-2xl bg-gradient-fun px-3 py-1.5 shadow-pop w-full max-w-full">
-        <div className="flex-1 min-w-0 no-copy" onCopy={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-          <p className="text-[9px] uppercase tracking-widest font-display opacity-80 leading-none">A palavra é</p>
-          <h2 className="font-display text-stroke text-xl text-white leading-tight truncate capitalize">{word.word}</h2>
+        <div
+          className="flex-1 min-w-0 no-copy"
+          onCopy={(e) => e.preventDefault()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <p className="text-[9px] uppercase tracking-widest font-display opacity-80 leading-none">
+            A palavra é
+          </p>
+          <h2 className="font-display text-stroke text-xl text-white leading-tight truncate capitalize">
+            {word.word}
+          </h2>
         </div>
         <motion.div
           animate={critical ? { scale: [1, 1.18, 1] } : { scale: 1 }}
-          transition={critical ? { duration: 0.6, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
-          className={"font-display tabular-nums text-3xl leading-none shrink-0 " + (urgent ? "text-destructive drop-shadow-[0_0_10px_rgba(255,80,80,0.5)]" : "text-white")}
+          transition={
+            critical
+              ? { duration: 0.6, repeat: Infinity, ease: "easeInOut" }
+              : { duration: 0.2 }
+          }
+          className={
+            "font-display tabular-nums text-3xl leading-none shrink-0 " +
+            (urgent
+              ? "text-destructive drop-shadow-[0_0_10px_rgba(255,80,80,0.5)]"
+              : "text-white")
+          }
         >
-          {remaining}<span className="text-sm opacity-70">s</span>
+          {remaining}
+          <span className="text-sm opacity-70">s</span>
         </motion.div>
       </div>
       <div className="shrink-0 h-1 w-full bg-card rounded-full overflow-hidden border border-white/10">
-        <motion.div className={"h-full " + (urgent ? "bg-destructive" : "bg-sun")} animate={{ width: `${(remaining / timerMax) * 100}%` }} transition={{ duration: 0.5, ease: "linear" }} />
+        <motion.div
+          className={"h-full " + (urgent ? "bg-destructive" : "bg-sun")}
+          animate={{ width: `${(remaining / timerMax) * 100}%` }}
+          transition={{ duration: 0.5, ease: "linear" }}
+        />
       </div>
       {showExtBanner && (
-        <div className={"shrink-0 rounded-xl px-3 py-2 text-center font-display text-xs border " + (myExt >= 2 ? "bg-destructive/15 border-destructive text-destructive" : "bg-pink/15 border-pink text-pink")}>
-          {myExt === 1 && <>⏰ Tempo esgotado! Você perdeu <b>1 ponto</b>. Mais 20s pra votar — se faltar de novo, perde outro ponto. Na 3ª falha, é eliminado.</>}
-          {myExt >= 2 && <>⚠️ Última chance! Vote agora ou será <b>eliminado da partida</b> (já perdeu {myExt} pts no total).</>}
+        <div
+          className={
+            "shrink-0 rounded-xl px-3 py-2 text-center font-display text-xs border " +
+            (myExt >= 2
+              ? "bg-destructive/15 border-destructive text-destructive"
+              : "bg-pink/15 border-pink text-pink")
+          }
+        >
+          {myExt === 1 && (
+            <>
+              ⏰ Tempo esgotado! Você perdeu <b>1 ponto</b>. Mais 20s pra votar
+              — se faltar de novo, perde outro ponto. Na 3ª falha, é eliminado.
+            </>
+          )}
+          {myExt >= 2 && (
+            <>
+              ⚠️ Última chance! Vote agora ou será <b>eliminado da partida</b>{" "}
+              (já perdeu {myExt} pts no total).
+            </>
+          )}
         </div>
       )}
-
 
       <div
         className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pb-2 w-full max-w-full"
@@ -269,7 +410,8 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
         {ordered.map((d) => {
           // S1: as cédulas chegam sem autor — a própria é reconhecida pelo
           // id guardado no envio (fallback pro player_id em salas antigas).
-          const isMine = d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id);
+          const isMine =
+            d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id);
           const isPicked = effectiveVoteDefId === d.id;
           return (
             <motion.button
@@ -286,12 +428,25 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
                 (isMine ? " opacity-50" : "")
               }
             >
-              <span className="font-display text-2xl text-sun w-6 shrink-0 leading-none">{d.letter}</span>
-              <p className="font-body text-base flex-1 leading-snug">{d.text}</p>
-              {isMine && <span className="text-[10px] text-mint font-display shrink-0">SUA</span>}
+              <span className="font-display text-2xl text-sun w-6 shrink-0 leading-none">
+                {d.letter}
+              </span>
+              <p className="font-body text-base flex-1 leading-snug">
+                {d.text}
+              </p>
+              {isMine && (
+                <span className="text-[10px] text-mint font-display shrink-0">
+                  SUA
+                </span>
+              )}
               {!isMine && (
                 <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-                  <ReportButton definition={d} room={room} players={players} meId={me.id} />
+                  <ReportButton
+                    definition={d}
+                    room={room}
+                    players={players}
+                    meId={me.id}
+                  />
                 </span>
               )}
               {isPicked && (
@@ -310,17 +465,25 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
       </div>
 
       <div className="shrink-0 flex flex-col items-center gap-1 text-[11px] text-muted-foreground font-display px-2">
-        <span className="tabular-nums">{roundVotes.length}/{voters.length}</span>
+        <span className="tabular-nums">
+          {roundVotes.length}/{voters.length}
+        </span>
         {pending.length > 0 ? (
           <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-full">
             {pending.slice(0, 6).map((p) => (
-              <span key={p.id}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/60 border border-white/10">
+              <span
+                key={p.id}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/60 border border-white/10"
+              >
                 <span className="text-sm leading-none">{p.avatar}</span>
-                <span className="text-[11px] text-foreground/80 max-w-[80px] truncate">{p.nickname}</span>
+                <span className="text-[11px] text-foreground/80 max-w-[80px] truncate">
+                  {p.nickname}
+                </span>
               </span>
             ))}
-            {pending.length > 6 && <span className="opacity-70">+{pending.length - 6}</span>}
+            {pending.length > 6 && (
+              <span className="opacity-70">+{pending.length - 6}</span>
+            )}
           </div>
         ) : (
           <span className="text-mint">✨ todos votaram!</span>
@@ -332,5 +495,3 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
 
 export const Voting = memo(VotingImpl);
 export default Voting;
-
-

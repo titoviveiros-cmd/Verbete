@@ -8,12 +8,24 @@ import { sanitizeNickname } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
 import { primeAudio, playUITap } from "@/lib/sound";
 
-export function JoinFlow({ code, roomId, status }: { code: string; roomId: string; status: string }) {
+export function JoinFlow({
+  code,
+  roomId,
+  status,
+}: {
+  code: string;
+  roomId: string;
+  status: string;
+}) {
   const nav = useNavigate();
   const playerId = typeof window !== "undefined" ? getPlayerId() : "";
   const [nick, setNick] = useState<string>(() => getStored("nick", ""));
-  const [avatar, setAvatar] = useState<string>(() => getStored("avatar", randomAvatar()));
-  const [color, setColor] = useState<string>(() => getStored("color", randomColor()));
+  const [avatar, setAvatar] = useState<string>(() =>
+    getStored("avatar", randomAvatar()),
+  );
+  const [color, setColor] = useState<string>(() =>
+    getStored("color", randomColor()),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +35,10 @@ export function JoinFlow({ code, roomId, status }: { code: string; roomId: strin
     void primeAudio();
     setError(null);
     const cleanNick = sanitizeNickname(nick);
-    if (!cleanNick || cleanNick === "Anônimo") { setError("Escolha um apelido"); return; }
+    if (!cleanNick || cleanNick === "Anônimo") {
+      setError("Escolha um apelido");
+      return;
+    }
     setBusy(true);
     try {
       setStored("nick", cleanNick);
@@ -57,14 +72,18 @@ export function JoinFlow({ code, roomId, status }: { code: string; roomId: strin
       } catch (e) {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
-            new CustomEvent("player:optimistic-remove", { detail: { playerId } }),
+            new CustomEvent("player:optimistic-remove", {
+              detail: { playerId },
+            }),
           );
         }
         throw e;
       }
     } catch (e) {
       setError((e as Error).message);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -73,7 +92,8 @@ export function JoinFlow({ code, roomId, status }: { code: string; roomId: strin
         <Mascot mood="excited" size={130} />
         <h1 className="font-display text-3xl mt-2">Você foi convidado!</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Código da Sala: <span className="font-display text-sun tracking-[0.3em]">{code}</span>
+          Código da Sala:{" "}
+          <span className="font-display text-sun tracking-[0.3em]">{code}</span>
         </p>
         {inGame && (
           <p className="text-xs text-pink mt-2 font-display">
@@ -84,7 +104,9 @@ export function JoinFlow({ code, roomId, status }: { code: string; roomId: strin
 
       <div className="flex flex-col gap-4 mt-5">
         <div>
-          <label className="text-xs uppercase tracking-wider text-muted-foreground font-display">Seu apelido</label>
+          <label className="text-xs uppercase tracking-wider text-muted-foreground font-display">
+            Seu apelido
+          </label>
           <input
             value={nick}
             onChange={(e) => setNick(e.target.value)}
@@ -96,47 +118,84 @@ export function JoinFlow({ code, roomId, status }: { code: string; roomId: strin
         </div>
 
         <div>
-          <label className="text-xs uppercase tracking-wider text-muted-foreground font-display">Avatar</label>
+          <label className="text-xs uppercase tracking-wider text-muted-foreground font-display">
+            Avatar
+          </label>
           <div className="rounded-2xl bg-card p-3 border border-white/10 shadow-soft">
             <div className="flex justify-center mb-2">
               <motion.div
                 key={avatar + color}
-                initial={{ scale: 0.6, rotate: -20 }} animate={{ scale: 1, rotate: 0 }}
+                initial={{ scale: 0.6, rotate: -20 }}
+                animate={{ scale: 1, rotate: 0 }}
                 className="rounded-full w-20 h-20 flex items-center justify-center text-4xl shadow-pop"
                 style={{
                   background: `radial-gradient(circle at 30% 25%, ${color}cc, ${color})`,
                   border: "3px solid rgba(0,0,0,0.4)",
                 }}
-              >{avatar}</motion.div>
+              >
+                {avatar}
+              </motion.div>
             </div>
             <div className="grid grid-cols-8 gap-1 mb-2">
               {AVATARS.map((a) => (
-                <button key={a} onClick={() => setAvatar(a)}
+                <button
+                  key={a}
+                  onClick={() => setAvatar(a)}
                   aria-label={`Escolher avatar ${a}`}
                   aria-pressed={avatar === a}
-                  className={"text-2xl rounded-lg p-1 transition " + (avatar === a ? "bg-pink/30 ring-2 ring-pink" : "hover:bg-white/5")}>
+                  className={
+                    "text-2xl rounded-lg p-1 transition " +
+                    (avatar === a
+                      ? "bg-pink/30 ring-2 ring-pink"
+                      : "hover:bg-white/5")
+                  }
+                >
                   {a}
                 </button>
               ))}
             </div>
             <div className="flex gap-2 justify-center">
               {COLORS.map((c) => (
-                <button key={c} onClick={() => setColor(c)}
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
                   aria-label={`Escolher cor ${c}`}
                   aria-pressed={color === c}
-                  className={"w-7 h-7 rounded-full border-2 " + (color === c ? "border-white scale-110" : "border-black/40")}
-                  style={{ background: c }} />
+                  className={
+                    "w-7 h-7 rounded-full border-2 " +
+                    (color === c ? "border-white scale-110" : "border-black/40")
+                  }
+                  style={{ background: c }}
+                />
               ))}
             </div>
           </div>
         </div>
 
-        {error && <p className="text-destructive text-sm text-center font-display">{error}</p>}
+        {error && (
+          <p className="text-destructive text-sm text-center font-display">
+            {error}
+          </p>
+        )}
 
         <div className="flex gap-2">
-          <button onClick={() => { void playUITap("secondary"); nav({ to: "/" }); }} className="btn-pop bg-card flex-1">← Voltar</button>
-          <button onClick={() => { void playUITap("primary"); handleJoin(); }} disabled={busy}
-            className="btn-pop bg-gradient-fun text-white flex-[2] text-xl disabled:opacity-50">
+          <button
+            onClick={() => {
+              void playUITap("secondary");
+              nav({ to: "/" });
+            }}
+            className="btn-pop bg-card flex-1"
+          >
+            ← Voltar
+          </button>
+          <button
+            onClick={() => {
+              void playUITap("primary");
+              handleJoin();
+            }}
+            disabled={busy}
+            className="btn-pop bg-gradient-fun text-white flex-[2] text-xl disabled:opacity-50"
+          >
             {busy ? "Entrando…" : "🎉 Entrar na sala"}
           </button>
         </div>
@@ -144,5 +203,3 @@ export function JoinFlow({ code, roomId, status }: { code: string; roomId: strin
     </div>
   );
 }
-
-
