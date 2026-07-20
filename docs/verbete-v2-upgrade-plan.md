@@ -114,3 +114,5 @@ Os 18 itens da spec. Verificação: `npm run check` (lint+typecheck+unit), suít
 - [x] Fase 1 · parte 3: record_match_result server-side — client informa só o código da sala; score/posição/acertos/blefes/XP/conquistas derivados das tabelas oficiais via `players.user_id` + `claim_player_identity`. Verificada por sonda de ataque (`scripts/probe-stats.mjs`: assinatura forjada 404, sem sessão Unauthorized)
 - [ ] Fase 1 · parte 4: identidade anônima (auth.uid) nas RPCs de ação + auditoria SECURITY DEFINER (docs/security-audit.md)
 - [ ] Fases 2–10 (pendentes)
+
+**Decisão (2026-07-19):** o botão 🔄 "Atualizar sala" permanece até a Fase 2 validar reconexão com testes; na Fase 3–4 migra para o componente `ConnectionState` (visível só com conexão degradada).
