@@ -100,11 +100,11 @@ export function RoomChat({
           setOpen((o) => !o);
         }}
         aria-label={open ? "Fechar chat" : "Abrir chat"}
-        className="fixed z-[60] w-12 h-12 rounded-full bg-gradient-fun text-white text-xl shadow-pop border-2 border-white/25 flex items-center justify-center"
+        className="fixed z-[60] w-10 h-10 rounded-full bg-gradient-fun text-white text-base shadow-pop border-2 border-white/25 flex items-center justify-center"
         style={{
-          // Acima da barra de reações e dos CTAs de rodapé (playtest:
-          // sobrepunha "Próxima rodada"/reações em telas menores).
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 168px)",
+          // Playtest 5G: em 168px o balão cobria "Enviar definição". Menor
+          // (40px) e no vão entre o toggle de reações (76px) e os CTAs.
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 120px)",
           right: "calc(env(safe-area-inset-right, 0px) + 10px)",
         }}
       >
@@ -125,7 +125,8 @@ export function RoomChat({
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
             className="fixed z-[59] flex flex-col rounded-2xl bg-card/95 backdrop-blur-md border border-white/15 shadow-pop overflow-hidden"
             style={{
-              bottom: "calc(env(safe-area-inset-bottom, 0px) + 140px)",
+              // Logo acima do balão (que agora fica em 120–160px).
+              bottom: "calc(env(safe-area-inset-bottom, 0px) + 168px)",
               right: "calc(env(safe-area-inset-right, 0px) + 12px)",
               width: "min(320px, calc(100vw - 24px))",
               height: "min(380px, 55vh)",

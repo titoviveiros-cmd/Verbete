@@ -389,7 +389,9 @@ export function WriteDefinition({
         </div>
       ) : (
         <>
-          <div className="-mt-2 -mx-4 flex flex-col gap-2">
+          {/* Sem -mx-4: no celular a margem negativa colava "0/140", chips e
+              "faltam:" na borda esquerda da tela (playtest 5G). */}
+          <div className="-mt-2 flex flex-col gap-2">
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value.slice(0, 140))}
