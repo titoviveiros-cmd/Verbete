@@ -39,7 +39,7 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     needs: build-and-test
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,3 +62,11 @@ jobs:
           export DB_URL=$(echo "$STATUS" | grep -E '^DB_URL=' | cut -d= -f2- | tr -d '"')
           echo "API=$SUPA_URL DB=$DB_URL"
           npm run test:integration
+      - name: Instala Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+      - name: E2E Playwright (smoke + partida multiplayer, Supabase local)
+        run: |
+          STATUS=$(npx supabase status -o env)
+          export VITE_SUPABASE_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
+          export VITE_SUPABASE_PUBLISHABLE_KEY=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
+          npx playwright test

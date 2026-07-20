@@ -1,4 +1,8 @@
 project_id = "mvicfbqyjeypxikzrahb"
+# Espelha produção: convidados entram com sessão anônima e o join reivindica
+# players.user_id — o E2E do CI exercita o caminho real de identidade (S4).
+[auth]
+enable_anonymous_sign_ins = true
 [functions.bot-definitions]
 verify_jwt = false
 [functions.score-similarity]
