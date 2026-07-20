@@ -41,19 +41,27 @@ Deno.serve(async (req) => {
         text: String(c?.text ?? "").slice(0, MAX_TEXT_LEN),
       }));
 
-    // Busca a palavra atual da sala e a definição verdadeira (server-side, service role)
+    // Busca a palavra DA RODADA JULGADA (via rounds) — usar a palavra
+    // "atual" da sala quebrava quando a sala já tinha avançado de rodada.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data: room } = await admin
-      .from("rooms")
-      .select("current_word_id, status")
-      .eq("id", roomId)
+    let wid: string | null = null;
+    const { data: roundRow } = await admin
+      .from("rounds")
+      .select("word_id")
+      .eq("room_id", roomId)
+      .eq("round", round)
       .maybeSingle();
-    if (!room || !(room as any).current_word_id) {
-      return new Response(JSON.stringify({ matches: [] }), {
+    wid = (roundRow as any)?.word_id ?? null;
+    if (!wid) {
+      const { data: room } = await admin
+        .from("rooms").select("current_word_id").eq("id", roomId).maybeSingle();
+      wid = (room as any)?.current_word_id ?? null;
+    }
+    if (!wid) {
+      return new Response(JSON.stringify({ matches: [], error: "word_not_found" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const wid = (room as any).current_word_id;
     let word = "";
     const { data: w1 } = await admin.from("words").select("word").eq("id", wid).maybeSingle();
     if (w1) word = String((w1 as any).word ?? "");
@@ -83,14 +91,24 @@ Deno.serve(async (req) => {
       .map((c: { id: string; text: string }, i: number) => `${i + 1}. [id=${c.id}] "${c.text}"`)
       .join("\n");
 
-    const system = `Você avalia proximidade semântica entre definições do jogo "Verbete". Seja GENEROSO: aceite a candidata quando ela aponta para a MESMA ideia geral da verdadeira, ainda que com palavras diferentes, sinônimos coloquiais, conotação aproximada, paráfrase mais ampla ou mais estreita, ou foco parcial em um dos sentidos. Considere equivalentes definições que um falante comum interpretaria como "praticamente a mesma coisa" no contexto da palavra. Ignore estilo, ordem, formalidade e completude. Só rejeite quando o sentido for claramente diferente, não relacionado, ou se referir a outro conceito. Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdown.`;
+    const system = `Você avalia proximidade semântica entre definições do jogo "Verbete". Seja MUITO GENEROSO: aceite a candidata quando ela aponta para a MESMA ideia geral da verdadeira, ainda que com palavras diferentes, sinônimos, hiperônimos próximos, paráfrase mais ampla ou mais estreita, ou versão resumida. Uma única palavra sinônima CONTA como equivalente. Ignore estilo, ordem, formalidade e completude. Só rejeite quando o sentido for claramente diferente ou se referir a outro conceito.
+
+Exemplos calibrados:
+- verdadeira "falta completa de dinheiro" vs candidata "pobreza" -> APROVA (sinônimo direto)
+- verdadeira "dito espirituoso, gracejo" vs candidata "comentario engracado" -> APROVA (mesma ideia)
+- verdadeira "grande confusao" vs candidata "tipo de dança do interior" -> REJEITA (conceito diferente)
+
+Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdown.`;
     const user = `Palavra: ${word}\nDefinição verdadeira: ${truth}\n\nCandidatas:\n${list}\n\nRetorne os ids semanticamente próximos (seja generoso com sinônimos e paráfrases).`;
 
+    // flash-lite: pool de quota gratuita separado e maior — o flash comum
+    // estourou o free tier no playtest e TODAS as rodadas perderam o bônus
+    // silenciosamente (429 -> matches vazio).
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gemini-flash-latest",
+        model: "gemini-flash-lite-latest",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -101,7 +119,9 @@ Deno.serve(async (req) => {
     if (!r.ok) {
       const t = await r.text();
       console.error("AI gateway error", r.status, t);
-      return new Response(JSON.stringify({ matches: [] }), {
+      // Erro VISÍVEL no corpo — a resposta fica gravada em net._http_response
+      // e a próxima investigação não precisa adivinhar a causa.
+      return new Response(JSON.stringify({ matches: [], error: `ai_${r.status}`, detail: t.slice(0, 160) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
