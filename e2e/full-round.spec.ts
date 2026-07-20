@@ -79,10 +79,7 @@ test("host + convidado jogam uma rodada completa", async ({ browser }) => {
 
   await coord!.getByRole("button", { name: /Sortear palavra/ }).click();
   // 3 cartas de palavra (classe sticker) — escolhe a primeira
-  await coord!
-    .locator("button.sticker")
-    .first()
-    .click({ timeout: 20_000 });
+  await coord!.locator("button.sticker").first().click({ timeout: 20_000 });
 
   // 6) Escritor blefa e envia
   const ta = writer.getByPlaceholder("escreva sua definicao mirabolante...");
