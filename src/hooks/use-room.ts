@@ -783,6 +783,28 @@ export function useRoom(code: string | undefined, playerId?: string) {
     };
   }, [room?.id]);
 
+  // Retomada da aba (playtest mobile): o iOS congela timers/realtime quando o
+  // jogador troca de app; ao voltar, a UI mostrava fase/timer VELHOS por
+  // segundos e um toque caía numa fase que já tinha virado no servidor
+  // ("tempo acabou antes do seu voto" sem o tempo ter acabado na tela).
+  // Sincroniza IMEDIATAMENTE ao ficar visível de novo.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onResume = () => {
+      if (document.visibilityState !== "visible") return;
+      lastEventAtRef.current = 0; // canal esteve mudo — poll adaptativo acorda
+      void reloadRef.current?.();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("pageshow", onResume);
+    window.addEventListener("focus", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("pageshow", onResume);
+      window.removeEventListener("focus", onResume);
+    };
+  }, []);
+
   const reload = () => {
     reloadRef.current?.();
   };

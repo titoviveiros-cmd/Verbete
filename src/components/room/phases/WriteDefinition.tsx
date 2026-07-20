@@ -23,6 +23,7 @@ import {
   TimerBar,
 } from "@/components/room/shared";
 import type { RoundExtension } from "@/hooks/use-room";
+import { scrollbarClip } from "@/lib/utils";
 
 export function WriteDefinition({
   room,
@@ -49,9 +50,9 @@ export function WriteDefinition({
   const [submitted, setSubmitted] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
-  // Frases prontas (3 sugestões por rodada) em UMA chamada de IA com
-  // personas distintas — mais variedade e menos latência que 3 chamadas.
-  // Sem IA disponível, cai no pool local (sempre distintas entre si).
+  // Frases prontas (2 sugestões por rodada — playtest mobile: com 3, a dica
+  // de "letras minúsculas" saía da tela) em UMA chamada de IA com personas
+  // distintas. Sem IA disponível, cai no pool local (sempre distintas).
   const [suggestions, setSuggestions] = useState<string[]>([]);
   useEffect(() => {
     if (isCoordinator) return;
@@ -67,8 +68,8 @@ export function WriteDefinition({
         const { data } = await supabase.functions.invoke("bot-definitions", {
           body: {
             word_id: word.id,
-            count: 3,
-            personas: ["conciso", "contextual", "comparativo"],
+            count: 2,
+            personas: ["conciso", "contextual"],
           },
         });
         const arr =
@@ -77,16 +78,16 @@ export function WriteDefinition({
           .filter((s): s is string => typeof s === "string" && s.length > 5)
           .map((s) => sanitizeDefinition(s, 140, word.word))
           .filter((s, i, a) => s.length > 0 && a.indexOf(s) === i)
-          .slice(0, 3);
+          .slice(0, 2);
       } catch {
         /* fallback abaixo */
       }
-      if (out.length < 3) {
+      if (out.length < 2) {
         const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
           () => Math.random() - 0.5,
         );
         for (const fb of pool) {
-          if (out.length >= 3) break;
+          if (out.length >= 2) break;
           const s = sanitizeDefinition(fb, 140, word.word);
           if (s && !out.includes(s)) out.push(s);
         }
@@ -287,7 +288,8 @@ export function WriteDefinition({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="flex-1 flex flex-col items-center gap-5 pt-4"
+        className="flex-1 min-h-0 flex flex-col items-center gap-5 pt-4 overflow-y-auto overflow-x-hidden no-scrollbar pb-3"
+        style={scrollbarClip()}
       >
         <WordCard word={word} />
         <Mascot mood="excited" size={100} />
@@ -333,7 +335,10 @@ export function WriteDefinition({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-4 pt-2"
+      // Rolagem própria (playtest mobile: barra de navegação do Safari cobria
+      // o rodapé e não dava para ver todo o conteúdo). Barra clipada fora do shell.
+      className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3"
+      style={scrollbarClip()}
     >
       <WordCard word={word} />
       <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />

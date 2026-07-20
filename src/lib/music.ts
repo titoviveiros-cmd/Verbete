@@ -39,6 +39,24 @@ let masterGain: GainNode | null = null;
 let currentMood: Mood = "silent";
 let cleanupCurrent: (() => void) | null = null;
 let subscribed = false;
+let resumeHooked = false;
+
+// Playtest mobile: ao trocar de app, o iOS "interrompe" o AudioContext e mata
+// osciladores/schedulers — a música não voltava sozinha. Na retomada da aba,
+// religa o contexto e re-arma o loop do mood atual.
+function resumeMusicAfterSuspend() {
+  const c = ctx;
+  if (!c) return;
+  if (c.state === "running") return; // nada foi suspenso — não mexe
+  try {
+    void c.resume();
+  } catch {}
+  if (currentMood === "lobby" || currentMood === "tension") {
+    const prev = cleanupCurrent;
+    cleanupCurrent = startMood(currentMood);
+    if (prev) setTimeout(prev, 100);
+  }
+}
 
 const MOOD_BASE_GAIN = 0.18; // baixo, para não competir com SFX
 
@@ -47,6 +65,13 @@ function ensureMaster(c: AudioContext) {
     masterGain = c.createGain();
     masterGain.gain.value = getAudioPrefs().muted ? 0 : MOOD_BASE_GAIN;
     masterGain.connect(c.destination);
+  }
+  if (!resumeHooked && typeof document !== "undefined") {
+    resumeHooked = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resumeMusicAfterSuspend();
+    });
+    window.addEventListener("pageshow", resumeMusicAfterSuspend);
   }
   if (!subscribed) {
     subscribed = true;
