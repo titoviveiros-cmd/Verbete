@@ -11,6 +11,7 @@ import {
   type Player, type RoomMessage, type RoomStatus,
 } from "@/lib/room";
 import { playUITap } from "@/lib/sound";
+import { scrollbarClip } from "@/lib/utils";
 
 export function RoomChat({ roomId, status, playerId, players }: {
   roomId: string; status: RoomStatus; playerId: string; players: Player[];
@@ -106,7 +107,7 @@ export function RoomChat({ roomId, status, playerId, players }: {
               </span>
             </div>
 
-            <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 py-2 space-y-1.5">
+            <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 py-2 space-y-1.5" style={scrollbarClip("0.75rem")}>
               {messages.length === 0 && (
                 <p className="text-center text-xs text-muted-foreground italic pt-6">
                   Nenhuma mensagem ainda — puxa assunto! 😄

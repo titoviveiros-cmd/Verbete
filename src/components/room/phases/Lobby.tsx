@@ -8,6 +8,7 @@ import {
 import { AvatarBubble } from "@/components/AvatarBubble";
 import { Mascot } from "@/components/Mascot";
 import { playJoin, playBotJoin, playKick, playUITap } from "@/lib/sound";
+import { scrollbarClip } from "@/lib/utils";
 
 export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
   // Categorias enxutas (pedido do usuário 2026-07-19: natureza, história,
@@ -93,7 +94,8 @@ export function Lobby({
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar pb-2">
+      className="flex-1 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar pb-2"
+      style={scrollbarClip()}>
       <div className="flex items-center justify-center gap-3">
         <Mascot mood="excited" size={70} />
         <button onClick={handleShare} className="btn-pop bg-gradient-sun text-primary-foreground py-2 px-4 text-sm">

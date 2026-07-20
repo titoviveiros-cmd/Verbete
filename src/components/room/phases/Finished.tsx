@@ -7,6 +7,7 @@ import { Confetti } from "@/components/Confetti";
 import { Scoreboard } from "@/components/room/phases/Scoreboard";
 import { useAuth } from "@/hooks/use-auth";
 import { pushAchievement } from "@/components/AchievementToaster";
+import { scrollbarClip } from "@/lib/utils";
 
 export function Finished({ room, players, isHost, roomId, roomCode, playerId, onLeave }: {
   room: Room; players: Player[]; isHost: boolean; roomId: string; roomCode: string; playerId: string; onLeave: () => void;
@@ -100,7 +101,7 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
   if (viewingScoreboard) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col min-h-0 pt-2">
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2" style={scrollbarClip()}>
           <button
             type="button"
             onClick={() => setViewingScoreboard(false)}
@@ -117,7 +118,7 @@ export function Finished({ room, players, isHost, roomId, roomCode, playerId, on
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col min-h-0 pt-2">
 
       <Confetti />
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2 pb-2">
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2 pb-2" style={scrollbarClip()}>
         <div className="flex flex-col items-center">
           <Mascot mood="excited" size={72} />
           <motion.div

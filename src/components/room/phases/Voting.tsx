@@ -8,6 +8,7 @@ import { playVoteCast } from "@/lib/sound";
 import { getStored } from "@/lib/player-id";
 import { ReportButton } from "@/components/room/ReportButton";
 import type { RoundExtension } from "@/hooks/use-room";
+import { scrollbarClip } from "@/lib/utils";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -261,6 +262,7 @@ function VotingImpl({ room, players, word, definitions, votes, me, isHost, isDep
 
       <div
         className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pb-2 w-full max-w-full"
+        style={scrollbarClip()}
         onCopy={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >

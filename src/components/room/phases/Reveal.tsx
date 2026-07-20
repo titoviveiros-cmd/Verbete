@@ -10,6 +10,7 @@ import { WordCard } from "@/components/room/shared";
 import { playFooledMagnitude, playFooledOthersMagnitude, playPerfectRound, playSavage, playTailFreeze, playUITap } from "@/lib/sound";
 import { getPlayerId } from "@/lib/player-id";
 import { RevealFx } from "@/components/RevealFx";
+import { scrollbarClip } from "@/lib/utils";
 
 
 
@@ -137,7 +138,7 @@ function RevealImpl({ room, players, word, definitions, votes, isHost }: {
           <span className="font-display text-sm text-white/90">s</span>
         </motion.div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-4 w-full max-w-full">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-4 w-full max-w-full" style={scrollbarClip()}>
         <WordCard word={word} compact />
 
         {step < 1 && (

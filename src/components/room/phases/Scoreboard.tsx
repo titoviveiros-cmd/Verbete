@@ -5,6 +5,7 @@ import {
   type Definition, type Player, type Room, type Vote,
 } from "@/lib/room";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
+import { scrollbarClip } from "@/lib/utils";
 
 function ScoreboardImpl({ room, players, isHost }: {
   room: Room; players: Player[]; isHost: boolean;
@@ -135,7 +136,7 @@ function ScoreboardImpl({ room, players, isHost }: {
           {sortedTeams.length > 0 ? "Pontuação por equipe e por jogador:" : "Como cada um pontuou:"}
         </p>
       </div>
-      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full">
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full" style={scrollbarClip()}>
         {sortedTeams.length > 0 && (
           <div className="sticker py-3">
             <p className="font-display text-sm uppercase tracking-widest text-center opacity-80 mb-2">
