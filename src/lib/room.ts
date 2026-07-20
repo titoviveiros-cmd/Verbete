@@ -736,6 +736,10 @@ export async function submitDefinition(
       if (data && (data as any).ok === false) {
         if ((data as any).reason === "duplicate_definition")
           throw new DuplicateDefinitionError();
+        if ((data as any).reason === "too_similar")
+          throw new DuplicateDefinitionError(
+            "✋ Ficou muito parecida com outra definição desta rodada — muda umas palavras!",
+          );
         throw new Error(`submit_definition rejected: ${(data as any).reason}`);
       }
       // Guarda o id da PRÓPRIA definição: na votação as cédulas chegam sem
@@ -823,7 +827,19 @@ export async function botSubmitDefinitions(
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9]+/g, " ")
         .trim();
-    const used = new Set<string>();
+    // Similaridade, não só igualdade: playtest mostrou a IA gerando textos
+    // quase idênticos para bots diferentes ("...elegancia mundana" vs
+    // "...elegancia formal"). Qualquer candidato parecido demais com um já
+    // usado cai para o fallback local.
+    const { textSimilarity } = await import("./text-filter");
+    const usedTexts: string[] = [];
+    const used = {
+      has: (key: string) =>
+        usedTexts.some((t) => t === key || textSimilarity(t, key) > 0.6),
+      add: (key: string) => {
+        usedTexts.push(key);
+      },
+    };
     if (word?.meaning) used.add(norm(humanizeMeaning(word.meaning)));
 
     // Carrega definições já existentes nessa rodada (humanos + verdade) para

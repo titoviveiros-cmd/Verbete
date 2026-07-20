@@ -104,6 +104,26 @@ export function humanizeMeaning(input: string, maxLen = 90): string {
   return t.replace(/[.;,:]+$/, "").trim();
 }
 
+// Similaridade 0..1 entre textos (Dice sobre trigramas de caracteres do texto
+// normalizado). Usada para impedir definições quase iguais na mesma rodada —
+// playtest: IA/bots convergiam ("excesso de elegancia mundana" vs "...formal").
+export function textSimilarity(a: string, b: string): number {
+  const grams = (s: string): Set<string> => {
+    const n = ` ${normalizeForGame(s)
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()} `;
+    const out = new Set<string>();
+    for (let i = 0; i <= n.length - 3; i++) out.add(n.slice(i, i + 3));
+    return out;
+  };
+  const ga = grams(a);
+  const gb = grams(b);
+  if (ga.size === 0 || gb.size === 0) return 0;
+  let inter = 0;
+  for (const g of ga) if (gb.has(g)) inter++;
+  return (2 * inter) / (ga.size + gb.size);
+}
+
 export function sanitizeNickname(input: string): string {
   return (
     input

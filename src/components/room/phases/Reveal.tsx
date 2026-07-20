@@ -238,13 +238,111 @@ function RevealImpl({
           </div>
         )}
 
-        {/* Eliminação dos blefes, um a um */}
+        {/* Pausa de suspense (topo) antes da verdade */}
+        {elimCount >= bluffs.length && elimCount > 0 && !truthShown && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center font-display text-xl text-mint animate-pulse py-2"
+          >
+            E a verdade é… 🥁
+          </motion.p>
+        )}
+
+        {/* Clímax: a VERDADE — no TOPO da pilha (pedido 2026-07-20: revelar
+            de baixo para cima, com a resposta correta coroando o topo). */}
+        {truthShown && (
+          <div className="relative overflow-hidden rounded-3xl">
+            <motion.div
+              aria-hidden
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: [0, 0.7, 0.45], scale: [0.4, 1.3, 1.15] }}
+              transition={{ duration: 1.4, ease: "easeOut" }}
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  "radial-gradient(closest-side, color-mix(in oklab, var(--mint) 50%, transparent), transparent 70%)",
+                filter: "blur(20px)",
+              }}
+            />
+            <motion.div
+              initial={{ scale: 0.3, opacity: 0, y: 40, rotate: -3 }}
+              animate={{
+                scale: [0.3, 1.15, 0.95, 1.02, 1],
+                opacity: 1,
+                y: 0,
+                rotate: [-3, 2, -1, 0],
+              }}
+              transition={{
+                duration: 0.7,
+                times: [0, 0.45, 0.7, 0.88, 1],
+                ease: "easeOut",
+              }}
+              className="relative sticker bg-gradient-mint text-accent-foreground text-center py-6"
+            >
+              <p className="text-sm uppercase tracking-wider font-display">
+                ✅ A definição verdadeira é…
+              </p>
+              <p className="font-display text-2xl mt-2 leading-snug break-words">
+                "{truth?.text}"
+              </p>
+              {truthVoters.length > 0 && (
+                <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap px-3">
+                  <span className="text-[10px] uppercase tracking-wider font-display opacity-80 mr-1">
+                    🎯 acertaram:
+                  </span>
+                  {truthVoters.map((v, i) => (
+                    <motion.div
+                      key={v.id}
+                      initial={{ scale: 0, y: -10 }}
+                      animate={{ scale: 1, y: 0 }}
+                      transition={{
+                        delay: 0.25 + i * 0.15,
+                        type: "spring",
+                        stiffness: 260,
+                      }}
+                      className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-white/25 border-white/40"
+                    >
+                      <span className="text-sm">{v.avatar}</span>
+                      <span>{v.nickname}</span>
+                      {pointsShown && (
+                        <motion.span
+                          initial={{ scale: 0, y: 8 }}
+                          animate={{ scale: 1, y: 0 }}
+                          transition={{ type: "spring", stiffness: 300 }}
+                          className="rounded-full bg-white/40 px-1.5 text-[11px] font-display"
+                        >
+                          +3
+                        </motion.span>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+              {truthVoters.length === 0 && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="mt-3 text-xs font-display opacity-90"
+                >
+                  😱 NINGUÉM acertou — coordenador leva +2!
+                </motion.p>
+              )}
+            </motion.div>
+          </div>
+        )}
+
+        {/* Eliminação dos blefes: a pilha cresce PARA CIMA — o mais recente
+            entra no topo da lista, logo abaixo da verdade. */}
         {elimCount > 0 && (
           <div className="space-y-2">
             <p className="text-center text-xs uppercase tracking-wider font-display text-muted-foreground">
-              ❌ eliminando os blefes…
+              {truthShown
+                ? "🤥 os blefes da rodada"
+                : "❌ eliminando os blefes…"}
             </p>
-            {bluffs.slice(0, elimCount).map((d) => {
+            {[...bluffs.slice(0, elimCount)].reverse().map((d) => {
               const author = playersById.get(d.player_id);
               const dVoters = votersByDefId.get(d.id) ?? [];
               return (
@@ -317,100 +415,6 @@ function RevealImpl({
                 </motion.div>
               );
             })}
-          </div>
-        )}
-
-        {/* Pausa de suspense antes da verdade */}
-        {elimCount >= bluffs.length && elimCount > 0 && !truthShown && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center font-display text-xl text-mint animate-pulse py-2"
-          >
-            E a verdade é… 🥁
-          </motion.p>
-        )}
-
-        {/* Clímax: a VERDADE */}
-        {truthShown && (
-          <div className="relative overflow-hidden rounded-3xl">
-            <motion.div
-              aria-hidden
-              initial={{ opacity: 0, scale: 0.4 }}
-              animate={{ opacity: [0, 0.7, 0.45], scale: [0.4, 1.3, 1.15] }}
-              transition={{ duration: 1.4, ease: "easeOut" }}
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  "radial-gradient(closest-side, color-mix(in oklab, var(--mint) 50%, transparent), transparent 70%)",
-                filter: "blur(20px)",
-              }}
-            />
-            <motion.div
-              initial={{ scale: 0.3, opacity: 0, y: -40, rotate: -3 }}
-              animate={{
-                scale: [0.3, 1.15, 0.95, 1.02, 1],
-                opacity: 1,
-                y: 0,
-                rotate: [-3, 2, -1, 0],
-              }}
-              transition={{
-                duration: 0.7,
-                times: [0, 0.45, 0.7, 0.88, 1],
-                ease: "easeOut",
-              }}
-              className="relative sticker bg-gradient-mint text-accent-foreground text-center py-6"
-            >
-              <p className="text-sm uppercase tracking-wider font-display">
-                ✅ A definição verdadeira é…
-              </p>
-              <p className="font-display text-2xl mt-2 leading-snug break-words">
-                "{truth?.text}"
-              </p>
-              {truthVoters.length > 0 && (
-                <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap px-3">
-                  <span className="text-[10px] uppercase tracking-wider font-display opacity-80 mr-1">
-                    🎯 acertaram:
-                  </span>
-                  {truthVoters.map((v, i) => (
-                    <motion.div
-                      key={v.id}
-                      initial={{ scale: 0, y: -10 }}
-                      animate={{ scale: 1, y: 0 }}
-                      transition={{
-                        delay: 0.25 + i * 0.15,
-                        type: "spring",
-                        stiffness: 260,
-                      }}
-                      className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-white/25 border-white/40"
-                    >
-                      <span className="text-sm">{v.avatar}</span>
-                      <span>{v.nickname}</span>
-                      {pointsShown && (
-                        <motion.span
-                          initial={{ scale: 0, y: 8 }}
-                          animate={{ scale: 1, y: 0 }}
-                          transition={{ type: "spring", stiffness: 300 }}
-                          className="rounded-full bg-white/40 px-1.5 text-[11px] font-display"
-                        >
-                          +3
-                        </motion.span>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-              {truthShown && truthVoters.length === 0 && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                  className="mt-3 text-xs font-display opacity-90"
-                >
-                  😱 NINGUÉM acertou — coordenador leva +2!
-                </motion.p>
-              )}
-            </motion.div>
           </div>
         )}
 

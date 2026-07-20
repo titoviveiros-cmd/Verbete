@@ -81,7 +81,10 @@ if (st2.status === "shuffling") {
   await rpc("advance_writing_to_voting", { p_room_id: rid });
 }
 
-// 7) votos: b1→verdade (+3), b3→verdade (+3), b2→blefe do b1 (b1 +1)
+// 7) votos: b1→verdade (+3), b3→verdade (+3), b2→blefe do b1 (b1 +1) e o
+//    HUMANO (host/coordenador) → blefe do b1 (b1 +1). O guard de quórum
+//    (sala 7850) exige o voto de todo humano vivo antes do prazo — igual
+//    ao jogo real, onde o coordenador também vota.
 const { rows: defs } = await db.query(
   `SELECT id, player_id FROM public.definitions WHERE room_id = $1 AND round = 1`, [rid]);
 const truth = defs.find((d) => d.player_id === "__truth__");
@@ -94,16 +97,23 @@ await rpc("cast_votes_bulk", {
     { voter_id: "e2e_b2", definition_id: defB1.id },
   ],
 });
+
+// Quórum: com o humano ainda sem voto, o advance deve ser NO-OP
+await rpc("advance_voting_to_reveal", { p_room_id: rid });
+const { rows: [stq] } = await db.query(`SELECT status FROM public.rooms WHERE id = $1`, [rid]);
+check("quórum: sem o voto do humano, advance é no-op", stq.status === "voting", stq.status);
+
+await rpc("cast_vote", { p_room_id: rid, p_voter_id: "e2e_host", p_definition_id: defB1.id });
 const { rows: [vc] } = await db.query(
   `SELECT count(*)::int AS n FROM public.votes WHERE room_id = $1 AND round = 1`, [rid]);
-check("3 votos registrados", vc.n === 3, `n=${vc.n}`);
+check("4 votos registrados", vc.n === 4, `n=${vc.n}`);
 
 // 8) revela e confere pontuação ORIGINAL congelada
 await rpc("advance_voting_to_reveal", { p_room_id: rid });
 const { rows: scores } = await db.query(
   `SELECT id, score FROM public.players WHERE room_id = $1 ORDER BY id`, [rid]);
 const S = Object.fromEntries(scores.map((p) => [p.id, p.score]));
-check("b1 = 4 (+3 verdade, +1 enganou)", S.e2e_b1 === 4, `b1=${S.e2e_b1}`);
+check("b1 = 5 (+3 verdade, +2 enganou)", S.e2e_b1 === 5, `b1=${S.e2e_b1}`);
 check("b2 = 0", S.e2e_b2 === 0, `b2=${S.e2e_b2}`);
 check("b3 = 3 (+3 verdade)", S.e2e_b3 === 3, `b3=${S.e2e_b3}`);
 check("host (coord) = 0 (alguém achou a verdade)", S.e2e_host === 0, `host=${S.e2e_host}`);

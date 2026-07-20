@@ -85,11 +85,18 @@ export function WriteDefinition({
         });
         const arr =
           (data as { definitions?: unknown[] } | null)?.definitions ?? [];
-        const ai = arr
-          .filter((s): s is string => typeof s === "string" && s.length > 5)
-          .map((s) => sanitizeDefinition(s, 140, word.word))
-          .filter((s, i, a) => s.length > 0 && a.indexOf(s) === i)
-          .slice(0, 2);
+        const { textSimilarity } = await import("@/lib/text-filter");
+        const ai: string[] = [];
+        for (const raw of arr) {
+          if (typeof raw !== "string" || raw.length <= 5) continue;
+          const s = sanitizeDefinition(raw, 140, word.word);
+          if (!s) continue;
+          // Sugestões precisam ser DIFERENTES entre si (playtest: a IA
+          // convergia em frases quase iguais para personas distintas).
+          if (ai.some((t) => t === s || textSimilarity(t, s) > 0.6)) continue;
+          ai.push(s);
+          if (ai.length >= 2) break;
+        }
         if (alive && ai.length > 0) {
           setSuggestions((cur) => {
             const merged = [...ai];

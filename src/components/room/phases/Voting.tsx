@@ -84,8 +84,15 @@ function VotingImpl({
   // Coordenador TAMBÉM vota — todos os jogadores precisam votar para avançar.
   const voters = useMemo(() => players.filter((p) => !p.kicked_at), [players]);
   const voterIds = useMemo(() => new Set(voters.map((p) => p.id)), [voters]);
+  // Sala 7850: votos OTIMISTAS (id `pending_*`) não contam no quórum de
+  // avanço — contá-los disparava o advance em corrida com o próprio
+  // cast_vote, e a rodada pontuava sem o voto real. (O servidor agora também
+  // tem guard de quórum; aqui evitamos sequer tentar.)
   const validVotes = useMemo(
-    () => roundVotes.filter((v) => voterIds.has(v.voter_id)),
+    () =>
+      roundVotes.filter(
+        (v) => voterIds.has(v.voter_id) && !String(v.id).startsWith("pending"),
+      ),
     [roundVotes, voterIds],
   );
   const allVoted = voters.length > 0 && validVotes.length >= voters.length;
