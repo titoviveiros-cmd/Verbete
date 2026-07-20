@@ -266,9 +266,30 @@ function VotingImpl({
   const effectiveVoteDefId = myVote?.definition_id ?? optimisticVoteId;
   const hasVoted = !!effectiveVoteDefId;
 
+  // Retomada da aba (playtest 5G): logo após voltar do background, o estado
+  // pode estar a ~1s de sincronizar — segura toques na cédula nessa janela e
+  // usa a marca para explicar direito quando a rodada expirou na ausência.
+  const resumedAtRef = useRef(0);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onResume = () => {
+      if (document.visibilityState === "visible")
+        resumedAtRef.current = Date.now();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("pageshow", onResume);
+    return () => {
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("pageshow", onResume);
+    };
+  }, []);
+
   const handleVote = useCallback(
     async (defId: string) => {
       if (hasVoted || (myDef && myDef.id === defId)) return;
+      // Acabou de voltar do background: espera a sincronização (~1.2s)
+      // antes de aceitar o toque — evita votar numa fase já virada.
+      if (Date.now() - resumedAtRef.current < 1200) return;
       void playVoteCast();
       setOptimisticVoteId(defId);
       try {
@@ -282,8 +303,11 @@ function VotingImpl({
         const msg = String((e as Error)?.message ?? "");
         const { toast } = await import("sonner");
         if (msg.includes("wrong_phase")) {
+          const awayRecently = Date.now() - resumedAtRef.current < 8000;
           toast.error(
-            "⏰ O tempo acabou antes do seu voto — ele não contou nesta rodada.",
+            awayRecently
+              ? "⏰ A votação terminou enquanto você estava fora do app — seu voto não contou nesta rodada."
+              : "⏰ O tempo acabou antes do seu voto — ele não contou nesta rodada.",
           );
         } else {
           toast.error("Não foi possível registrar seu voto. Tente de novo.");
