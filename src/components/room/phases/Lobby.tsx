@@ -3,8 +3,7 @@ import { motion } from "framer-motion";
 import {
   addBot, kickPlayer, setWinCondition, startGame,
   setRoomMode, setRoomTeams, assignPlayerToTeam, autoBalanceTeams, setCategories, setNivel,
-  fetchRoomWords, addRoomWord, deleteRoomWord,
-  TEAM_PRESETS, type Player, type Room, type Team, type RoomMode, type RoomWord, type NivelFilter,
+  TEAM_PRESETS, type Player, type Room, type Team, type RoomMode, type NivelFilter,
 } from "@/lib/room";
 import { AvatarBubble } from "@/components/AvatarBubble";
 import { Mascot } from "@/components/Mascot";
@@ -20,10 +19,7 @@ export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
   planta:        { emoji: "🌱", label: "Plantas" },
   animal:        { emoji: "🐾", label: "Animais" },
   corpo:         { emoji: "🫀", label: "Corpo" },
-  objeto:        { emoji: "🧰", label: "Objetos" },
   sentimento:    { emoji: "💗", label: "Sentimentos" },
-  regional:      { emoji: "🗺️", label: "Regional" },
-  pessoa:        { emoji: "🧑", label: "Pessoas" },
   lugar:         { emoji: "📍", label: "Lugares" },
   qualidade:     { emoji: "✨", label: "Qualidades" },
   adjetivo:      { emoji: "🎨", label: "Adjetivos" },
@@ -239,7 +235,8 @@ export function Lobby({
 
           <CategoriesPicker roomId={roomId} actorId={playerId} selected={categories} />
 
-          <CustomWordsPicker roomId={roomId} playerId={playerId} />
+          {/* "Palavras próprias" removida do lobby a pedido (2026-07-19);
+              backend room_words segue intacto para eventual retorno. */}
         </div>
       )}
 
@@ -441,100 +438,6 @@ function StartButton({ canStart, playersCount, roomId, players, mode, teams }: {
   );
 }
 
-function CustomWordsPicker({ roomId, playerId }: { roomId: string; playerId: string }) {
-  const [list, setList] = useState<RoomWord[]>([]);
-  const [open, setOpen] = useState(false);
-  const [word, setWord] = useState("");
-  const [meaning, setMeaning] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    fetchRoomWords(roomId).then((rs) => { if (alive) setList(rs); });
-    return () => { alive = false; };
-  }, [roomId]);
-
-  const add = async () => {
-    if (busy || !word.trim() || !meaning.trim()) return;
-    setBusy(true);
-    try {
-      const created = await addRoomWord(roomId, playerId, word, meaning);
-      if (created) {
-        setList((cur) => [created, ...cur]);
-        setWord(""); setMeaning("");
-      }
-    } finally { setBusy(false); }
-  };
-
-  const remove = async (id: string) => {
-    setList((cur) => cur.filter((w) => w.id !== id));
-    await deleteRoomWord(id);
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-1 py-0.5"
-      >
-        <span className="font-display text-[11px] uppercase text-muted-foreground tracking-wider">
-          ✍️ Palavras próprias {list.length > 0 && <span className="text-foreground/70">({list.length})</span>}
-        </span>
-        <span className="text-muted-foreground text-[11px]">{open ? "▲" : "▼"}</span>
-      </button>
-
-      {open && (
-        <div className="space-y-1.5 pt-1">
-          <div className="flex gap-1.5">
-            <input
-              value={word}
-              onChange={(e) => setWord(e.target.value)}
-              maxLength={40}
-              placeholder="palavra"
-              className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-input border border-white/10 text-[12px] font-display"
-            />
-            <input
-              value={meaning}
-              onChange={(e) => setMeaning(e.target.value)}
-              maxLength={220}
-              placeholder="significado real"
-              className="flex-[1.6] min-w-0 px-2 py-1.5 rounded-md bg-input border border-white/10 text-[12px]"
-            />
-            <button
-              onClick={add}
-              disabled={busy || !word.trim() || !meaning.trim()}
-              className="btn-pop bg-mint text-accent-foreground px-2.5 text-[11px] disabled:opacity-40"
-            >
-              +
-            </button>
-          </div>
-
-          {list.length > 0 && (
-            <div className="max-h-32 overflow-y-auto no-scrollbar space-y-1">
-              {list.map((w) => (
-                <div key={w.id} className="flex items-start gap-2 px-2 py-1 rounded-md bg-input/60 border border-white/5 text-[11px]">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-display text-foreground truncate">{w.word}</div>
-                    <div className="text-muted-foreground line-clamp-2">{w.meaning}</div>
-                  </div>
-                  <button
-                    onClick={() => remove(w.id)}
-                    aria-label={`Remover ${w.word}`}
-                    className="w-5 h-5 rounded-full bg-destructive/80 text-[10px] font-bold leading-none flex items-center justify-center shrink-0"
-                  >×</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <p className="text-[9px] text-muted-foreground text-center font-display leading-tight">
-            Suas palavras entram no sorteio junto com as do dicionário oficial.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default Lobby;
 
