@@ -220,16 +220,20 @@ function RevealImpl({
       alive = false;
     };
   }, [room.id, room.current_round]);
-  // Autor de blefe "quase verdade" NESTA rodada → +3 extras exibidos no chip
-  // do card da verdade (Tito: +3 acerto +3 cérebro = +6).
-  const nearBonusByPlayer = useMemo(() => {
+  // Chip do card da verdade = TOTAL da rodada de quem acertou (pedido
+  // 2026-07-21, sala 7621): +3 do acerto, +3 se o próprio blefe foi
+  // quase-verdade E +1 por voto recebido no próprio blefe (3+3+1 = +7).
+  const roundExtraByPlayer = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of definitions) {
-      if (d.player_id !== "__truth__" && nearTruthIds.has(d.id))
-        m.set(d.player_id, 3);
+      if (d.player_id === "__truth__") continue;
+      let extra = m.get(d.player_id) ?? 0;
+      extra += votersByDefId.get(d.id)?.length ?? 0;
+      if (nearTruthIds.has(d.id)) extra += 3;
+      m.set(d.player_id, extra);
     }
     return m;
-  }, [definitions, nearTruthIds]);
+  }, [definitions, votersByDefId, nearTruthIds]);
 
   return (
     <motion.div
@@ -348,9 +352,9 @@ function RevealImpl({
                           transition={{ type: "spring", stiffness: 300 }}
                           className="rounded-full bg-white/40 px-1.5 text-[11px] font-display"
                         >
-                          {/* +3 do acerto (+3 🧠 se o blefe dele quase acertou
-                              a verdade — total da rodada, pedido 2026-07-21) */}
-                          +{3 + (nearBonusByPlayer.get(v.id) ?? 0)}
+                          {/* total da rodada: +3 acerto, +3 🧠, +1 por voto
+                              no próprio blefe (pedido 2026-07-21) */}
+                          +{3 + (roundExtraByPlayer.get(v.id) ?? 0)}
                         </motion.span>
                       )}
                     </motion.div>
