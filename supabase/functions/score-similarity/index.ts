@@ -96,6 +96,8 @@ Deno.serve(async (req) => {
 Exemplos calibrados:
 - verdadeira "falta completa de dinheiro" vs candidata "pobreza" -> APROVA (sinônimo direto)
 - verdadeira "dito espirituoso, gracejo" vs candidata "comentario engracado" -> APROVA (mesma ideia)
+- verdadeira "desse modo, assim sendo" vs candidata "por conseguinte" -> APROVA (conectivos sinônimos — apontam para a mesma função)
+- verdadeira "conversa fiada, papo furado" vs candidata "conversa informal, inutil" -> APROVA (mesma ideia com adjetivos diferentes)
 - verdadeira "grande confusao" vs candidata "tipo de dança do interior" -> REJEITA (conceito diferente)
 
 Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdown.`;

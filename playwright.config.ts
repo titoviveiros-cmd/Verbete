@@ -11,6 +11,9 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 export default defineConfig({
   testDir: "e2e",
   timeout: 60_000,
+  // Serial: o full-round já usa 2 páginas; smoke em paralelo disputava o
+  // dev server e flakava na hidratação da home.
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {

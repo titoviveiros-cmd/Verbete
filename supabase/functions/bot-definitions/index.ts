@@ -133,8 +133,12 @@ Deno.serve(async (req) => {
       .map((p, i) => `${i + 1}. estilo "${p}": ${PERSONA_PROMPTS[p]}`)
       .join("\n");
 
-    const system = `Você é um lexicógrafo escrevendo verbetes de dicionário para o jogo "Verbete" (Balderdash em português). Para cada palavra rara, escreva ${count} definições FALSAS, plausíveis, em ESTILO DE DICIONÁRIO: enxutas, neutras, sem exemplos, sem "que serve para", sem rodeios. Idealmente 5 a 11 palavras, NUNCA mais que 13. Cada definição usa um ESTILO diferente (estrutura/registro variados) para parecer escrita por verbetistas distintos — VARIE as construções iniciais: evite começar todas com "que..." ou "aquele que...". NUNCA repita a verdadeira nem a parafraseie diretamente. Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v., bot., med.) nem parênteses iniciais de área. NUNCA use a própria palavra dentro da definição. TODAS as definições DEVEM respeitar o tipo gramatical da palavra (verbo→ação, substantivo→coisa, adjetivo→qualidade, etc.). Devolva APENAS JSON: {"definitions":["...","...","..."]} na MESMA ORDEM dos estilos abaixo, sem markdown.`;
-    const user = `Palavra: ${word}\nDefinição verdadeira (não copie nem parafraseie diretamente): ${meaning}${categoryRule}\n\nEstilos a usar (na ordem):\n${personaInstructions}\n\nGere ${count} definições falsas convincentes, uma por estilo, TODAS coerentes com o tipo gramatical indicado.`;
+    const system = `Você é um lexicógrafo escrevendo verbetes de dicionário para o jogo "Verbete" (Balderdash em português). Para cada palavra rara, escreva ${count} definições FALSAS, plausíveis, em ESTILO DE DICIONÁRIO: enxutas, neutras, sem exemplos, sem "que serve para", sem rodeios. Idealmente 5 a 11 palavras, NUNCA mais que 13. Cada definição usa um ESTILO diferente (estrutura/registro variados) para parecer escrita por verbetistas distintos — VARIE as construções iniciais: evite começar todas com "que..." ou "aquele que...".
+
+REGRA MAIS IMPORTANTE — a definição deve ser INCORRETA: se um professor de português a visse como resposta para a palavra, deveria marcá-la como ERRADA. É PROIBIDO: repetir a verdadeira, sinônimos dela, paráfrases, versões resumidas ou ampliadas, ou qualquer formulação que capture a MESMA ideia (ex.: se a verdade é "desse modo, assim sendo", então "por conseguinte" é PROIBIDO por ser sinônimo). Escolha um conceito VIZINHO mas claramente DISTINTO: outra função, outro domínio, outro objeto.
+
+Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v., bot., med.) nem parênteses iniciais de área. NUNCA use a própria palavra dentro da definição. TODAS as definições DEVEM respeitar o tipo gramatical da palavra (verbo→ação, substantivo→coisa, adjetivo→qualidade, etc.). Devolva APENAS JSON: {"definitions":["...","...","..."]} na MESMA ORDEM dos estilos abaixo, sem markdown.`;
+    const user = `Palavra: ${word}\nDefinição verdadeira (PROIBIDO copiar, parafrasear ou usar sinônimos — a falsa deve significar OUTRA coisa): ${meaning}${categoryRule}\n\nEstilos a usar (na ordem):\n${personaInstructions}\n\nGere ${count} definições falsas convincentes, uma por estilo, TODAS coerentes com o tipo gramatical indicado e NENHUMA com o mesmo sentido da verdadeira.`;
 
     // Endpoint OpenAI-compatível do Google AI — mesmo formato de mensagens
     // que o gateway anterior, só muda URL/credencial/nome do modelo.
@@ -167,6 +171,40 @@ Deno.serve(async (req) => {
       defs = Array.isArray(parsed.definitions) ? parsed.definitions.slice(0, count) : [];
     } catch (e) {
       console.error("parse failed", e, content);
+    }
+
+    // Pós-filtro anti-vazamento (playtest 2026-07-21: sugestão da IA era a
+    // própria verdade com outras palavras): descarta candidata lexicalmente
+    // próxima do significado real (Dice/trigramas sobre texto normalizado).
+    const normTxt = (s: string) =>
+      s
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+    const grams = (s: string): Set<string> => {
+      const n = ` ${normTxt(s)} `;
+      const out = new Set<string>();
+      for (let i = 0; i <= n.length - 3; i++) out.add(n.slice(i, i + 3));
+      return out;
+    };
+    const dice = (a: string, b: string): number => {
+      const ga = grams(a);
+      const gb = grams(b);
+      if (ga.size === 0 || gb.size === 0) return 0;
+      let inter = 0;
+      for (const g of ga) if (gb.has(g)) inter++;
+      return (2 * inter) / (ga.size + gb.size);
+    };
+    if (meaning) {
+      const before = defs.length;
+      defs = defs.filter((d) => dice(d, meaning) < 0.45);
+      if (defs.length < before) {
+        console.warn(
+          `anti-vazamento: ${before - defs.length} candidata(s) descartada(s) por proximidade com a verdade`,
+        );
+      }
     }
 
     return new Response(JSON.stringify({ definitions: defs, personas: chosen }), {

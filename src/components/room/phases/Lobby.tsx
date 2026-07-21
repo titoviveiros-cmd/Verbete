@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
   addBot,
@@ -449,6 +450,14 @@ export function Lobby({
           Aguardando o host iniciar…
         </div>
       )}
+      {/* Voltar ao início (pedido 2026-07-21) — o 🚪 do topo continua
+          existindo; este é o caminho explícito e sem fricção no lobby. */}
+      <Link
+        to="/"
+        className="self-center mt-1 mb-2 flex items-center gap-1.5 text-sm font-display px-4 py-2 rounded-full bg-card/60 border border-white/10 hover:bg-card/80 transition text-muted-foreground"
+      >
+        ← Voltar para o início
+      </Link>
     </motion.div>
   );
 }
