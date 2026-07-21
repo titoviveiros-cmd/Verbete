@@ -276,6 +276,84 @@ export function Finished({
           </motion.div>
         </div>
 
+        {/* Fase 4 (aprovado 2026-07-20): PÓDIO com degraus — avatares sobem
+            com quique, campeão maior no centro. Paleta/estilos atuais. */}
+        <div className="flex items-end justify-center gap-2 px-6 mt-1">
+          {[
+            { p: sorted[1], place: 2, h: 58, medal: "🥈", tone: "#C0C0C0" },
+            { p: sorted[0], place: 1, h: 86, medal: "👑", tone: "#FFD166" },
+            { p: sorted[2], place: 3, h: 44, medal: "🥉", tone: "#CD7F32" },
+          ]
+            .filter((x) => !!x.p)
+            .map(({ p, place, h, medal, tone }) => (
+              <div
+                key={place}
+                className="flex flex-col items-center flex-1 max-w-[110px] min-w-0"
+              >
+                <motion.div
+                  initial={{ y: 46, opacity: 0, scale: 0.5 }}
+                  animate={{
+                    y: 0,
+                    opacity: 1,
+                    scale: place === 1 ? 1.12 : 1,
+                  }}
+                  transition={{
+                    delay: place === 1 ? 0.85 : place === 2 ? 0.45 : 0.25,
+                    type: "spring",
+                    stiffness: 230,
+                    damping: 13,
+                  }}
+                  className="flex flex-col items-center min-w-0 w-full"
+                >
+                  <motion.span
+                    className="text-xl leading-none mb-0.5"
+                    animate={
+                      place === 1 ? { rotate: [-8, 8, -8], y: [0, -2, 0] } : {}
+                    }
+                    transition={{ duration: 2, repeat: Infinity }}
+                    aria-hidden
+                  >
+                    {medal}
+                  </motion.span>
+                  <span className="text-4xl leading-none drop-shadow">
+                    {p!.avatar}
+                  </span>
+                  <span
+                    className="font-display text-sm mt-1 w-full text-center truncate"
+                    style={{ color: tone }}
+                  >
+                    {p!.nickname}
+                  </span>
+                  <span
+                    className="font-display text-lg"
+                    style={{ color: tone }}
+                  >
+                    {p!.score}
+                  </span>
+                </motion.div>
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: h, opacity: 1 }}
+                  transition={{
+                    delay: place === 1 ? 0.55 : place === 2 ? 0.2 : 0.05,
+                    type: "spring",
+                    stiffness: 210,
+                    damping: 19,
+                  }}
+                  className="w-full rounded-t-xl border-2 border-b-0 border-white/20 flex items-start justify-center pt-1"
+                  style={{
+                    background: `linear-gradient(180deg, ${tone}59, ${tone}1f)`,
+                    boxShadow: `0 0 18px ${tone}40`,
+                  }}
+                >
+                  <span className="font-display text-lg text-white/85">
+                    {place}º
+                  </span>
+                </motion.div>
+              </div>
+            ))}
+        </div>
+
         {sortedTeams.length > 0 && (
           <div className="sticker py-1.5">
             <p className="font-display text-[10px] uppercase tracking-widest text-center opacity-80 mb-1">

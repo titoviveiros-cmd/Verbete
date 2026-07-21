@@ -11,6 +11,37 @@ import {
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import { scrollbarClip } from "@/lib/utils";
 
+// Contador rolante (Fase 4, aprovado): o número "sobe" do placar anterior
+// para o novo com easing — dá a sensação de pontos sendo somados ao vivo.
+function AnimatedNumber({
+  value,
+  from,
+  duration = 900,
+}: {
+  value: number;
+  from?: number;
+  duration?: number;
+}) {
+  const [display, setDisplay] = useState(from ?? value);
+  useEffect(() => {
+    const start = from ?? value;
+    if (start === value) {
+      setDisplay(value);
+      return;
+    }
+    const t0 = performance.now();
+    const iv = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / duration);
+      setDisplay(
+        Math.round(start + (value - start) * (1 - Math.pow(1 - k, 3))),
+      );
+      if (k >= 1) clearInterval(iv);
+    }, 40);
+    return () => clearInterval(iv);
+  }, [value, from, duration]);
+  return <>{display}</>;
+}
+
 function ScoreboardImpl({
   room,
   players,
@@ -53,6 +84,19 @@ function ScoreboardImpl({
   // Sem auto-avanço no client (feedback de playtest: tirava a serventia
   // do botão). O host decide quando seguir; se estiver ausente, o cron
   // server-side avança sozinho após o hold — backstop já existente.
+
+  // Fase 4 (aprovado): coreografia de "ultrapassagem" — as fileiras entram
+  // na ordem da rodada ANTERIOR e deslizam para as novas posições, com o
+  // placar rolando (prev → atual) e pulso em quem subiu.
+  const [reordered, setReordered] = useState(false);
+  useEffect(() => {
+    setReordered(false);
+  }, [room.current_round]);
+  useEffect(() => {
+    if (!scoreTransitionDone || !history) return;
+    const t = setTimeout(() => setReordered(true), 900);
+    return () => clearTimeout(t);
+  }, [scoreTransitionDone, history, room.current_round]);
 
   useEffect(() => {
     (async () => {
@@ -192,6 +236,70 @@ function ScoreboardImpl({
   const breakdown = (playerId: string): string[] =>
     breakdownByPlayer.get(playerId) ?? [];
 
+  // Delta da RODADA ATUAL por jogador — usado para reconstruir o placar
+  // anterior (prev = atual − delta) e coreografar a ultrapassagem.
+  const roundDeltaByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!history) return map;
+    const r = room.current_round;
+    const truthDef = history.defs.find(
+      (d) => d.round === r && d.player_id === "__truth__",
+    );
+    for (const p of players) {
+      let d = 0;
+      if (truthDef)
+        d +=
+          3 *
+          countedVotes.filter(
+            (v) =>
+              v.round === r &&
+              v.definition_id === truthDef.id &&
+              v.voter_id === p.id,
+          ).length;
+      const myDefs = history.defs.filter(
+        (dd) => dd.round === r && dd.player_id === p.id,
+      );
+      for (const md of myDefs) {
+        d += countedVotes.filter((v) => v.definition_id === md.id).length;
+        if (history.nearTruthIds.has(md.id)) d += 3;
+      }
+      const roundRow = history.rounds.find((rr) => rr.round === r);
+      if (roundRow?.coordinator_id === p.id && truthDef) {
+        const someoneHit = countedVotes.some(
+          (v) => v.round === r && v.definition_id === truthDef.id,
+        );
+        if (!someoneHit) d += 2;
+      }
+      d -= history.extensions.filter(
+        (e) => e.player_id === p.id && e.round === r,
+      ).length;
+      map.set(p.id, d);
+    }
+    return map;
+  }, [history, players, countedVotes, room.current_round]);
+
+  const prevScore = (p: Player) =>
+    Math.max(0, p.score - (roundDeltaByPlayer.get(p.id) ?? 0));
+
+  // Antes da coreografia: ordem/valores da rodada anterior. Depois: atuais.
+  const displaySorted = useMemo(() => {
+    if (reordered || !history) return sorted;
+    return [...players].sort((a, b) => prevScore(b) - prevScore(a));
+  }, [reordered, history, players, sorted, roundDeltaByPlayer]);
+
+  const prevRank = useMemo(() => {
+    const m = new Map<string, number>();
+    [...players]
+      .sort((a, b) => prevScore(b) - prevScore(a))
+      .forEach((p, i) => m.set(p.id, i));
+    return m;
+  }, [players, roundDeltaByPlayer]);
+  const newRank = useMemo(() => {
+    const m = new Map<string, number>();
+    sorted.forEach((p, i) => m.set(p.id, i));
+    return m;
+  }, [sorted]);
+
   const sortedTeams = useMemo(
     () =>
       room.mode === "teams" && (room.teams?.length ?? 0) > 0
@@ -256,7 +364,7 @@ function ScoreboardImpl({
             </ul>
           </div>
         )}
-        {sorted.map((p, i) => {
+        {displaySorted.map((p, i) => {
           const team =
             sortedTeams.length > 0
               ? (room.teams ?? []).find((t) => t.id === p.team_id)
@@ -270,21 +378,38 @@ function ScoreboardImpl({
                 : i === 2
                   ? "#CD7F32"
                   : null;
+          // Subiu de posição nesta rodada → pulso de destaque na chegada.
+          const riser =
+            reordered && (newRank.get(p.id) ?? 0) < (prevRank.get(p.id) ?? 0);
           return (
             <motion.div
               key={p.id}
+              layout
               initial={{ x: -30, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: i * 0.06 }}
+              animate={
+                riser
+                  ? { x: 0, opacity: 1, scale: [1, 1.04, 1] }
+                  : { x: 0, opacity: 1 }
+              }
+              transition={{
+                delay: reordered ? 0 : i * 0.06,
+                layout: { type: "spring", stiffness: 240, damping: 26 },
+                scale: { duration: 0.8, times: [0, 0.4, 1] },
+              }}
               className="sticker"
               style={
                 tone
                   ? {
-                      borderColor: tone,
+                      borderColor: riser ? "#FFDE00" : tone,
                       boxShadow:
                         i === 0 ? `0 0 18px ${tone}55` : `0 0 8px ${tone}33`,
                     }
-                  : undefined
+                  : riser
+                    ? {
+                        borderColor: "#FFDE00",
+                        boxShadow: "0 0 14px #ffde0055",
+                      }
+                    : undefined
               }
             >
               <div className="flex items-center gap-3">
@@ -325,10 +450,14 @@ function ScoreboardImpl({
                   )}
                 </div>
                 <span
-                  className="font-display text-3xl"
+                  className="font-display text-3xl tabular-nums"
                   style={{ color: tone ?? undefined }}
                 >
-                  {p.score}
+                  {reordered ? (
+                    <AnimatedNumber from={prevScore(p)} value={p.score} />
+                  ) : (
+                    prevScore(p)
+                  )}
                 </span>
               </div>
               <ul className="mt-2 pl-14 space-y-1">
