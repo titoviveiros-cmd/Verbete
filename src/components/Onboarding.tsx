@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mascot } from "@/components/Mascot";
+import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
 
 type StaticStep = {
   kind: "static";
@@ -83,13 +84,10 @@ function DemoStepView({
       <p className="text-xs text-muted-foreground mb-2">
         Qual destas é a definição verdadeira de:
       </p>
+      {/* Uniformização: palavra no tratamento canônico (branco + contorno) */}
       <div
-        className="font-display text-4xl mb-3 leading-tight pb-1"
-        style={{
-          background: "var(--gradient-fun)",
-          WebkitBackgroundClip: "text",
-          color: "transparent",
-        }}
+        className="font-display font-black text-4xl mb-3 leading-tight pb-1 capitalize"
+        style={verbeteWordmarkStyle(36)}
       >
         {step.word}
       </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Mascot } from "@/components/Mascot";
+import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
 import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/login")({
@@ -37,7 +38,11 @@ function LoginPage() {
   const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) nav({ to: "/profile" });
+    // Sessão ANÔNIMA não conta como logado (S4: todo jogador tem uma) —
+    // sem esta checagem o /login redirecionava direto para o perfil e o
+    // formulário de e-mail ficava inalcançável.
+    if (user && !(user as { is_anonymous?: boolean }).is_anonymous)
+      nav({ to: "/profile" });
   }, [user]);
 
   const handleEmail = async (e: React.FormEvent) => {
@@ -71,27 +76,17 @@ function LoginPage() {
     }
   };
 
-  // Supabase Auth nativo. Requer o provider habilitado no painel do Supabase
-  // (Authentication > Providers) com as credenciais OAuth do Google/Apple.
-  const handleOAuth = async (provider: "google" | "apple") => {
-    setError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) setError(error.message);
-  };
+  // OAuth Google/Apple: botões ocultos até os providers serem configurados
+  // no Supabase (Authentication → Providers) — reintroduzir handleOAuth aqui.
 
   return (
     <div className="mobile-shell items-center pt-8 gap-4">
       <Mascot mood="excited" size={120} />
+      {/* Fase 3/uniformização: título no tratamento canônico da marca
+          (a variante gradiente + stroke renderizava quebrada — playtest). */}
       <motion.h1
-        className="font-display text-5xl text-stroke leading-none tracking-tight"
-        style={{
-          background: "var(--gradient-fun)",
-          WebkitBackgroundClip: "text",
-          color: "transparent",
-        }}
+        className="font-display font-black leading-none"
+        style={verbeteWordmarkStyle(44)}
         initial={{ scale: 0.6, opacity: 0, y: 10 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 200, damping: 14 }}
@@ -103,23 +98,9 @@ function LoginPage() {
         conta.
       </p>
 
-      <button
-        onClick={() => handleOAuth("google")}
-        className="btn-pop bg-card w-full max-w-sm border border-white/10"
-      >
-        🔐 Continuar com Google
-      </button>
-      <button
-        onClick={() => handleOAuth("apple")}
-        className="btn-pop bg-white text-black w-full max-w-sm"
-      >
-        Continuar com Apple
-      </button>
-
-      <div className="flex items-center gap-2 w-full max-w-sm text-xs text-muted-foreground">
-        <div className="flex-1 h-px bg-white/10" /> ou{" "}
-        <div className="flex-1 h-px bg-white/10" />
-      </div>
+      {/* Google/Apple OCULTOS até os providers OAuth serem configurados no
+          Supabase (playtest 2026-07-21: "Unsupported provider" ao tocar).
+          Reativar quando Authentication → Providers tiver as credenciais. */}
 
       <form
         onSubmit={handleEmail}

@@ -1,4 +1,5 @@
 import { APP_URL } from "@/lib/app-url";
+import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
 import {
   createFileRoute,
   Link,
@@ -206,14 +207,7 @@ function DailyPage() {
           <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-display leading-none">
             ⏳ Próximo desafio
           </span>
-          <span
-            className="font-display text-lg leading-none tabular-nums"
-            style={{
-              background: "var(--gradient-fun)",
-              WebkitBackgroundClip: "text",
-              color: "transparent",
-            }}
-          >
+          <span className="font-display text-lg leading-none tabular-nums text-sun">
             {formatHMS(nowMs)}
           </span>
         </div>
@@ -227,15 +221,12 @@ function DailyPage() {
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground font-display">
           Desafio Diário
         </p>
+        {/* Uniformização: palavra no tratamento canônico (branco + contorno) */}
         <motion.h1
           initial={{ scale: 0.7, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="font-display text-5xl mt-1 leading-[1.15] pb-2"
-          style={{
-            background: "var(--gradient-fun)",
-            WebkitBackgroundClip: "text",
-            color: "transparent",
-          }}
+          className="font-display font-black text-5xl mt-1 leading-[1.15] pb-2 capitalize"
+          style={verbeteWordmarkStyle(44)}
         >
           {data.word.word}
         </motion.h1>
