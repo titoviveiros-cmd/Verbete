@@ -195,6 +195,42 @@ function RevealImpl({
 
   const truthVoters = truth ? (votersByDefId.get(truth.id) ?? []) : [];
 
+  // Bônus 🧠 "chegou perto da verdade" (pedido 2026-07-21): o juiz de IA
+  // pontua segundos após a virada — re-consulta get_room_reveal até o fim
+  // da contagem para o badge +3 aparecer assim que for concedido.
+  const [nearTruthIds, setNearTruthIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setNearTruthIds(new Set());
+    let alive = true;
+    let tries = 0;
+    const fetchNear = async () => {
+      tries++;
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data } = await (supabase.rpc as any)("get_room_reveal", {
+        p_room_id: room.id,
+      });
+      if (!alive) return;
+      const ids: string[] =
+        (data as { near_truth_ids?: string[] } | null)?.near_truth_ids ?? [];
+      if (ids.length > 0) setNearTruthIds(new Set(ids));
+      if (ids.length === 0 && tries < 8) setTimeout(fetchNear, 2000);
+    };
+    void fetchNear();
+    return () => {
+      alive = false;
+    };
+  }, [room.id, room.current_round]);
+  // Autor de blefe "quase verdade" NESTA rodada → +3 extras exibidos no chip
+  // do card da verdade (Tito: +3 acerto +3 cérebro = +6).
+  const nearBonusByPlayer = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of definitions) {
+      if (d.player_id !== "__truth__" && nearTruthIds.has(d.id))
+        m.set(d.player_id, 3);
+    }
+    return m;
+  }, [definitions, nearTruthIds]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -312,7 +348,9 @@ function RevealImpl({
                           transition={{ type: "spring", stiffness: 300 }}
                           className="rounded-full bg-white/40 px-1.5 text-[11px] font-display"
                         >
-                          +3
+                          {/* +3 do acerto (+3 🧠 se o blefe dele quase acertou
+                              a verdade — total da rodada, pedido 2026-07-21) */}
+                          +{3 + (nearBonusByPlayer.get(v.id) ?? 0)}
                         </motion.span>
                       )}
                     </motion.div>
@@ -369,11 +407,15 @@ function RevealImpl({
                             {author.nickname}
                           </span>
                         )}
-                        {dVoters.length > 0 && (
+                        {(dVoters.length > 0 || nearTruthIds.has(d.id)) && (
                           <span className="ml-auto text-pink font-display flex items-center gap-1">
-                            +{dVoters.length} voto
-                            {dVoters.length > 1 ? "s" : ""}
-                            {pointsShown && author && (
+                            {dVoters.length > 0 && (
+                              <>
+                                +{dVoters.length} voto
+                                {dVoters.length > 1 ? "s" : ""}
+                              </>
+                            )}
+                            {pointsShown && author && dVoters.length > 0 && (
                               <motion.span
                                 initial={{ scale: 0, y: 8 }}
                                 animate={{ scale: 1, y: 0 }}
@@ -382,6 +424,18 @@ function RevealImpl({
                               >
                                 +{dVoters.length} pt
                                 {dVoters.length > 1 ? "s" : ""}
+                              </motion.span>
+                            )}
+                            {/* 🧠 quase a verdade: +3 do juiz de IA (pedido
+                                2026-07-21 — aparecia só no placar) */}
+                            {pointsShown && nearTruthIds.has(d.id) && (
+                              <motion.span
+                                initial={{ scale: 0, y: 8 }}
+                                animate={{ scale: 1, y: 0 }}
+                                transition={{ type: "spring", stiffness: 300 }}
+                                className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
+                              >
+                                🧠 +3 pts
                               </motion.span>
                             )}
                           </span>

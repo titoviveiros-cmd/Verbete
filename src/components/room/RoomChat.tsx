@@ -138,6 +138,39 @@ export function RoomChat({
                 {enabled ? "ao vivo" : "pausado na rodada"}
               </span>
             </div>
+            {/* Quem está na sala (pedido 2026-07-21): nomes dos conectados */}
+            <div className="shrink-0 px-3 py-1.5 border-b border-white/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display shrink-0">
+                na sala:
+              </span>
+              {players
+                .filter((p) => !p.kicked_at)
+                .map((p) => (
+                  <span
+                    key={p.id}
+                    className={
+                      "flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-[11px] font-display border shrink-0 " +
+                      (p.is_connected === false
+                        ? "border-white/10 opacity-40"
+                        : "border-white/20 bg-white/5")
+                    }
+                    style={
+                      p.is_connected !== false
+                        ? { borderColor: `${p.color}88` }
+                        : undefined
+                    }
+                  >
+                    <span className="text-sm leading-none">{p.avatar}</span>
+                    <span className="max-w-[72px] truncate">{p.nickname}</span>
+                    {p.is_connected !== false && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-mint shrink-0"
+                        aria-label="online"
+                      />
+                    )}
+                  </span>
+                ))}
+            </div>
 
             <div
               ref={listRef}

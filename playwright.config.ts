@@ -17,6 +17,10 @@ export default defineConfig({
     baseURL,
     viewport: { width: 390, height: 844 }, // mobile portrait — formato do jogo
     trace: "retain-on-failure",
+    // Nenhuma ação pode pendurar até o timeout do teste: em telas que
+    // transicionam ao vivo (fases do jogo), fill/click sem teto ficavam
+    // presos em actionability enquanto o jogo expulsava o jogador parado.
+    actionTimeout: 10_000,
     // E2E_RESOLVE="MAP host ip" contorna cache DNS local ao testar um
     // deploy recém-criado (o DNS global já resolve, o resolvedor local não).
     ...(process.env.E2E_RESOLVE

@@ -81,11 +81,24 @@ test("host + convidado jogam uma rodada completa", async ({ browser }) => {
   // 3 cartas de palavra (classe sticker) — escolhe a primeira
   await coord!.locator("button.sticker").first().click({ timeout: 20_000 });
 
-  // 6) Escritor blefa e envia
+  // 6) Escritor blefa e envia — com retry e CONFIRMAÇÃO: o clique só conta
+  //    quando a UI reage (enviada/embaralhando/votação). Sem isso, um fill
+  //    preso em actionability deixava o jogo expulsar o escritor parado.
   const ta = writer.getByPlaceholder("escreva sua definicao mirabolante...");
   await expect(ta).toBeVisible({ timeout: 30_000 });
-  await ta.fill("definicao mirabolante do teste multiplayer");
-  await writer.getByRole("button", { name: /Enviar definição/ }).click();
+  await expect(async () => {
+    await ta.fill("definicao mirabolante do teste multiplayer", {
+      timeout: 3_000,
+    });
+    await writer
+      .getByRole("button", { name: /Enviar definição/ })
+      .click({ timeout: 3_000 });
+    await expect(
+      writer
+        .getByText(/Definição enviada|Embaralhando as cédulas|A palavra é/)
+        .first(),
+    ).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 45_000 });
 
   // 7) Votação (após o embaralhamento): cada um vota na primeira cédula
   //    habilitada — a do escritor está bloqueada para ele, então ele vota
