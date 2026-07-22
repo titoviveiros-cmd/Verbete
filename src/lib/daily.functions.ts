@@ -104,7 +104,7 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
     if (error) {
       console.error("[submitDailyAttempt] rpc error", error);
       throw new Error(
-        "Não foi possível registrar sua tentativa. Tente novamente.",
+        `Não foi possível registrar sua tentativa. [${(error as { code?: string }).code ?? "?"}: ${(error as { message?: string }).message ?? "?"}]`,
       );
     }
     return result as {
