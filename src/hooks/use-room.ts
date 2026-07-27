@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Definition, Vote, Word } from "@/lib/room";
 import { reportOpsEvent, setOpsRoom } from "@/lib/ops";
+import type { RoomCtx } from "@/hooks/room/ctx";
+import { useRoomOptimistic } from "@/hooks/room/use-room-optimistic";
 
 export interface RoundExtension {
   id: string;
@@ -55,6 +57,37 @@ export function useRoom(code: string | undefined, playerId?: string) {
   useEffect(() => {
     roomRef.current = room;
   }, [room]);
+
+  // Contexto compartilhado com os módulos (Fase 10 · parte 2). O objeto é
+  // recriado a cada render, mas os efeitos dos módulos dependem dos MESMOS
+  // primitivos de antes (room?.id etc.) — comportamento idêntico ao monólito.
+  const ctx: RoomCtx = {
+    code,
+    playerId,
+    room,
+    setRoom,
+    players,
+    setPlayers,
+    definitions,
+    setDefinitions,
+    votes,
+    setVotes,
+    word,
+    setWord,
+    roundExtensions,
+    setRoundExtensions,
+    setLoading,
+    setError,
+    setDegraded,
+    presenceMap,
+    setPresenceMap,
+    reloadRef,
+    optimisticPlayerIdsRef,
+    lastEventAtRef,
+    lastRoomSigRef,
+    playersRef,
+    roomRef,
+  };
 
   // Initial load — single RPC roundtrip
   useEffect(() => {
@@ -342,188 +375,8 @@ export function useRoom(code: string | undefined, playerId?: string) {
     };
   }, [room?.id, playerId]);
 
-  // Optimistic player adds (e.g. addBot) — adiciona localmente sem esperar
-  // o echo de realtime. Quando o evento postgres_changes chegar, o reducer
-  // acima faz merge por id (substitui in-place).
-  useEffect(() => {
-    if (!room?.id) return;
-    const onAdd = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string; player?: Player } | undefined;
-      if (!detail?.player || detail.roomId !== room.id) return;
-      optimisticPlayerIdsRef.current[detail.player.id] = Date.now();
-      setPlayers((cur) =>
-        cur.some((p) => p.id === detail.player!.id)
-          ? cur
-          : [...cur, detail.player!],
-      );
-    };
-    const onRemove = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { playerId?: string } | undefined;
-      if (!detail?.playerId) return;
-      delete optimisticPlayerIdsRef.current[detail.playerId];
-      setPlayers((cur) => cur.filter((p) => p.id !== detail.playerId));
-    };
-    const onDefAdd = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string; definition?: Definition } | undefined;
-      if (!detail?.definition || detail.roomId !== room.id) return;
-      const incoming = detail.definition;
-      setDefinitions((cur) => {
-        // Evita duplicata se já existe linha real para este jogador/rodada.
-        if (
-          cur.some(
-            (d) =>
-              d.player_id === incoming.player_id && d.round === incoming.round,
-          )
-        )
-          return cur;
-        return [...cur, incoming];
-      });
-    };
-    const onVoteAdd = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string; vote?: Vote } | undefined;
-      if (!detail?.vote || detail.roomId !== room.id) return;
-      const incoming = detail.vote;
-      setVotes((cur) => {
-        if (
-          cur.some(
-            (v) =>
-              v.voter_id === incoming.voter_id && v.round === incoming.round,
-          )
-        )
-          return cur;
-        return [...cur, incoming];
-      });
-    };
-    const onDefsReplaceRound = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        | { roomId?: string; round?: number; definitions?: Definition[] }
-        | undefined;
-      if (
-        !detail?.definitions ||
-        detail.roomId !== room.id ||
-        typeof detail.round !== "number"
-      )
-        return;
-      setDefinitions((cur) => [
-        ...cur.filter((d) => d.round !== detail.round),
-        ...detail.definitions!,
-      ]);
-    };
-    const onDefRollback = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string; pendingId?: string } | undefined;
-      if (!detail?.pendingId || detail.roomId !== room.id) return;
-      setDefinitions((cur) => cur.filter((d) => d.id !== detail.pendingId));
-    };
-    const onVoteRollback = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string; pendingId?: string } | undefined;
-      if (!detail?.pendingId || detail.roomId !== room.id) return;
-      setVotes((cur) => cur.filter((v) => v.id !== detail.pendingId));
-    };
-    const onRoomUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string; patch?: Partial<Room> } | undefined;
-      if (!detail?.patch || detail.roomId !== room.id) return;
-      setRoom((cur) => (cur ? ({ ...cur, ...detail.patch } as Room) : cur));
-    };
-    const onPlayerUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { playerId?: string; patch?: Partial<Player> } | undefined;
-      if (!detail?.playerId || !detail.patch) return;
-      setPlayers((cur) =>
-        cur.map((p) =>
-          p.id === detail.playerId ? ({ ...p, ...detail.patch } as Player) : p,
-        ),
-      );
-    };
-    const onPlayersClearTeam = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        { roomId?: string } | undefined;
-      if (detail?.roomId !== room.id) return;
-      setPlayers((cur) => cur.map((p) => ({ ...p, team_id: null })));
-    };
-    window.addEventListener("player:optimistic-add", onAdd as EventListener);
-    window.addEventListener(
-      "player:optimistic-remove",
-      onRemove as EventListener,
-    );
-    window.addEventListener(
-      "player:optimistic-update",
-      onPlayerUpdate as EventListener,
-    );
-    window.addEventListener(
-      "players:optimistic-clear-team",
-      onPlayersClearTeam as EventListener,
-    );
-    window.addEventListener(
-      "room:optimistic-update",
-      onRoomUpdate as EventListener,
-    );
-    window.addEventListener(
-      "definition:optimistic-add",
-      onDefAdd as EventListener,
-    );
-    window.addEventListener(
-      "definitions:optimistic-replace-round",
-      onDefsReplaceRound as EventListener,
-    );
-    window.addEventListener("vote:optimistic-add", onVoteAdd as EventListener);
-    window.addEventListener(
-      "definition:optimistic-rollback",
-      onDefRollback as EventListener,
-    );
-    window.addEventListener(
-      "vote:optimistic-rollback",
-      onVoteRollback as EventListener,
-    );
-    return () => {
-      window.removeEventListener(
-        "player:optimistic-add",
-        onAdd as EventListener,
-      );
-      window.removeEventListener(
-        "player:optimistic-remove",
-        onRemove as EventListener,
-      );
-      window.removeEventListener(
-        "player:optimistic-update",
-        onPlayerUpdate as EventListener,
-      );
-      window.removeEventListener(
-        "players:optimistic-clear-team",
-        onPlayersClearTeam as EventListener,
-      );
-      window.removeEventListener(
-        "room:optimistic-update",
-        onRoomUpdate as EventListener,
-      );
-      window.removeEventListener(
-        "definition:optimistic-add",
-        onDefAdd as EventListener,
-      );
-      window.removeEventListener(
-        "definitions:optimistic-replace-round",
-        onDefsReplaceRound as EventListener,
-      );
-      window.removeEventListener(
-        "vote:optimistic-add",
-        onVoteAdd as EventListener,
-      );
-      window.removeEventListener(
-        "definition:optimistic-rollback",
-        onDefRollback as EventListener,
-      );
-      window.removeEventListener(
-        "vote:optimistic-rollback",
-        onVoteRollback as EventListener,
-      );
-    };
-  }, [room?.id]);
+  // Atualizações otimistas (CustomEvent) — módulo próprio.
+  useRoomOptimistic(ctx);
 
   // Reconnect: refresh state when window regains focus or becomes visible.
   // Otimização mobile: usuários alternam de app o tempo todo. Só recarrega
