@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useEffect, useRef, useState } from "react";
+import { hapticTick } from "@/lib/sound";
 
 // Tempo total real da transição, incluindo o fade-out do overlay + buffer.
 // Componentes de fases (Reveal/Scoreboard) usam essa constante para só iniciar
@@ -63,6 +64,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
     if (status === "lobby") return;
     setShow(true);
     setLabelOn(true);
+    hapticTick(); // Fase 5: tique tátil na virada de fase
     const tLabel = setTimeout(() => setLabelOn(false), LABEL_VISIBLE_MS);
     const tShow = setTimeout(() => setShow(false), CURTAIN_VISIBLE_MS);
     return () => {

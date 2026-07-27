@@ -13,6 +13,9 @@ import { Mascot } from "@/components/Mascot";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import { WordCard } from "@/components/room/shared";
 import {
+  hapticBigWin,
+  hapticFail,
+  hapticSuccess,
   playFooledMagnitude,
   playFooledOthersMagnitude,
   playPerfectRound,
@@ -185,11 +188,28 @@ function RevealImpl({
     const isPerfectRound =
       myDef && myDefVotes >= totalVoters && totalVoters >= 3;
     const isSavage = myDefVotes >= 4;
+    const iHitTruth = !!(
+      myVote &&
+      truthDef &&
+      myVote.definition_id === truthDef.id
+    );
     setTimeout(() => {
-      if (isPerfectRound) void playPerfectRound();
-      else if (isSavage) void playSavage();
-      else if (myDefVotes > 0) void playFooledOthersMagnitude(myDefVotes);
-      else if (iWasFooled) void playFooledMagnitude(totalFooled);
+      // Fase 5: haptics contam a mesma história que os stingers
+      if (isPerfectRound) {
+        void playPerfectRound();
+        hapticBigWin();
+      } else if (isSavage) {
+        void playSavage();
+        hapticBigWin();
+      } else if (myDefVotes > 0) {
+        void playFooledOthersMagnitude(myDefVotes);
+        hapticSuccess();
+      } else if (iWasFooled) {
+        void playFooledMagnitude(totalFooled);
+        hapticFail();
+      } else if (iHitTruth) {
+        hapticSuccess();
+      }
     }, 600);
   }, [truthShown, votes, definitions]);
 

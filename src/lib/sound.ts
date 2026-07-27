@@ -283,6 +283,27 @@ export function vibrate(pattern: number | number[] = [120, 60, 120]) {
 }
 
 // ============================================================
+// Haptics semânticos (Fase 5) — o tato conta a mesma história que o som.
+// Padrões distintos por evento; respeitam o mute global via vibrate().
+// ============================================================
+/** Tique leve: virada de fase, últimos segundos do timer. */
+export function hapticTick() {
+  vibrate(10);
+}
+/** Sucesso: acertou a verdade, enganou alguém, subiu no placar. */
+export function hapticSuccess() {
+  vibrate([25, 40, 55]);
+}
+/** Revés: caiu num blefe. */
+export function hapticFail() {
+  vibrate([70]);
+}
+/** Vitória grande: rodada perfeita, savage, campeão da partida. */
+export function hapticBigWin() {
+  vibrate([30, 45, 30, 45, 95]);
+}
+
+// ============================================================
 // Master bus + reverb (espacialização global — "vida" no áudio)
 // ============================================================
 let masterNode: GainNode | null = null;

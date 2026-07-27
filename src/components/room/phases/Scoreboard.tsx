@@ -1,4 +1,6 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { hapticSuccess } from "@/lib/sound";
+import { getPlayerId } from "@/lib/player-id";
 import { motion } from "framer-motion";
 import {
   nextRound,
@@ -299,6 +301,18 @@ function ScoreboardImpl({
     sorted.forEach((p, i) => m.set(p.id, i));
     return m;
   }, [sorted]);
+
+  // Fase 5: se EU subi de posição na ultrapassagem, sinto o sucesso no tato.
+  const riseHapticRound = useRef<number | null>(null);
+  useEffect(() => {
+    if (!reordered || riseHapticRound.current === room.current_round) return;
+    riseHapticRound.current = room.current_round;
+    const myId = getPlayerId();
+    if (!myId) return;
+    if ((newRank.get(myId) ?? 99) < (prevRank.get(myId) ?? 99)) {
+      setTimeout(() => hapticSuccess(), 400); // junto com o deslize da fileira
+    }
+  }, [reordered, room.current_round, newRank, prevRank]);
 
   const sortedTeams = useMemo(
     () =>

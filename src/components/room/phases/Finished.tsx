@@ -15,6 +15,7 @@ import { Confetti } from "@/components/Confetti";
 import { Scoreboard } from "@/components/room/phases/Scoreboard";
 import { useAuth } from "@/hooks/use-auth";
 import { pushAchievement } from "@/components/AchievementToaster";
+import { hapticBigWin, hapticSuccess } from "@/lib/sound";
 import { scrollbarClip } from "@/lib/utils";
 
 export function Finished({
@@ -114,6 +115,18 @@ export function Finished({
   const winner = sorted[0];
   const second = sorted[1];
   const third = sorted[Math.min(2, sorted.length - 1)];
+
+  // Fase 5: haptic cerimonial no pódio — campeão sente a vitória grande.
+  const hapticPlayed = useRef(false);
+  useEffect(() => {
+    if (hapticPlayed.current) return;
+    hapticPlayed.current = true;
+    const t = setTimeout(() => {
+      if (winner?.id === playerId) hapticBigWin();
+      else hapticSuccess();
+    }, 900); // junto com o quique dos avatares no pódio
+    return () => clearTimeout(t);
+  }, []);
 
   const titles: Array<{
     title: string;

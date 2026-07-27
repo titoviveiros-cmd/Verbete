@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { playCountdownTick, playCountdownFinal } from "@/lib/sound";
+import { playCountdownTick, playCountdownFinal, hapticTick } from "@/lib/sound";
 import type { Word, Player } from "@/lib/room";
 
 export function WordCard({
@@ -103,9 +103,11 @@ export function TimerBar({
     const key = `${max}:${tickStartAt}:${remaining}`;
     if (lastPlayed.current === key) return;
     lastPlayed.current = key;
-    if (remaining > 0 && remaining <= tickStartAt)
+    if (remaining > 0 && remaining <= tickStartAt) {
       void playCountdownTick(remaining);
-    else if (remaining === 0) void playCountdownFinal();
+      // Fase 5: tato acompanha o som nos 3 segundos finais
+      if (remaining <= 3) hapticTick();
+    } else if (remaining === 0) void playCountdownFinal();
   }, [remaining, max, tickStartAt]);
   return (
     <div className="w-full flex flex-col items-center gap-1">

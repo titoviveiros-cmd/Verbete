@@ -11,7 +11,7 @@ import {
   type Vote,
   type Word,
 } from "@/lib/room";
-import { playVoteCast } from "@/lib/sound";
+import { playVoteCast, vibrate } from "@/lib/sound";
 import { getStored } from "@/lib/player-id";
 import { ReportButton } from "@/components/room/ReportButton";
 import type { RoundExtension } from "@/hooks/use-room";
@@ -298,6 +298,7 @@ function VotingImpl({
       // antes de aceitar o toque — evita votar numa fase já virada.
       if (Date.now() - resumedAtRef.current < 1200) return;
       void playVoteCast();
+      vibrate(12); // Fase 5: confirmação tátil crisp do voto
       setOptimisticVoteId(defId);
       try {
         await castVote(room.id, room.current_round, me.id, defId);
