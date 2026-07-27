@@ -58,11 +58,11 @@ export function Finished({
       const { supabase } = await import("@/integrations/supabase/client");
       const [{ data: defs }, { data: votes }] = await Promise.all([
         // S1: leitura direta de definitions foi revogada — RPC status-gated.
-        (supabase.rpc as any)("get_room_definitions", { p_room_id: roomId }),
+        supabase.rpc("get_room_definitions", { p_room_id: roomId }),
         supabase.from("votes").select("*").eq("room_id", roomId),
       ]);
       setHistory({
-        defs: (defs ?? []) as Definition[],
+        defs: (defs ?? []) as unknown as Definition[],
         votes: (votes ?? []) as Vote[],
       });
     })().catch((e) => console.error("finished history fetch failed", e));
@@ -86,10 +86,10 @@ export function Finished({
       // Fase 1 (S3): o servidor calcula TUDO (score, posição, acertos,
       // blefes, XP, conquistas) a partir das tabelas oficiais. O client
       // apenas vincula sua identidade ao jogador e informa a sala.
-      await (supabase.rpc as any)("claim_player_identity", {
+      await supabase.rpc("claim_player_identity", {
         p_player_id: playerId,
       });
-      const { data } = await (supabase.rpc as any)("record_match_result", {
+      const { data } = await supabase.rpc("record_match_result", {
         p_room_code: roomCode,
       });
       const res = data as {

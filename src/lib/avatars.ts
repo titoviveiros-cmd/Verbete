@@ -29,9 +29,9 @@ export const COLORS = [
   "#F472B6",
 ];
 
-export function randomAvatar() {
-  return AVATARS[Math.floor(Math.random() * AVATARS.length)];
+export function randomAvatar(): string {
+  return AVATARS[Math.floor(Math.random() * AVATARS.length)]!;
 }
-export function randomColor() {
-  return COLORS[Math.floor(Math.random() * COLORS.length)];
+export function randomColor(): string {
+  return COLORS[Math.floor(Math.random() * COLORS.length)]!;
 }

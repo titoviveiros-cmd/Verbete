@@ -158,7 +158,8 @@ function DemoStepView({
 
 export function Onboarding({ onClose }: { onClose: () => void }) {
   const [i, setI] = useState(0);
-  const step = STEPS[i];
+  // noUncheckedIndexedAccess: i é sempre um índice válido de STEPS
+  const step = STEPS[i] ?? STEPS[0]!;
   const isLast = i === STEPS.length - 1;
   const isDemo = step.kind === "demo";
 

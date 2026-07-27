@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession } from "./auth-session";
 import { scalePhaseSecs } from "./game-times";
@@ -148,7 +149,7 @@ export async function createRoom(
   await ensureAnonSession();
   const cleanNick = sanitizeNickname(nickname);
   const callCreate = (pid: string) =>
-    (supabase.rpc as any)("create_room_with_host", {
+    supabase.rpc("create_room_with_host", {
       p_host_id: pid,
       p_nickname: cleanNick,
       p_avatar: avatar,
@@ -160,14 +161,16 @@ export async function createRoom(
     ({ data, error } = await callCreate(regeneratePlayerId()));
   }
   if (!error && data) {
-    const room = data as Room;
+    const room = data as unknown as Room;
     // Amarra a identidade auth ao jogador do host (idempotente).
-    (supabase.rpc as any)("claim_player_identity", {
-      p_player_id: room.host_id,
-    }).then(
-      () => {},
-      () => {},
-    );
+    supabase
+      .rpc("claim_player_identity", {
+        p_player_id: room.host_id,
+      })
+      .then(
+        () => {},
+        () => {},
+      );
     return room;
   }
 
@@ -217,9 +220,11 @@ export async function joinRoom(
   // Bloqueia jogadores banidos antes de inserir na sala
   const { data: authData } = await supabase.auth.getUser();
   const authUserId = authData?.user?.id ?? null;
-  const { data: banned } = await (supabase.rpc as any)("is_player_banned", {
+  const { data: banned } = await supabase.rpc("is_player_banned", {
     _player_id: playerId,
-    _user_id: authUserId,
+    // A função SQL aceita NULL (visitante sem sessão), mas o tipo gerado
+    // marca o arg como obrigatório — cast preserva o comportamento.
+    _user_id: authUserId as unknown as string,
   });
   if (banned === true) {
     throw new Error(
@@ -232,7 +237,7 @@ export async function joinRoom(
   // Usa rejoin_room: se o jogador existir (mesmo kicked_at), preserva
   // a pontuação acumulada e zera apenas os contadores de penalidade.
   const callRejoin = (pid: string) =>
-    (supabase.rpc as any)("rejoin_room", {
+    supabase.rpc("rejoin_room", {
       p_code: code,
       p_player_id: pid,
       p_nickname: cleanNick,
@@ -259,12 +264,14 @@ export async function joinRoom(
     });
   }
   // Amarra a identidade auth ao jogador (idempotente; ignora sem sessão).
-  (supabase.rpc as any)("claim_player_identity", {
-    p_player_id: effectiveId,
-  }).then(
-    () => {},
-    () => {},
-  );
+  supabase
+    .rpc("claim_player_identity", {
+      p_player_id: effectiveId,
+    })
+    .then(
+      () => {},
+      () => {},
+    );
   return room as unknown as Room;
 }
 
@@ -280,7 +287,7 @@ export async function rejoinAfterKick(
 }
 
 export async function leaveRoom(playerId: string) {
-  await (supabase.rpc as any)("leave_room", { p_player_id: playerId });
+  await supabase.rpc("leave_room", { p_player_id: playerId });
 }
 
 // Promove `newHostId` a host da sala, mas SÓ se o host atual continuar sendo
@@ -322,15 +329,17 @@ export async function kickPlayer(
   // IMPORTANTE: chamamos .then() explicitamente para disparar a request HTTP —
   // o builder do supabase é "thenable", e `void builder` NÃO executa nada,
   // o que fazia o bot reaparecer (otimismo desfeito pelo próximo polling).
-  (supabase.rpc as any)("kick_player", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_target_player_id: playerId,
-  }).then(({ error }: { error: unknown }) => {
-    if (error) {
-      console.error("kick_player failed", error);
-    }
-  });
+  supabase
+    .rpc("kick_player", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_target_player_id: playerId,
+    })
+    .then(({ error }: { error: unknown }) => {
+      if (error) {
+        console.error("kick_player failed", error);
+      }
+    });
 }
 
 export async function addBot(roomId: string, index: number) {
@@ -338,7 +347,7 @@ export async function addBot(roomId: string, index: number) {
   const row = {
     id,
     room_id: roomId,
-    nickname: BOT_NAMES[index % BOT_NAMES.length],
+    nickname: BOT_NAMES[index % BOT_NAMES.length]!,
     avatar: randomAvatar(),
     color: randomColor(),
     is_bot: true,
@@ -393,16 +402,18 @@ export async function setWinCondition(
     );
   }
   // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  (supabase.rpc as any)("host_update_room_config", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_patch: { win_condition: condition, win_target: target },
-  }).then(
-    ({ error }: { error: unknown }) => {
-      if (error) console.error("host_update_room_config" + " failed", error);
-    },
-    (e: unknown) => console.error("host_update_room_config" + " failed", e),
-  );
+  supabase
+    .rpc("host_update_room_config", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_patch: { win_condition: condition, win_target: target },
+    })
+    .then(
+      ({ error }: { error: unknown }) => {
+        if (error) console.error("host_update_room_config" + " failed", error);
+      },
+      (e: unknown) => console.error("host_update_room_config" + " failed", e),
+    );
 }
 
 // ---------- Game flow (driven by host browser) ----------
@@ -438,27 +449,21 @@ export async function fetchThreeWords(
   let globalPool: Word[] = [];
   if (needed > 0) {
     // RPC segura: devolve apenas colunas não-reveladoras (sem meaning).
-    const { data, error } = await (supabase.rpc as any)(
-      "get_random_word_prompts",
-      {
-        exclude_ids: excludeIds,
-        min_rarity: 2,
-        lim: needed,
-        p_categories: categories,
-        p_nivel: nivel,
-      },
-    );
+    const { data, error } = await supabase.rpc("get_random_word_prompts", {
+      exclude_ids: excludeIds,
+      min_rarity: 2,
+      lim: needed,
+      p_categories: categories,
+      p_nivel: nivel,
+    });
     if (!error && data && data.length >= needed) {
       globalPool = data as Word[];
     } else if (categories.length > 0 || nivel !== "aleatorio") {
-      const { data: any3 } = await (supabase.rpc as any)(
-        "get_random_word_prompts",
-        {
-          exclude_ids: excludeIds,
-          min_rarity: 2,
-          lim: needed,
-        },
-      );
+      const { data: any3 } = await supabase.rpc("get_random_word_prompts", {
+        exclude_ids: excludeIds,
+        min_rarity: 2,
+        lim: needed,
+      });
       if (any3) globalPool = any3 as Word[];
     }
     if (globalPool.length < needed) {
@@ -537,16 +542,18 @@ export async function setNivel(
     );
   }
   // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  (supabase.rpc as any)("host_update_room_config", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_patch: { nivel },
-  }).then(
-    ({ error }: { error: unknown }) => {
-      if (error) console.error("host_update_room_config" + " failed", error);
-    },
-    (e: unknown) => console.error("host_update_room_config" + " failed", e),
-  );
+  supabase
+    .rpc("host_update_room_config", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_patch: { nivel },
+    })
+    .then(
+      ({ error }: { error: unknown }) => {
+        if (error) console.error("host_update_room_config" + " failed", error);
+      },
+      (e: unknown) => console.error("host_update_room_config" + " failed", e),
+    );
 }
 
 export async function setCategories(
@@ -562,23 +569,25 @@ export async function setCategories(
     );
   }
   // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  (supabase.rpc as any)("host_update_room_config", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_patch: { categories },
-  }).then(
-    ({ error }: { error: unknown }) => {
-      if (error) console.error("host_update_room_config" + " failed", error);
-    },
-    (e: unknown) => console.error("host_update_room_config" + " failed", e),
-  );
+  supabase
+    .rpc("host_update_room_config", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_patch: { categories },
+    })
+    .then(
+      ({ error }: { error: unknown }) => {
+        if (error) console.error("host_update_room_config" + " failed", error);
+      },
+      (e: unknown) => console.error("host_update_room_config" + " failed", e),
+    );
 }
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i], a[j]] = [a[j]!, a[i]!];
   }
   return a;
 }
@@ -608,7 +617,7 @@ export async function startGame(room: Room, players: Player[]) {
       }),
     );
   }
-  await (supabase.rpc as any)("start_game", { p_room_id: room.id });
+  await supabase.rpc("start_game", { p_room_id: room.id });
 }
 
 function pickNextCoordinator(
@@ -620,7 +629,8 @@ function pickNextCoordinator(
   const pool = candidates.length > 0 ? candidates : players;
   const minCount = Math.min(...pool.map((p) => p.coordinator_count));
   const tier = pool.filter((p) => p.coordinator_count === minCount);
-  return tier[Math.floor(Math.random() * tier.length)];
+  // tier nunca é vazio: minCount vem do próprio pool
+  return tier[Math.floor(Math.random() * tier.length)]!;
 }
 
 export async function chooseWord(
@@ -652,7 +662,7 @@ export async function chooseWord(
       }),
     );
   }
-  await (supabase.rpc as any)("choose_word", {
+  await supabase.rpc("choose_word", {
     p_room_id: roomId,
     p_word_id: wordId,
     p_duration_sec: durationSec,
@@ -717,14 +727,11 @@ export async function submitDefinition(
   try {
     if (isTruth) {
       // Definição verdadeira (chamada pelo host na transição p/ votação)
-      const { data, error } = await (supabase.rpc as any)(
-        "insert_truth_definition",
-        {
-          p_room_id: roomId,
-          p_round: round,
-          p_text: clean,
-        },
-      );
+      const { data, error } = await supabase.rpc("insert_truth_definition", {
+        p_room_id: roomId,
+        p_round: round,
+        p_text: clean,
+      });
       if (error) throw error;
       if (data && (data as any).ok === false) {
         throw new Error(
@@ -732,7 +739,7 @@ export async function submitDefinition(
         );
       }
     } else {
-      const { data, error } = await (supabase.rpc as any)("submit_definition", {
+      const { data, error } = await supabase.rpc("submit_definition", {
         p_room_id: roomId,
         p_player_id: playerId,
         p_text: clean,
@@ -790,7 +797,8 @@ const PERSONA_POOL = [
 ];
 function personaFor(bot: Player, idx: number): string {
   return (
-    BOT_PERSONA_BY_NAME[bot.nickname] ?? PERSONA_POOL[idx % PERSONA_POOL.length]
+    BOT_PERSONA_BY_NAME[bot.nickname] ??
+    PERSONA_POOL[idx % PERSONA_POOL.length]!
   );
 }
 
@@ -880,7 +888,7 @@ export async function botSubmitDefinitions(
     let fbIdx = 0;
     const nextFallback = (): string => {
       for (let k = 0; k < fallbackPool.length; k++) {
-        const cand = fallbackPool[(fbIdx + k) % fallbackPool.length];
+        const cand = fallbackPool[(fbIdx + k) % fallbackPool.length]!;
         if (!used.has(norm(cand))) {
           fbIdx = (fbIdx + k + 1) % fallbackPool.length;
           return cand;
@@ -905,14 +913,16 @@ export async function botSubmitDefinitions(
       used.add(key);
       return { player_id: bot.id, text };
     });
-    (supabase.rpc as any)("submit_bot_definitions_bulk", {
-      p_room_id: roomId,
-      p_round: round,
-      p_rows: rows,
-    }).then(
-      () => {},
-      () => {},
-    );
+    supabase
+      .rpc("submit_bot_definitions_bulk", {
+        p_room_id: roomId,
+        p_round: round,
+        p_rows: rows,
+      })
+      .then(
+        () => {},
+        () => {},
+      );
   }, delay);
 }
 
@@ -989,7 +999,7 @@ export async function startShuffling(roomId: string): Promise<boolean> {
   // Guarda atômica: a RPC só promove se ainda estiver em "writing". A UI
   // otimista só roda DEPOIS do retorno real para não pular a
   // penalidade/prorrogação quando ainda há humano sem definição.
-  const { data, error } = await (supabase.rpc as any)("start_shuffling", {
+  const { data, error } = await supabase.rpc("start_shuffling", {
     p_room_id: roomId,
   });
   if (error || !(data as any)?.ok) return false;
@@ -1016,7 +1026,7 @@ export async function startVoting(
   // substitui o polling de 8x250ms que existia aqui antes). Os parâmetros
   // round/word/defs continuam na assinatura só para não obrigar os
   // call-sites (Shuffling.tsx) a mudar; o estado real vem sempre do banco.
-  await (supabase.rpc as any)("advance_writing_to_voting", {
+  await supabase.rpc("advance_writing_to_voting", {
     p_room_id: roomId,
   });
 }
@@ -1048,7 +1058,7 @@ export async function castVote(
     );
   }
   try {
-    const { data, error } = await (supabase.rpc as any)("cast_vote", {
+    const { data, error } = await supabase.rpc("cast_vote", {
       p_room_id: roomId,
       p_voter_id: voterId,
       p_definition_id: definitionId,
@@ -1082,19 +1092,21 @@ export async function botsVote(
       .map((bot) => {
         const choices = defs.filter((d) => d.player_id !== bot.id);
         if (!choices.length) return null;
-        const pick = choices[Math.floor(Math.random() * choices.length)];
+        const pick = choices[Math.floor(Math.random() * choices.length)]!;
         return { voter_id: bot.id, definition_id: pick.id };
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
     if (rows.length === 0) return;
-    (supabase.rpc as any)("cast_votes_bulk", {
-      p_room_id: roomId,
-      p_round: round,
-      p_votes: rows,
-    }).then(
-      () => {},
-      () => {},
-    );
+    supabase
+      .rpc("cast_votes_bulk", {
+        p_room_id: roomId,
+        p_round: round,
+        p_votes: rows,
+      })
+      .then(
+        () => {},
+        () => {},
+      );
   }, delay);
 }
 
@@ -1113,7 +1125,7 @@ export async function revealAndScore(
   // não pontua duas vezes; ela só termina de mover o status pra "reveal".
   // A pontuação-base E o bônus de similaridade semântica (IA) são aplicados
   // atomicamente dentro da RPC — não há mais lógica de score aqui no client.
-  await (supabase.rpc as any)("advance_voting_to_reveal", {
+  await supabase.rpc("advance_voting_to_reveal", {
     p_room_id: room.id,
   });
   const { data } = await supabase
@@ -1132,7 +1144,7 @@ export async function revealAndScore(
 }
 
 export async function goToScoreboard(roomId: string) {
-  await (supabase.rpc as any)("finish_reveal", { p_room_id: roomId });
+  await supabase.rpc("finish_reveal", { p_room_id: roomId });
 }
 
 // Decide se vai pro placar da rodada ou direto pro fim de jogo (quando
@@ -1141,7 +1153,7 @@ export async function goToScoreboard(roomId: string) {
 // sob lock de linha — elimina a corrida entre "status reveal chegou via
 // realtime" e "os pontos ainda não chegaram" que existia na versão client.
 export async function advanceAfterReveal(room: Room, _players: Player[]) {
-  await (supabase.rpc as any)("finish_reveal", { p_room_id: room.id });
+  await supabase.rpc("finish_reveal", { p_room_id: room.id });
 }
 
 export async function nextRound(room: Room, _players: Player[]) {
@@ -1149,7 +1161,7 @@ export async function nextRound(room: Room, _players: Player[]) {
   // vitória (pontos ou "todo mundo coordenou 2x") e escolhe o próximo
   // coordenador atomicamente. p_force=true porque esta é uma chamada
   // deliberada (host clicou "próxima rodada"), não o backstop do cron.
-  await (supabase.rpc as any)("advance_scoreboard_to_next_round_or_finished", {
+  await supabase.rpc("advance_scoreboard_to_next_round_or_finished", {
     p_room_id: room.id,
     p_force: true,
   });
@@ -1223,7 +1235,7 @@ export async function sendRoomMessage(
 ): Promise<{ ok: boolean; reason?: string }> {
   const clean = sanitizeDefinition(text, 200);
   if (!clean) return { ok: false, reason: "empty" };
-  const { data, error } = await (supabase.rpc as any)("send_room_message", {
+  const { data, error } = await supabase.rpc("send_room_message", {
     p_room_id: roomId,
     p_player_id: playerId,
     p_text: clean,
@@ -1258,7 +1270,7 @@ export async function joinPublicRoom(
   color: string,
 ): Promise<Room> {
   const cleanNick = sanitizeNickname(nickname);
-  const { data, error } = await (supabase.rpc as any)("join_public_room", {
+  const { data, error } = await supabase.rpc("join_public_room", {
     p_player_id: playerId,
     p_nickname: cleanNick,
     p_avatar: avatar,
@@ -1273,7 +1285,7 @@ export async function joinPublicRoom(
     throw error;
   }
   if (!data) throw new Error("Não foi possível encontrar uma sala pública.");
-  return data as Room;
+  return data as unknown as Room;
 }
 
 export async function sendReaction(
@@ -1282,7 +1294,7 @@ export async function sendReaction(
   emoji: string,
 ) {
   // RPC com rate-limit servidor-side (800ms por jogador) e validação de pertencimento à sala.
-  await (supabase.rpc as any)("send_reaction", {
+  await supabase.rpc("send_reaction", {
     p_room_id: roomId,
     p_player_id: playerId,
     p_emoji: emoji,
@@ -1315,16 +1327,18 @@ export async function setRoomMode(
   }
   // RPC já zera team_id de todos quando mode='individual'.
   // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  (supabase.rpc as any)("host_update_room_config", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_patch: { mode, teams: nextTeams },
-  }).then(
-    ({ error }: { error: unknown }) => {
-      if (error) console.error("host_update_room_config" + " failed", error);
-    },
-    (e: unknown) => console.error("host_update_room_config" + " failed", e),
-  );
+  supabase
+    .rpc("host_update_room_config", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_patch: { mode, teams: nextTeams } as unknown as Json,
+    })
+    .then(
+      ({ error }: { error: unknown }) => {
+        if (error) console.error("host_update_room_config" + " failed", error);
+      },
+      (e: unknown) => console.error("host_update_room_config" + " failed", e),
+    );
 }
 
 export async function setRoomTeams(
@@ -1340,16 +1354,18 @@ export async function setRoomTeams(
     );
   }
   // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  (supabase.rpc as any)("host_update_room_config", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_patch: { teams },
-  }).then(
-    ({ error }: { error: unknown }) => {
-      if (error) console.error("host_update_room_config" + " failed", error);
-    },
-    (e: unknown) => console.error("host_update_room_config" + " failed", e),
-  );
+  supabase
+    .rpc("host_update_room_config", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_patch: { teams } as unknown as Json,
+    })
+    .then(
+      ({ error }: { error: unknown }) => {
+        if (error) console.error("host_update_room_config" + " failed", error);
+      },
+      (e: unknown) => console.error("host_update_room_config" + " failed", e),
+    );
 }
 
 export async function assignPlayerToTeam(
@@ -1366,17 +1382,19 @@ export async function assignPlayerToTeam(
     );
   }
   // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  (supabase.rpc as any)("assign_player_team", {
-    p_room_id: roomId,
-    p_actor_id: actorId,
-    p_player_id: playerId,
-    p_team_id: teamId ?? "",
-  }).then(
-    ({ error }: { error: unknown }) => {
-      if (error) console.error("assign_player_team" + " failed", error);
-    },
-    (e: unknown) => console.error("assign_player_team" + " failed", e),
-  );
+  supabase
+    .rpc("assign_player_team", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_player_id: playerId,
+      p_team_id: teamId ?? "",
+    })
+    .then(
+      ({ error }: { error: unknown }) => {
+        if (error) console.error("assign_player_team" + " failed", error);
+      },
+      (e: unknown) => console.error("assign_player_team" + " failed", e),
+    );
 }
 
 export async function autoBalanceTeams(
@@ -1389,7 +1407,7 @@ export async function autoBalanceTeams(
   // Distribui em round-robin pelos times (ordem aleatória)
   const shuffled = [...players].sort(() => Math.random() - 0.5);
   shuffled.forEach((p, i) =>
-    assignPlayerToTeam(roomId, actorId, p.id, teams[i % teams.length].id),
+    assignPlayerToTeam(roomId, actorId, p.id, teams[i % teams.length]!.id),
   );
 }
 

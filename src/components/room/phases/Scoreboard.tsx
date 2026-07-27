@@ -114,7 +114,7 @@ function ScoreboardImpl({
       ] = await Promise.all([
         // S1: leitura direta de definitions foi revogada — RPC devolve as
         // rodadas já reveladas (a corrente só a partir do reveal).
-        (supabase.rpc as any)("get_room_definitions", { p_room_id: room.id }),
+        supabase.rpc("get_room_definitions", { p_room_id: room.id }),
         supabase.from("votes").select("*").eq("room_id", room.id),
         supabase
           .from("rounds")
@@ -129,7 +129,7 @@ function ScoreboardImpl({
       const nearIds: string[] =
         (reveal as { near_truth_ids?: string[] } | null)?.near_truth_ids ?? [];
       setHistory({
-        defs: (defs ?? []) as Definition[],
+        defs: (defs ?? []) as unknown as Definition[],
         votes: (votes ?? []) as Vote[],
         rounds: (rounds ?? []) as {
           round: number;

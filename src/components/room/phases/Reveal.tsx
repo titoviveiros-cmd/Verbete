@@ -229,7 +229,7 @@ function RevealImpl({
     const fetchNear = async () => {
       tries++;
       const { supabase } = await import("@/integrations/supabase/client");
-      const { data } = await (supabase.rpc as any)("get_room_reveal", {
+      const { data } = await supabase.rpc("get_room_reveal", {
         p_room_id: room.id,
       });
       if (!alive) return;

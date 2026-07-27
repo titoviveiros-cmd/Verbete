@@ -61,13 +61,12 @@ export function useRoom(code: string | undefined, playerId?: string) {
     if (!code) return;
     let alive = true;
     const load = async () => {
-      const { data, error: rpcErr } = await (supabase.rpc as any)(
-        "get_room_state",
-        { p_code: code },
-      );
+      const { data, error: rpcErr } = await supabase.rpc("get_room_state", {
+        p_code: code,
+      });
       if (!alive) return;
       if (!rpcErr && data) {
-        const payload = data as {
+        const payload = data as unknown as {
           room: Room;
           players: Player[];
           definitions: Definition[];
@@ -117,7 +116,7 @@ export function useRoom(code: string | undefined, playerId?: string) {
           .eq("room_id", r.id)
           .is("kicked_at", null)
           .order("joined_at"),
-        (supabase.rpc as any)("get_round_sync", { p_room_id: r.id }),
+        supabase.rpc("get_round_sync", { p_room_id: r.id }),
         supabase.from("round_extensions").select("*").eq("room_id", r.id),
       ]);
       if (!alive) return;
@@ -556,7 +555,7 @@ export function useRoom(code: string | undefined, playerId?: string) {
     setDefinitions([]);
     setVotes([]);
     (async () => {
-      const { data: sync } = await (supabase.rpc as any)("get_round_sync", {
+      const { data: sync } = await supabase.rpc("get_round_sync", {
         p_room_id: room.id,
       });
       const payload = sync as {
@@ -577,7 +576,7 @@ export function useRoom(code: string | undefined, playerId?: string) {
       return;
     let cancelled = false;
     const refreshRound = async () => {
-      const { data: sync, error: syncErr } = await (supabase.rpc as any)(
+      const { data: sync, error: syncErr } = await supabase.rpc(
         "get_round_sync",
         { p_room_id: room.id },
       );

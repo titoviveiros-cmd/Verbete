@@ -88,20 +88,16 @@ function AdminOpsPage() {
   useEffect(() => {
     if (!isAdmin) return;
     (async () => {
-      const rpc = supabase.rpc as never as (
-        fn: string,
-        args: object,
-      ) => Promise<{ data: unknown; error: { message: string } | null }>;
       const [sum, rec] = await Promise.all([
-        rpc("admin_ops_summary", { p_hours: hours }),
-        rpc("admin_ops_recent", { p_limit: 60 }),
+        supabase.rpc("admin_ops_summary", { p_hours: hours }),
+        supabase.rpc("admin_ops_recent", { p_limit: 60 }),
       ]);
       if (sum.error || rec.error) {
         setError(sum.error?.message ?? rec.error?.message ?? "erro");
         return;
       }
-      setSummary(sum.data as Summary);
-      setEvents((rec.data as OpsEvent[]) ?? []);
+      setSummary(sum.data as unknown as Summary);
+      setEvents((rec.data as unknown as OpsEvent[]) ?? []);
       setError(null);
     })();
   }, [isAdmin, hours]);

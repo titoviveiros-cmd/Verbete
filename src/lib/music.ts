@@ -231,7 +231,7 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
     intervalId = setInterval(() => {
       if (stopped || !ctx) return;
       const t = ctx.currentTime;
-      const semis = pattern.arpeggio[arpIdx % pattern.arpeggio.length];
+      const semis = pattern.arpeggio[arpIdx % pattern.arpeggio.length] ?? 0;
       arpIdx++;
       const osc = ctx.createOscillator();
       osc.type = pattern.arpType;

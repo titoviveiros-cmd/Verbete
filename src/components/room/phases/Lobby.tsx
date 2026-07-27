@@ -550,7 +550,7 @@ function ModeAndTeamsConfig({
     void setRoomMode(roomId, actorId, next, initial);
   };
   const applyPreset = (key: keyof typeof TEAM_PRESETS) => {
-    void setRoomTeams(roomId, actorId, TEAM_PRESETS[key]);
+    void setRoomTeams(roomId, actorId, TEAM_PRESETS[key]!);
     players.forEach((p) => assignPlayerToTeam(roomId, actorId, p.id, null));
   };
   return (

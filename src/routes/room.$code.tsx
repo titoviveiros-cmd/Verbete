@@ -396,7 +396,7 @@ function RoomPage() {
             botAutopickRef.current = null;
             return;
           }
-          const pick = options[Math.floor(Math.random() * options.length)];
+          const pick = options[Math.floor(Math.random() * options.length)]!;
           await chooseWord(room.id, pick.id, 60, players.length);
         } catch (e) {
           console.error("bot global auto-pick failed", e);

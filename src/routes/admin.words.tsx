@@ -69,17 +69,15 @@ function AdminWordsPage() {
   }, [user, loading]);
 
   const refresh = async (st = status) => {
-    const { data, error: err } = await (
-      supabase.rpc as never as (
-        fn: string,
-        args: object,
-      ) => Promise<{ data: unknown; error: { message: string } | null }>
-    )("admin_list_words", { p_status: st, p_limit: 60 });
+    const { data, error: err } = await supabase.rpc("admin_list_words", {
+      p_status: st,
+      p_limit: 60,
+    });
     if (err) {
       setError(err.message);
       return;
     }
-    const payload = data as {
+    const payload = data as unknown as {
       ok: boolean;
       reason?: string;
       total?: number;
@@ -101,15 +99,10 @@ function AdminWordsPage() {
   const review = async (id: string, action: "publish" | "reject") => {
     setBusy(id);
     try {
-      const { data } = await (
-        supabase.rpc as never as (
-          fn: string,
-          args: object,
-        ) => Promise<{ data: unknown }>
-      )("admin_review_word", {
+      const { data } = await supabase.rpc("admin_review_word", {
         p_word_id: id,
         p_action: action,
-        p_meaning: edits[id] ?? null,
+        p_meaning: edits[id] ?? undefined,
         p_notes: `revisado no /admin/words em ${new Date().toISOString().slice(0, 10)}`,
       });
       if ((data as { ok?: boolean })?.ok) {

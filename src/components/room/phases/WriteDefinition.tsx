@@ -304,7 +304,7 @@ export function WriteDefinition({
         const pick = pool
           .map((p) => sanitizeDefinition(p, 140, word.word))
           .find((s) => s && s !== text && !suggestions.includes(s));
-        return pick ?? pool[0];
+        return pick ?? pool[0] ?? "";
       };
       const generated = await Promise.race([
         generateAiDefinitionForPlayer(word, room.id, room.current_round),

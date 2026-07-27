@@ -67,7 +67,7 @@ export async function generateReplayCard(data: ReplayCardData): Promise<Blob> {
     ctx.font = `${48 + (i % 3) * 12}px sans-serif`;
     ctx.globalAlpha = 0.18;
     ctx.fillText(
-      confetti[i % confetti.length],
+      confetti[i % confetti.length]!,
       (i * 137) % W,
       40 + ((i * 211) % H),
     );
