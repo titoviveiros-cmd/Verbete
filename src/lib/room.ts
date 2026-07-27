@@ -807,7 +807,15 @@ export async function botSubmitDefinitions(
   if (word) {
     try {
       const { data } = await supabase.functions.invoke("bot-definitions", {
-        body: { word_id: word.id, count: bots.length, personas },
+        // memória por rodada: cédulas de bot nunca repetem sugestões já
+        // mostradas a jogadores (vazava que a alternativa era falsa)
+        body: {
+          word_id: word.id,
+          count: bots.length,
+          personas,
+          room_id: roomId,
+          round,
+        },
       });
       const arr = (data as any)?.definitions;
       if (Array.isArray(arr))
@@ -943,7 +951,13 @@ export async function generateAiDefinitionForPlayer(
 
   try {
     const { data } = await supabase.functions.invoke("bot-definitions", {
-      body: { word_id: word.id, count: 1, personas: [persona] },
+      body: {
+        word_id: word.id,
+        count: 1,
+        personas: [persona],
+        room_id: roomId,
+        round,
+      },
     });
     const arr = (data as any)?.definitions;
     const raw = Array.isArray(arr)

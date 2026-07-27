@@ -299,10 +299,12 @@ function DailyPage() {
               +{displayResult?.score ?? 0} pts
             </p>
 
+            {/* Uniformização (playtest 2026-07-21): cards no padrão do
+                tema — os cinza-lavados destoavam da identidade. */}
             {displayResult && (
-              <div className="mt-3 text-[11px] text-muted-foreground bg-white/50 rounded-2xl px-3 py-2 border border-white/40 text-left">
-                <p className="font-display uppercase tracking-wider text-[10px] mb-1 text-center">
-                  Como calculamos
+              <div className="mt-3 text-[11px] text-foreground/80 bg-card/80 rounded-2xl px-3 py-2 border border-white/10 text-left">
+                <p className="font-display uppercase tracking-wider text-[10px] mb-1 text-center text-sun">
+                  🧮 Como calculamos
                 </p>
                 {displayResult.correct ? (
                   <>
@@ -362,11 +364,13 @@ function DailyPage() {
             )}
 
             {displayResult?.guess && (
-              <div className="mt-4 text-left bg-white/60 rounded-2xl p-3 border border-white/40">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mb-1">
-                  Seu palpite
+              <div className="mt-4 text-left bg-card/80 rounded-2xl p-3 border border-pink/30">
+                <p className="text-[10px] uppercase tracking-wider text-pink font-display mb-1">
+                  ✍️ Seu palpite
                 </p>
-                <p className="text-sm">"{displayResult.guess}"</p>
+                <p className="text-sm text-foreground">
+                  "{displayResult.guess}"
+                </p>
               </div>
             )}
             {displayResult?.truth && (

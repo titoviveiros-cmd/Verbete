@@ -47,6 +47,13 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const wordId = typeof body?.word_id === "string" ? body.word_id : "";
     const personas = body?.personas;
+    // Memória por rodada (opcional/retrocompatível): com room_id+round,
+    // textos já servidos NUNCA se repetem — sugestão de um jogador não pode
+    // reaparecer como cédula de bot (vazava que a alternativa era falsa).
+    const memRoomId = typeof body?.room_id === "string" ? body.room_id : "";
+    const memRound = Number.isFinite(Number(body?.round))
+      ? Number(body.round)
+      : null;
     if (!wordId) {
       return new Response(JSON.stringify({ error: "word_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -203,6 +210,37 @@ Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v.,
       if (defs.length < before) {
         console.warn(
           `anti-vazamento: ${before - defs.length} candidata(s) descartada(s) por proximidade com a verdade`,
+        );
+      }
+    }
+
+    // Memória por rodada: exclui o que já foi servido (a qualquer jogador,
+    // como sugestão OU cédula de bot) e registra o que vai ser servido agora.
+    if (memRoomId && memRound !== null) {
+      const { data: served } = await admin
+        .from("ai_served_defs")
+        .select("norm_text")
+        .eq("room_id", memRoomId)
+        .eq("round", memRound);
+      const servedNorms: string[] = (served ?? []).map((r: { norm_text: string }) => r.norm_text);
+      const before = defs.length;
+      defs = defs.filter((d) => {
+        const n = norm(d);
+        return !servedNorms.some((s) => s === n || dice(s, n) > 0.6);
+      });
+      if (defs.length < before) {
+        console.warn(
+          `memória da rodada: ${before - defs.length} candidata(s) já servida(s) descartada(s)`,
+        );
+      }
+      if (defs.length > 0) {
+        await admin.from("ai_served_defs").upsert(
+          defs.map((d) => ({
+            room_id: memRoomId,
+            round: memRound,
+            norm_text: norm(d),
+          })),
+          { onConflict: "room_id,round,norm_text", ignoreDuplicates: true },
         );
       }
     }

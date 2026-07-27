@@ -81,6 +81,9 @@ export function WriteDefinition({
             word_id: word.id,
             count: 2,
             personas: ["conciso", "contextual"],
+            // memória por rodada: o servidor não repete textos já servidos
+            room_id: room.id,
+            round: room.current_round,
           },
         });
         const arr =
