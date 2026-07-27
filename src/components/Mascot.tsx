@@ -22,6 +22,7 @@ export function Mascot({
   return (
     <motion.div
       className={"relative inline-block " + className}
+      aria-hidden
       style={{ width: size, height: size }}
       animate={{
         y: [0, -8, 0],

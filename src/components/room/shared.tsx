@@ -98,6 +98,13 @@ export function TimerBar({
   const pct = (remaining / max) * 100;
   const urgent = remaining <= 10;
   const color = urgent ? "bg-destructive" : "bg-sun";
+  // Fase 7: leitor de tela ouve só marcos (10s e 3s), não cada segundo.
+  const srAnnouncement =
+    remaining === 10
+      ? "10 segundos restantes"
+      : remaining === 3
+        ? "3 segundos restantes"
+        : "";
   const lastPlayed = useRef<string | null>(null);
   useEffect(() => {
     const key = `${max}:${tickStartAt}:${remaining}`;
@@ -122,11 +129,14 @@ export function TimerBar({
             ? "text-destructive text-5xl drop-shadow-[0_0_12px_rgba(255,80,80,0.45)]"
             : "text-sun text-5xl")
         }
-        aria-live="polite"
+        role="timer"
       >
         {remaining}
         <span className="text-xl ml-1 align-top opacity-70">s</span>
       </motion.div>
+      <span className="sr-only" aria-live="polite">
+        {srAnnouncement}
+      </span>
       <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-white/10">
         <motion.div
           className={"h-full " + color}

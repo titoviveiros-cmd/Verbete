@@ -47,5 +47,39 @@ export default defineConfig(({ mode }) => {
         "@tanstack/react-query",
       ],
     },
+    // Fase 7 (perf): vendors estáveis em chunks próprios SÓ no client — como
+    // cada deploy troca o hash do bundle e o auto-update força reload, sem o
+    // split o jogador rebaixa ~230KB gz a cada deploy; com ele, só o código do
+    // app muda. O SSR (worker) mantém o chunking automático.
+    environments: {
+      client: {
+        build: {
+          rollupOptions: {
+            output: {
+              manualChunks(id: string) {
+                if (!id.includes("node_modules")) return undefined;
+                if (
+                  /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(
+                    id,
+                  )
+                )
+                  return "vendor-react";
+                if (
+                  /[\\/]node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(
+                    id,
+                  )
+                )
+                  return "vendor-motion";
+                if (/[\\/]node_modules[\\/]@supabase[\\/]/.test(id))
+                  return "vendor-supabase";
+                if (/[\\/]node_modules[\\/]@tanstack[\\/]/.test(id))
+                  return "vendor-tanstack";
+                return undefined;
+              },
+            },
+          },
+        },
+      },
+    },
   };
 });

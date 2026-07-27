@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { installAudioUnlock, playUITap, vibrate } from "@/lib/sound";
 import { ensureAnonSession } from "@/lib/auth-session";
 import { installNativeHandlers } from "@/lib/native";
+import { MotionConfig } from "framer-motion";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { Toaster } from "@/components/ui/sonner";
@@ -86,7 +87,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           name: "viewport",
           content:
-            "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+            // Fase 7 (WCAG 1.4.4): zoom liberado até 5x — maximum-scale=1
+            // bloqueava pinch-zoom de quem precisa ampliar para ler.
+            "width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, interactive-widget=resizes-content",
         },
         {
           name: "theme-color",
@@ -294,12 +297,17 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <OfflineBanner />
-      <main id="main">
-        <Outlet />
-      </main>
-      <AchievementToaster />
-      <Toaster position="top-center" richColors closeButton />
+      {/* Fase 7: animações do Framer respeitam prefers-reduced-motion do SO
+          (a regra CSS global não alcança animações via JS). Visual idêntico
+          para quem não ativou a preferência. */}
+      <MotionConfig reducedMotion="user">
+        <OfflineBanner />
+        <main id="main">
+          <Outlet />
+        </main>
+        <AchievementToaster />
+        <Toaster position="top-center" richColors closeButton />
+      </MotionConfig>
     </QueryClientProvider>
   );
 }
