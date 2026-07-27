@@ -24,6 +24,7 @@ import {
   playUITap,
 } from "@/lib/sound";
 import { getPlayerId } from "@/lib/player-id";
+import { scalePhaseSecs } from "@/lib/game-times";
 import { RevealFx } from "@/components/RevealFx";
 import { scrollbarClip } from "@/lib/utils";
 
@@ -122,8 +123,10 @@ function RevealImpl({
     return () => timers.forEach(clearTimeout);
   }, [transitionDone, room.current_round, bluffs.length]);
 
-  // Coreografia (~7s) + contagem de 12s = ~19s < backstop do cron (20s).
-  const REVEAL_HOLD = 12;
+  // Coreografia (~7s) + contagem = menor que o backstop do cron, que também
+  // escala com o nº de jogadores (public.phase_secs + folga em salas grandes).
+  // `players` já vem sem expulsos (use-room filtra kicked_at).
+  const REVEAL_HOLD = scalePhaseSecs(12, players.length);
   const latestPlayersRef = useRef(players);
   useEffect(() => {
     latestPlayersRef.current = players;

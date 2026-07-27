@@ -16,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { Mascot } from "@/components/Mascot";
 import { playSubmit, playUITap } from "@/lib/sound";
+import { scalePhaseSecs } from "@/lib/game-times";
 import {
   WordCard,
   ProgressBar,
@@ -257,7 +258,10 @@ export function WriteDefinition({
     () => Math.max(0, ...Array.from(roundExtMap.values())),
     [roundExtMap],
   );
-  const timerMax = activeExtension >= 2 ? 15 : activeExtension === 1 ? 20 : 60;
+  const timerMax = scalePhaseSecs(
+    activeExtension >= 2 ? 15 : activeExtension === 1 ? 20 : 60,
+    players.length,
+  );
 
   const handleSubmit = async () => {
     if (!text.trim()) return;

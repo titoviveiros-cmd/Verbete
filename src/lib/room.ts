@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession } from "./auth-session";
+import { scalePhaseSecs } from "./game-times";
 import {
   sanitizeDefinition,
   sanitizeNickname,
@@ -626,8 +627,12 @@ export async function chooseWord(
   roomId: string,
   wordId: string,
   durationSec = 60,
+  activePlayers = 0,
 ) {
-  const ends = new Date(Date.now() + durationSec * 1000).toISOString();
+  // O servidor escala o prazo em salas de 7-12 (public.phase_secs); o otimismo
+  // usa a mesma conta para a barra não "pular" quando o realtime confirmar.
+  const scaledSec = scalePhaseSecs(durationSec, activePlayers);
+  const ends = new Date(Date.now() + scaledSec * 1000).toISOString();
   // Otimismo: transita para "writing" imediatamente para o coordenador e
   // demais clientes que estiverem ouvindo o evento. A RPC `choose_word` é
   // quem decide de fato (guarda atômica: status='choosing' + current_word_id

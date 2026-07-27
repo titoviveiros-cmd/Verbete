@@ -45,7 +45,7 @@ export function ChooseWord({
     setPicking(wordId);
     void playUITap();
     try {
-      await chooseWord(room.id, wordId, 60);
+      await chooseWord(room.id, wordId, 60, players.length);
     } catch (e) {
       console.error("chooseWord failed", e);
       setPicking(null);

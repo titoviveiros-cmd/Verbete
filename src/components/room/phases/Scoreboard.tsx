@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { hapticSuccess } from "@/lib/sound";
 import { getPlayerId } from "@/lib/player-id";
+import { scalePhaseSecs } from "@/lib/game-times";
 import { motion } from "framer-motion";
 import {
   nextRound,
@@ -65,7 +66,8 @@ function ScoreboardImpl({
     extensions: { player_id: string; round: number; attempt: number }[];
   } | null>(null);
 
-  const SCORE_HOLD = 8;
+  // Hold escala com o nº de jogadores (7-12): mais fileiras para ler.
+  const SCORE_HOLD = scalePhaseSecs(8, players.length);
   const [scoreTransitionDone, setScoreTransitionDone] = useState(false);
   useEffect(() => {
     setScoreTransitionDone(false);
