@@ -21,8 +21,7 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     if (!roomId) return;
     const onAdd = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string; player?: Player }
-        | undefined;
+        { roomId?: string; player?: Player } | undefined;
       if (!detail?.player || detail.roomId !== roomId) return;
       optimisticPlayerIdsRef.current[detail.player.id] = Date.now();
       setPlayers((cur) =>
@@ -33,16 +32,14 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     };
     const onRemove = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { playerId?: string }
-        | undefined;
+        { playerId?: string } | undefined;
       if (!detail?.playerId) return;
       delete optimisticPlayerIdsRef.current[detail.playerId];
       setPlayers((cur) => cur.filter((p) => p.id !== detail.playerId));
     };
     const onDefAdd = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string; definition?: Definition }
-        | undefined;
+        { roomId?: string; definition?: Definition } | undefined;
       if (!detail?.definition || detail.roomId !== roomId) return;
       const incoming = detail.definition;
       setDefinitions((cur) => {
@@ -59,8 +56,7 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     };
     const onVoteAdd = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string; vote?: Vote }
-        | undefined;
+        { roomId?: string; vote?: Vote } | undefined;
       if (!detail?.vote || detail.roomId !== roomId) return;
       const incoming = detail.vote;
       setVotes((cur) => {
@@ -91,29 +87,25 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     };
     const onDefRollback = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string; pendingId?: string }
-        | undefined;
+        { roomId?: string; pendingId?: string } | undefined;
       if (!detail?.pendingId || detail.roomId !== roomId) return;
       setDefinitions((cur) => cur.filter((d) => d.id !== detail.pendingId));
     };
     const onVoteRollback = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string; pendingId?: string }
-        | undefined;
+        { roomId?: string; pendingId?: string } | undefined;
       if (!detail?.pendingId || detail.roomId !== roomId) return;
       setVotes((cur) => cur.filter((v) => v.id !== detail.pendingId));
     };
     const onRoomUpdate = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string; patch?: Partial<Room> }
-        | undefined;
+        { roomId?: string; patch?: Partial<Room> } | undefined;
       if (!detail?.patch || detail.roomId !== roomId) return;
       setRoom((cur) => (cur ? ({ ...cur, ...detail.patch } as Room) : cur));
     };
     const onPlayerUpdate = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { playerId?: string; patch?: Partial<Player> }
-        | undefined;
+        { playerId?: string; patch?: Partial<Player> } | undefined;
       if (!detail?.playerId || !detail.patch) return;
       setPlayers((cur) =>
         cur.map((p) =>
@@ -123,8 +115,7 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     };
     const onPlayersClearTeam = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { roomId?: string }
-        | undefined;
+        { roomId?: string } | undefined;
       if (detail?.roomId !== roomId) return;
       setPlayers((cur) => cur.map((p) => ({ ...p, team_id: null })));
     };
