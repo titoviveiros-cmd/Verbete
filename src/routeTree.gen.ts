@@ -19,6 +19,7 @@ import { Route as RankingRouteImport } from './routes/ranking'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as AdminOpsRouteImport } from './routes/admin.ops'
 import { Route as AdminReportsRouteImport } from './routes/admin.reports'
 import { Route as AdminWordsRouteImport } from './routes/admin.words'
 import { Route as RoomCodeRouteImport } from './routes/room.$code'
@@ -73,6 +74,11 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminOpsRoute = AdminOpsRouteImport.update({
+  id: '/admin/ops',
+  path: '/admin/ops',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminReportsRoute = AdminReportsRouteImport.update({
   id: '/admin/reports',
   path: '/admin/reports',
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/words': typeof AdminWordsRoute
   '/room/$code': typeof RoomCodeRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/words': typeof AdminWordsRoute
   '/room/$code': typeof RoomCodeRoute
@@ -131,6 +139,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/words': typeof AdminWordsRoute
   '/room/$code': typeof RoomCodeRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/admin/ops'
     | '/admin/reports'
     | '/admin/words'
     | '/room/$code'
@@ -163,6 +173,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/admin/ops'
     | '/admin/reports'
     | '/admin/words'
     | '/room/$code'
@@ -178,6 +189,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/admin/ops'
     | '/admin/reports'
     | '/admin/words'
     | '/room/$code'
@@ -194,6 +206,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  AdminOpsRoute: typeof AdminOpsRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminWordsRoute: typeof AdminWordsRoute
   RoomCodeRoute: typeof RoomCodeRoute
@@ -271,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/ops': {
+      id: '/admin/ops'
+      path: '/admin/ops'
+      fullPath: '/admin/ops'
+      preLoaderRoute: typeof AdminOpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/reports': {
       id: '/admin/reports'
       path: '/admin/reports'
@@ -306,6 +326,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  AdminOpsRoute: AdminOpsRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminWordsRoute: AdminWordsRoute,
   RoomCodeRoute: RoomCodeRoute,

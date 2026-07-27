@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Definition, Vote, Word } from "@/lib/room";
+import { reportOpsEvent, setOpsRoom } from "@/lib/ops";
 
 export interface RoundExtension {
   id: string;
@@ -28,6 +29,12 @@ export function useRoom(code: string | undefined, playerId?: string) {
   // Local override of is_connected derived from realtime presence.
   // Keys are player ids; values true=connected, false=disconnected.
   const [presenceMap, setPresenceMap] = useState<Record<string, boolean>>({});
+
+  // Fase 8: eventos de telemetria carregam o hash da sala atual.
+  useEffect(() => {
+    setOpsRoom(code ?? null);
+    return () => setOpsRoom(null);
+  }, [code]);
 
   const reloadRef = useRef<() => Promise<void>>(async () => {});
   const optimisticPlayerIdsRef = useRef<Record<string, number>>({});
@@ -327,6 +334,8 @@ export function useRoom(code: string | undefined, playerId?: string) {
             status,
             "— aguardando reconexão",
           );
+          // Fase 8: quedas de canal viram métrica (com throttle/dedupe no ops)
+          reportOpsEvent("reconnect", { channel_status: status });
         }
       });
     return () => {

@@ -15,6 +15,8 @@ import { installAudioUnlock, playUITap, vibrate } from "@/lib/sound";
 import { ensureAnonSession } from "@/lib/auth-session";
 import { installNativeHandlers } from "@/lib/native";
 import { MotionConfig } from "framer-motion";
+import { installOpsCapture } from "@/lib/ops";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { Toaster } from "@/components/ui/sonner";
@@ -254,6 +256,10 @@ function RootComponent() {
   useEffect(() => {
     void installNativeHandlers();
   }, []);
+  // Fase 8: telemetria de erros não tratados (anônima, com throttle).
+  useEffect(() => {
+    installOpsCapture();
+  }, []);
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -302,9 +308,11 @@ function RootComponent() {
           para quem não ativou a preferência. */}
       <MotionConfig reducedMotion="user">
         <OfflineBanner />
-        <main id="main">
-          <Outlet />
-        </main>
+        <ErrorBoundary>
+          <main id="main">
+            <Outlet />
+          </main>
+        </ErrorBoundary>
         <AchievementToaster />
         <Toaster position="top-center" richColors closeButton />
       </MotionConfig>
