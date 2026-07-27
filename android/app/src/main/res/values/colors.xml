@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paleta Verbete: fundo #0f0a1f (mesmo do Capacitor config), roxo da marca -->
+    <color name="colorPrimary">#4c1a8f</color>
+    <color name="colorPrimaryDark">#0f0a1f</color>
+    <color name="colorAccent">#ff4bb0</color>
+</resources>

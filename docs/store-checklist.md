@@ -1,0 +1,104 @@
+# Checklist de publicação — Google Play (Fase 6)
+
+> Estado do repo (2026-07-27): applicationId `app.verbete.game`, versionCode 2 /
+> versionName 2.0.0, ícones adaptativos + monocromático e splash da marca
+> gerados de `resources/` (fonte: `scripts/gen-brand-assets.mjs`), R8 ligado com
+> keep-rules do Capacitor, deep links `/?join=` no manifest, botão voltar
+> tratado (`src/lib/native.ts`). O CI (`.github/workflows/android.yml`) builda o
+> APK de debug a cada push e a release assinada via `workflow_dispatch` quando
+> os secrets do keystore existirem.
+
+## 1. Keystore de assinatura (uma única vez — NUNCA vai para o repo)
+
+No PC (precisa apenas do Java, já instalado):
+
+```bash
+keytool -genkeypair -v -keystore verbete-release.jks -alias verbete \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+- Guarde `verbete-release.jks` e as senhas num cofre (perder = nunca mais
+  atualizar o app na Play Store com esse pacote).
+- `android/.gitignore` já ignora `*.jks` e `key.properties`.
+
+### 1a. Secrets no GitHub (para o CI assinar)
+
+Em Settings → Secrets and variables → Actions do repo, crie:
+
+| Secret | Valor |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | saída de `base64 -w0 verbete-release.jks` (no PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("verbete-release.jks"))`) |
+| `ANDROID_KEYSTORE_PASSWORD` | senha do keystore |
+| `ANDROID_KEY_ALIAS` | `verbete` |
+| `ANDROID_KEY_PASSWORD` | senha da chave |
+
+Depois: aba Actions → workflow "Android" → Run workflow → baixe o artifact
+`verbete-release-aab`.
+
+### 1b. Build local (alternativa, exige Android Studio)
+
+Crie `android/key.properties` (não versionado):
+
+```
+storeFile=../verbete-release.jks
+storePassword=...
+keyAlias=verbete
+keyPassword=...
+```
+
+E rode `cd android && ./gradlew bundleRelease`.
+
+## 2. Conta e ficha na Play Console
+
+1. Conta de desenvolvedor: https://play.google.com/console (taxa única US$ 25).
+2. Criar app → Jogo → Gratuito → Palavras.
+3. Ficha da loja (pt-BR):
+   - Nome: **Verbete — jogo de blefe com palavras**
+   - Descrição curta (80): "Invente significados falsos, engane seus amigos e
+     descubra a definição verdadeira!"
+   - Ícone 512×512: exporte de `resources/icon-only.png` (redimensionar).
+   - Feature graphic 1024×500: montar com o tile + wordmark (posso gerar).
+   - Screenshots: mínimo 2 de celular (tirar do jogo real; posso gerar via
+     Playwright nas telas de votação/revelação/pódio).
+4. Classificação etária (questionário IARC): sem violência; interação entre
+   usuários ON (chat) → provavelmente L/Everyone 10+ por "interação".
+5. Segurança dos dados: coleta e-mail (opcional, login), identificadores
+   anônimos; dados criptografados em trânsito; link da política:
+   https://jogo.verbete.workers.dev/privacy
+6. Público-alvo: 13+ (evita exigências de apps infantis).
+7. Upload do AAB no trilho **Teste interno** primeiro → testar → promover
+   para Produção.
+
+## 3. App Links verificados (`/?join=` abre direto no app)
+
+O manifest já tem o intent-filter com `autoVerify`. Para o Android confiar:
+
+1. Após criar o keystore, extraia a impressão digital:
+   `keytool -list -v -keystore verbete-release.jks -alias verbete | grep SHA256`
+   (se usar Play App Signing, pegue o SHA-256 em Play Console → Setup →
+   App integrity → App signing key certificate).
+2. Me passe o SHA-256 → eu publico
+   `https://jogo.verbete.workers.dev/.well-known/assetlinks.json` no worker.
+
+## 4. Login Google (reativar botões escondidos na Fase 4)
+
+Os botões Google/Apple do `/login` estão ocultos até o provedor existir
+(comentário `OAuth` em `src/routes/login.tsx` marca o ponto de reativação).
+
+1. https://console.cloud.google.com → APIs & Services → Credentials →
+   Create OAuth client ID:
+   - Tipo **Web application** (o Supabase usa o fluxo web mesmo no app)
+   - Authorized redirect URI:
+     `https://wspztmimctgbjcmyzexn.supabase.co/auth/v1/callback`
+2. Configure a tela de consentimento (nome Verbete, domínio
+   jogo.verbete.workers.dev, e-mail de suporte).
+3. Me passe o **Client ID** e o **Client Secret** → eu ativo o provedor no
+   Supabase (via Management API), reativo os botões e testo o fluxo.
+
+Login Apple: só quando houver conta Apple Developer (US$ 99/ano) — fica para
+a versão iOS.
+
+## 5. iOS (futuro)
+
+Exige Mac ou CI com macOS + conta Apple Developer. O projeto Capacitor iOS já
+existe (`ios/`); ícones/splash saem do mesmo `npm run cap:icons -- --ios`.

@@ -1,0 +1,99 @@
+name: Android
+
+# Builda o app Android (a máquina de dev não tem SDK — o runner tem).
+# - Sempre: assembleDebug (valida gradle/manifest/recursos a cada push que
+#   toca android/ ou o bundle web) e sobe o APK de debug como artifact.
+# - Release assinada (AAB p/ Play Store): só quando os secrets do keystore
+#   existem — ver docs/store-checklist.md.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "android/**"
+      - "capacitor.config.ts"
+      - "src/**"
+      - "package*.json"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+jobs:
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Alinhar npm com o lockfile
+        run: npm install -g npm@11
+
+      - run: npm ci
+
+      - name: Bundle web offline (modo capacitor)
+        run: npx vite build --mode capacitor
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Permitir execução do gradlew (checkout do Windows)
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Testes unitários Android
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verbete-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      # ===== Release assinada (opcional — exige secrets) =====
+      # ANDROID_KEYSTORE_BASE64: keystore .jks em base64
+      # ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
+      - name: Preparar keystore
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "Sem ANDROID_KEYSTORE_BASE64 — pulando release assinada."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/release.jks
+          cat > android/key.properties <<EOF
+          storeFile=release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build release AAB (assinado)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        working-directory: android
+        run: |
+          if [ ! -f key.properties ]; then
+            echo "Sem key.properties — pulando bundleRelease."
+            exit 0
+          fi
+          ./gradlew bundleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name == 'workflow_dispatch' && hashFiles('android/key.properties') != '' }}
+        with:
+          name: verbete-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30

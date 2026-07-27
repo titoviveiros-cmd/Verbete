@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { installAudioUnlock, playUITap, vibrate } from "@/lib/sound";
 import { ensureAnonSession } from "@/lib/auth-session";
+import { installNativeHandlers } from "@/lib/native";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { Toaster } from "@/components/ui/sonner";
@@ -245,6 +246,10 @@ function RootComponent() {
   // saia com auth.uid() e a identidade seja reivindicada de imediato.
   useEffect(() => {
     void ensureAnonSession();
+  }, []);
+  // Fase 6: botão voltar do Android + deep links (no-op no web).
+  useEffect(() => {
+    void installNativeHandlers();
   }, []);
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

@@ -19,3 +19,23 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ===== Capacitor / Cordova (R8 ligado na release) =====
+# A ponte JS<->nativo usa reflexão e @JavascriptInterface — sem estas regras
+# o R8 remove métodos chamados só via WebView e o app quebra em release.
+-keep class com.getcapacitor.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.annotation.PermissionCallback <methods>;
+    @com.getcapacitor.annotation.ActivityCallback <methods>;
+    @com.getcapacitor.PluginMethod <methods>;
+}
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keep class org.apache.cordova.** { *; }
+-keep public class * extends org.apache.cordova.CordovaPlugin
+-keepattributes JavascriptInterface
+-keepattributes *Annotation*
+-keepattributes SourceFile,LineNumberTable
+-dontwarn org.apache.cordova.**

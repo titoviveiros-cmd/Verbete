@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package app.verbete.game;
 
 import static org.junit.Assert.*;
 
