@@ -147,7 +147,7 @@ for (const cat of CATEGORIAS) {
         const { rowCount } = await db.query(
           `INSERT INTO public.words
              (word, meaning, category, rarity, nivel, classe, pronuncia, origem, curiosidade, exemplo, sinonimos, status, review_notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'published','IA: gerada e verificada em dupla passada (lote 2026-07-22)')
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'published','IA: gerada e verificada em dupla passada (lote 2026-07-28)')
            ON CONFLICT (word) DO NOTHING`,
           [
             String(c.word).toLowerCase().trim(),
