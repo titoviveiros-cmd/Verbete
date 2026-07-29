@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.verbete.game",
+      "sha256_cert_fingerprints": [
+        "FA:CC:D8:6C:68:B9:66:9D:A7:DB:59:67:5F:8E:17:4F:A1:15:BF:F2:5A:3A:C8:A4:ED:E5:C8:CD:58:39:54:65"
+      ]
+    }
+  }
+]

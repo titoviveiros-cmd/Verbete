@@ -71,14 +71,16 @@ E rode `cd android && ./gradlew bundleRelease`.
 
 ## 3. App Links verificados (`/?join=` abre direto no app)
 
-O manifest já tem o intent-filter com `autoVerify`. Para o Android confiar:
+✅ FEITO (2026-07-28): keystore gerado em `C:\Users\titov\verbete-release\`
+(senha em SENHAS-LEIA-ME.txt — **faça backup da pasta num cofre!**), os 4
+secrets cadastrados no GitHub Actions, e o
+`https://jogo.verbete.workers.dev/.well-known/assetlinks.json` publicado com
+o SHA-256 do certificado.
 
-1. Após criar o keystore, extraia a impressão digital:
-   `keytool -list -v -keystore verbete-release.jks -alias verbete | grep SHA256`
-   (se usar Play App Signing, pegue o SHA-256 em Play Console → Setup →
-   App integrity → App signing key certificate).
-2. Me passe o SHA-256 → eu publico
-   `https://jogo.verbete.workers.dev/.well-known/assetlinks.json` no worker.
+⚠️ Se ativar o **Play App Signing** na Play Console (recomendado), o Google
+re-assina o app com uma chave própria — aí é preciso ADICIONAR o SHA-256 de
+Play Console → Setup → App integrity → "App signing key certificate" ao
+assetlinks.json (me avise que eu adiciono).
 
 ## 4. Login Google (reativar botões escondidos na Fase 4)
 
