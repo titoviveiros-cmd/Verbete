@@ -33,13 +33,16 @@ Deno.serve(async (req) => {
       });
     }
     const MAX_CANDIDATES = 20;
-    const MAX_TEXT_LEN = 300;
-    const candidates = candidatesRaw
+    // Auditoria 2026-07-29: o texto do chamador é IGNORADO — aceitamos só os
+    // ids e buscamos o texto real no banco (service role). Antes, um jogador
+    // podia enviar o próprio id com o texto da verdade copiado após a
+    // revelação e ganhar +3 forjado.
+    const candidateIds = candidatesRaw
       .slice(0, MAX_CANDIDATES)
-      .map((c: { id: unknown; text: unknown }) => ({
-        id: String(c?.id ?? "").slice(0, 64),
-        text: String(c?.text ?? "").slice(0, MAX_TEXT_LEN),
-      }));
+      .map((c: { id: unknown } | string) =>
+        String(typeof c === "object" && c !== null ? (c as { id: unknown }).id : c).slice(0, 64),
+      )
+      .filter((id: string) => id.length > 0);
 
     // Busca a palavra DA RODADA JULGADA (via rounds) — usar a palavra
     // "atual" da sala quebrava quando a sala já tinha avançado de rodada.
@@ -79,6 +82,27 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const truth = String((truthDef as any)?.text ?? "").slice(0, 400);
     if (!word || !truth) {
+      return new Response(JSON.stringify({ matches: [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Textos REAIS das candidatas, restritos à sala/rodada e nunca a verdade.
+    const { data: candRows } = await admin
+      .from("definitions")
+      .select("id,text")
+      .in("id", candidateIds)
+      .eq("room_id", roomId)
+      .eq("round", round)
+      .eq("is_truth", false)
+      .neq("player_id", "__truth__");
+    const candidates = (candRows ?? []).map(
+      (r: { id: string; text: string }) => ({
+        id: String(r.id),
+        text: String(r.text ?? "").slice(0, 300),
+      }),
+    );
+    if (candidates.length === 0) {
       return new Response(JSON.stringify({ matches: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -147,7 +171,11 @@ Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdow
     // vinda do client quanto uma vinda do backstop server-side (pg_net
     // dentro de advance_voting_to_reveal) resultam no bônus aplicado.
     if (matches.length > 0) {
+      // Assinatura nova (auditoria): idempotente e presa à sala/rodada —
+      // replay não soma de novo (near_truth já true = 0 linhas).
       const { error: bonusError } = await admin.rpc("apply_similarity_bonus", {
+        p_room_id: roomId,
+        p_round: round,
         p_definition_ids: matches,
       });
       if (bonusError) console.error("apply_similarity_bonus failed", bonusError);
