@@ -21,7 +21,7 @@ const ReportInput = z.object({
 
 export const reportDefinition = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => ReportInput.parse(input))
+  .validator((input) => ReportInput.parse(input))
   .handler(async ({ data, context }) => {
     const { userId } = context;
 
@@ -93,7 +93,7 @@ const ResolveInput = z.object({
 
 export const resolveReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => ResolveInput.parse(input))
+  .validator((input) => ResolveInput.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: isAdmin } = await supabase

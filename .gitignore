@@ -22,3 +22,7 @@ android/capacitor-cordova-android-plugins/
 test-results/
 playwright-report/
 shots-*.png
+
+# Artefatos locais de CLI (auditoria 2026-07-29)
+.wrangler/
+supabase/.temp/

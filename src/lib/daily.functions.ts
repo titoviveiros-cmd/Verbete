@@ -62,7 +62,7 @@ async function scoreSemanticSimilarity(
 
 export const submitDailyAttempt = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => submitInput.parse(input))
+  .validator((input) => submitInput.parse(input))
   .handler(async ({ data, context }) => {
     const { userId } = context;
 

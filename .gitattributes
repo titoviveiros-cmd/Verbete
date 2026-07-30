@@ -1,0 +1,18 @@
+# Auditoria 2026-07-29: fim do vaivém CRLF/LF entre Windows (dev) e Linux
+# (CI/auditoria). Texto normalizado para LF no repositório; binários intactos.
+* text=auto eol=lf
+
+# Windows exige CRLF nestes:
+*.bat text eol=crlf
+gradlew.bat text eol=crlf
+
+# Binários — nunca tocar
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.jks binary
+*.woff binary
+*.woff2 binary
