@@ -236,7 +236,12 @@ function RevealImpl({
       const ids: string[] =
         (data as { near_truth_ids?: string[] } | null)?.near_truth_ids ?? [];
       if (ids.length > 0) setNearTruthIds(new Set(ids));
-      if (ids.length === 0 && tries < 8) setTimeout(fetchNear, 2000);
+      // BUGFIX (sala 7879, 2026-08-02): a lista é da SALA inteira — um 🧠
+      // de rodada anterior fazia o poll parar ANTES do veredito da rodada
+      // atual chegar (o juiz roda ~2s após a virada), e o badge/+3 não
+      // apareciam na revelação (o placar seguinte já mostrava certo).
+      // Agora consulta até o fim da revelação: o badge entra ao vivo.
+      if (tries < 18) setTimeout(fetchNear, 2000);
     };
     void fetchNear();
     return () => {
