@@ -82,20 +82,17 @@ re-assina o app com uma chave própria — aí é preciso ADICIONAR o SHA-256 de
 Play Console → Setup → App integrity → "App signing key certificate" ao
 assetlinks.json (me avise que eu adiciono).
 
-## 4. Login Google (reativar botões escondidos na Fase 4)
+## 4. Login Google
 
-Os botões Google/Apple do `/login` estão ocultos até o provedor existir
-(comentário `OAuth` em `src/routes/login.tsx` marca o ponto de reativação).
+✅ FEITO (2026-08-02): OAuth client "Verbete Web" criado no Google Cloud
+pelo Tito; provedor ativado no Supabase via Management API; botão
+"Entrar com Google" no ar no /login (deploy aef02b2) — clique validado
+navegando até accounts.google.com.
 
-1. https://console.cloud.google.com → APIs & Services → Credentials →
-   Create OAuth client ID:
-   - Tipo **Web application** (o Supabase usa o fluxo web mesmo no app)
-   - Authorized redirect URI:
-     `https://wspztmimctgbjcmyzexn.supabase.co/auth/v1/callback`
-2. Configure a tela de consentimento (nome Verbete, domínio
-   jogo.verbete.workers.dev, e-mail de suporte).
-3. Me passe o **Client ID** e o **Client Secret** → eu ativo o provedor no
-   Supabase (via Management API), reativo os botões e testo o fluxo.
+Pendente: 1 login real completo (valida o client secret no token
+exchange). Se aparecer erro invalid_client APÓS escolher a conta,
+redefinir o secret em Google Cloud → Credenciais → Verbete Web e me
+passar o novo como texto.
 
 Login Apple: só quando houver conta Apple Developer (US$ 99/ano) — fica para
 a versão iOS.
