@@ -133,12 +133,14 @@ await host
 await host.waitForTimeout(2500);
 await shot(host, "shot-6-revelacao");
 
-// Placar
+// Placar — o marcador entra no DOM ainda sob a cortina de transição
+// (PHASE_ANNOUNCER_TOTAL_MS = 3800) + coreografia de ultrapassagem (~1s);
+// espera o cenário assentar antes de fotografar.
 await host
   .getByText(/Como cada um pontuou|Pontuação por equipe/)
   .first()
   .waitFor({ timeout: 120000 });
-await host.waitForTimeout(1500);
+await host.waitForTimeout(6500);
 await shot(host, "shot-7-placar");
 
 await browser.close();
