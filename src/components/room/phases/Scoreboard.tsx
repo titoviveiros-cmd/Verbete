@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { hapticSuccess } from "@/lib/sound";
 import { getPlayerId } from "@/lib/player-id";
 import { scalePhaseSecs } from "@/lib/game-times";
+import { TrophyIcon } from "@/components/TrophyIcon";
 import { motion } from "framer-motion";
 import {
   nextRound,
@@ -334,8 +335,8 @@ function ScoreboardImpl({
       className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
     >
       <div className="shrink-0">
-        <h2 className="font-display text-4xl text-center text-sun leading-tight">
-          Placar 📊
+        <h2 className="font-display text-4xl text-center text-sun leading-tight flex items-center justify-center gap-2.5">
+          Placar <TrophyIcon size={36} />
         </h2>
         <p className="text-center text-base text-muted-foreground mt-1">
           {sortedTeams.length > 0
