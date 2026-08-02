@@ -89,10 +89,9 @@ pelo Tito; provedor ativado no Supabase via Management API; botão
 "Entrar com Google" no ar no /login (deploy aef02b2) — clique validado
 navegando até accounts.google.com.
 
-Pendente: 1 login real completo (valida o client secret no token
-exchange). Se aparecer erro invalid_client APÓS escolher a conta,
-redefinir o secret em Google Cloud → Credenciais → Verbete Web e me
-passar o novo como texto.
+✅ VALIDADO (2026-08-02): login real completado pelo Tito — identidade
+google vinculada à conta existente (provedores email+google, admin
+intacto). Fluxo 100% funcional.
 
 Login Apple: só quando houver conta Apple Developer (US$ 99/ano) — fica para
 a versão iOS.
