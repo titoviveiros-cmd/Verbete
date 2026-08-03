@@ -3,6 +3,10 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=11"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -19,7 +23,7 @@
     "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm run test",
     "cap:sync": "vite build --mode capacitor && cap sync",
-    "cap:icons": "capacitor-assets generate --assetPath resources",
+    "cap:icons": "npx --yes @capacitor/assets generate --assetPath resources",
     "cap:ios": "vite build --mode capacitor && cap sync ios && cap open ios",
     "cap:android": "vite build --mode capacitor && cap sync android && cap open android"
   },
@@ -90,7 +94,6 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.32.0",
     "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
