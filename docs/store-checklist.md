@@ -48,6 +48,23 @@ keyPassword=...
 
 E rode `cd android && ./gradlew bundleRelease`.
 
+## 1c. Validação da trilha nativa (nota para auditorias)
+
+A fonte de verdade da trilha nativa é o **workflow Android do GitHub
+Actions** (`.github/workflows/android.yml`): a cada push ele roda
+`vite build --mode capacitor` → `cap sync android` → Gradle (APK debug +
+testes) e publica os artifacts; via *workflow_dispatch* gera também o
+**AAB assinado**. Um run verde = trilha validada de ponta a ponta.
+
+O passo de prerender do TanStack Start sobe um servidor `vite preview`
+local e faz fetch de `127.0.0.1:<porta>` para gerar o `index.html` do
+shell. Em sandboxes restritos (agentes de IA, containers sem loopback
+IPv4 completo) esse fetch pode falhar com `ECONNREFUSED` mesmo com o
+código íntegro — nesses ambientes, valide pelo CI e seus artifacts em
+vez do build local. Pista de diagnóstico: conferir se `vite preview
+--host 127.0.0.1` sobe e responde (descarta conflito de binding
+IPv4/IPv6 do loopback).
+
 ## 2. Conta e ficha na Play Console
 
 1. Conta de desenvolvedor: https://play.google.com/console (taxa única US$ 25).
