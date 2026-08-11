@@ -31,6 +31,11 @@ jobs:
       - name: Gerar tipos
         run: supabase gen types typescript --local --schema public > src/integrations/supabase/types.ts
 
+      - name: Formatar com o Prettier do projeto
+        # Sem isto o commit do bot quebra o step de Lint do CI (o gerador
+        # não segue o prettier.config — regressão real em 2026-08-04).
+        run: npx --yes prettier --write src/integrations/supabase/types.ts
+
       - name: Commitar se houver drift
         run: |
           if git diff --quiet -- src/integrations/supabase/types.ts; then
