@@ -55,7 +55,7 @@ jobs:
         working-directory: android
         run: ./gradlew testDebugUnitTest --no-daemon
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: verbete-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
@@ -91,7 +91,7 @@ jobs:
           fi
           ./gradlew bundleRelease --no-daemon
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'workflow_dispatch' && hashFiles('android/key.properties') != '' }}
         with:
           name: verbete-release-aab
