@@ -5,11 +5,18 @@
 // tentativas usam ids inexistentes / sala inexistente).
 // Envs: SUPA_URL, ANON (chave publicável), DB_URL (postgres), APP_URL,
 // EXPECT_BUILD (opcional: SHA do deploy web, confere o meta verbete-build),
-// SKIP_WEB=1 (só no CI, que valida esta sonda contra o banco local no M1).
+// SKIP_WEB=1 (só no CI, que valida esta sonda contra o banco local no M1),
+// PROBE_DB=linked|local: lê o catálogo pela CLI do Supabase (`db query`), sem
+// DB_URL — para quando a senha do banco não está na máquina (a CLI logada usa
+// um papel temporário de login).
 import pg from "pg";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { httpGet } from "./lib/http-doh.mjs";
 
-const { SUPA_URL, ANON, DB_URL, EXPECT_BUILD, SKIP_WEB } = process.env;
+const { SUPA_URL, ANON, DB_URL, EXPECT_BUILD, SKIP_WEB, PROBE_DB } = process.env;
 const APP_URL = process.env.APP_URL ?? "https://jogo.verbete.workers.dev";
 let fails = 0;
 const check = (name, ok, detail = "") => {
@@ -26,12 +33,40 @@ const rest = async (path, body) => {
   return { status: r.status, text: await r.text() };
 };
 
-const db = new pg.Client({
-  connectionString: DB_URL,
-  ssl: /supabase\.(co|com)/.test(DB_URL ?? "") ? { rejectUnauthorized: false } : false,
-});
-await db.connect();
-const q = async (sql) => (await db.query(sql)).rows;
+let db = null;
+let q;
+if (PROBE_DB === "linked" || PROBE_DB === "local") {
+  const dir = mkdtempSync(join(tmpdir(), "probe-m1-"));
+  let n = 0;
+  q = async (sql) => {
+    const file = join(dir, `q${n++}.sql`);
+    writeFileSync(file, sql);
+    const r = spawnSync(
+      process.execPath,
+      ["node_modules/supabase/dist/supabase.js", "db", "query", `--${PROBE_DB}`, "--output-format", "json", "-f", file],
+      { encoding: "utf8" },
+    );
+    const out = r.stdout ?? "";
+    const json = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      /* cai no erro abaixo */
+    }
+    if (r.status !== 0 || !Array.isArray(parsed?.rows)) {
+      throw new Error(`db query --${PROBE_DB} falhou: ${(out + (r.stderr ?? "")).trim().slice(0, 300)}`);
+    }
+    return parsed.rows;
+  };
+} else {
+  db = new pg.Client({
+    connectionString: DB_URL,
+    ssl: /supabase\.(co|com)/.test(DB_URL ?? "") ? { rejectUnauthorized: false } : false,
+  });
+  await db.connect();
+  q = async (sql) => (await db.query(sql)).rows;
+}
 
 console.log("— Catálogo (somente leitura)");
 const mig = await q(
@@ -67,12 +102,23 @@ const leaked = await q(`
 check("funções internas fechadas", leaked.length === 0, leaked.map((x) => x.proname).join(", "));
 const jobs = await q(`SELECT jobname FROM cron.job WHERE jobname IN ('verbete-tick-stalled-rooms','verbete-ops-health')`);
 check("cron do motor e da saúde agendados", jobs.length === 2, jobs.map((j) => j.jobname).join(", "));
-const [hb] = await q(`SELECT max(at) AS at FROM public.ops_heartbeat WHERE job = 'tick_stalled_rooms'`);
-check("heartbeat do tick recente (< 3 min)", hb?.at && Date.now() - new Date(hb.at).getTime() < 180_000, String(hb?.at));
+// idade calculada no banco: independe do formato de data de cada transporte
+const [hbTable] = await q(`SELECT to_regclass('public.ops_heartbeat') IS NOT NULL AS ok`);
+const [hb] = hbTable?.ok
+  ? await q(
+      `SELECT extract(epoch FROM now() - max(at))::int AS age_s, max(at)::text AS at
+         FROM public.ops_heartbeat WHERE job = 'tick_stalled_rooms'`,
+    )
+  : [{ age_s: null, at: "tabela ops_heartbeat ausente" }];
+check(
+  "heartbeat do tick recente (< 3 min)",
+  hb?.age_s !== null && hb?.age_s !== undefined && Number(hb.age_s) < 180,
+  `${hb?.at} (${hb?.age_s} s atrás)`,
+);
 
 if (fails > 0) {
   console.log("\nCatálogo com falha: as tentativas pela API NÃO serão feitas (poderiam gravar algo).");
-  await db.end();
+  await db?.end();
   process.exit(1);
 }
 
@@ -124,6 +170,6 @@ if (EXPECT_BUILD && !SKIP_WEB) {
   );
 }
 
-await db.end();
+await db?.end();
 console.log(fails ? `\n${fails} FALHA(S)` : "\nPRODUÇÃO M1 OK");
 process.exit(fails ? 1 : 0);
