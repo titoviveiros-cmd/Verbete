@@ -1,6 +1,8 @@
-// Roda TODAS as suítes de integração SQL (Supabase local do CI) e só falha
-// no fim, com o resumo — uma falha não esconde as demais.
-// test-judge-calibration fica de fora: depende da chave real do Gemini.
+// Roda TODAS as suítes de integração (Supabase local do CI) e só falha no
+// fim, com o resumo — uma falha não esconde as demais.
+// test-judge-calibration fica de fora: depende da chave real do Gemini
+// (test-edges-e2e cobre o mesmo caminho com um Gemini simulado).
+// ci-android.mjs (Gradle) só roda no CI com Android SDK; é no-op local.
 import { spawnSync } from "node:child_process";
 
 const SUITES = [
@@ -9,9 +11,12 @@ const SUITES = [
   "test-security-rest.mjs",
   "test-shuffling-deadlock.mjs",
   "test-similarity-bonus.mjs",
+  "test-edges-e2e.mjs",
   "test-phase-secs.mjs",
   "test-ops.mjs",
   "test-ops-health.mjs",
+  "test-rollback.mjs",
+  "ci-android.mjs",
 ];
 
 const results = [];
