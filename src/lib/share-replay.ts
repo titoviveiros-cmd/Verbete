@@ -1,7 +1,7 @@
 // Geração e compartilhamento de "card de replay" da rodada do Verbete.
 // Renderiza um PNG quadrado (1080x1350, formato story) com a palavra,
 // a verdade, e quem caiu em qual blefe. Usa Web Share API com File quando
-import { APP_HOST } from "@/lib/app-url";
+import { APP_HOST, APP_URL } from "@/lib/app-url";
 // disponível (mobile, ideal para Stories/WhatsApp/TikTok); fallback faz download.
 
 export interface ReplayCardData {
@@ -170,7 +170,7 @@ export async function shareReplayCard(
     const file = new File([blob], `verbete-replay-${data.roomCode}.png`, {
       type: "image/png",
     });
-    const text = `Olha esse blefe no Verbete 🤥 a palavra era "${data.word}". Joga comigo: ${APP_HOST}`;
+    const text = `Olha esse blefe no Verbete 🤥 a palavra era "${data.word}". Joga comigo: ${APP_URL}`;
     const nav = navigator as Navigator & {
       canShare?: (d: ShareData) => boolean;
     };
