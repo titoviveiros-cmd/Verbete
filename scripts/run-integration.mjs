@@ -6,6 +6,7 @@
 import { spawnSync } from "node:child_process";
 
 const SUITES = [
+  "ci-deno-check.mjs",
   "test-identity.mjs",
   "test-e2e-round.mjs",
   "test-security-rest.mjs",
