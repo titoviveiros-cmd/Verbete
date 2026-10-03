@@ -53,3 +53,35 @@
 - `scripts/test-identity.mjs` — 13/13 (forja de mensagem/definição/voto, sequestro de id no rejoin/create, reset/start/kick por não-host, fallbacks sem sessão e legado, claim no rejoin).
 - `scripts/test-e2e-round.mjs` — 12/12 (rodada completa REST anônimo: pontuação original +3/+1 exata, fases corretas).
 - Probes anteriores da Fase 1 (partes 1–3): `scripts/probe-security.mjs`, `probe-stats.mjs`, `probe-ballot.mjs` — colunas sensíveis de `words` e leitura de `definitions` seguem revogadas.
+
+---
+
+## M1 (2026-10-03) — autoridade do servidor, sessão obrigatória e allowlist
+
+Origem: Master Release Audit (`docs/audit-verbete-2-release.md`) + análise final do M1. Migrations `20261003100000` (lote A), `20261003110000` (E), `20261003120000` (F), `20261003130000` (H).
+
+**O que mudou no modelo**
+
+| Antes | Depois |
+|---|---|
+| `players`, `definitions`, `rounds`, `round_extensions`, `rooms`(host_id), `room_words`, `reactions` aceitavam escrita direta (policies `USING(true)` + GRANTs) | Tabelas de jogo **somente leitura** para `anon`/`authenticated`; toda mutação por RPC `SECURITY DEFINER` |
+| Fallback "sem sessão": `auth.uid() IS NULL` liberava todas as guardas | Chamada da **API pública** sem sessão (papel `anon`/`authenticated` sem `sub`) recebe `session_required`. Cron, SQL interno e `service_role` seguem liberados (o papel vem do GUC `role` do PostgREST, que `SECURITY DEFINER` não altera) |
+| `insert_truth_definition` aberta: qualquer um plantava/trocava a verdade | Revogada; a verdade só entra por `advance_writing_to_voting` (servidor) |
+| `join_public_room` movia de sala e zerava o placar de qualquer `player_id` | Recusa id de outra identidade (`player_id_taken`) e reivindica a linha |
+| `leave_room` tirava qualquer jogador | Exige a identidade do próprio jogador |
+| Lotes dos bots (`submit_bot_definitions_bulk`, `cast_votes_bulk`) abertos a qualquer sessão | Exigem a sessão do **host** (o client já só orquestra no host) |
+| `migrate_host` era UPDATE direto com guarda otimista | RPC: herdeiro (humano vivo mais antigo) calculado no servidor; backstop no tick |
+| `room_words.meaning` legível durante a rodada | Ilegível pela API; chega só por `get_word_reveal()` na revelação |
+| `apply_similarity_bonus` executável por anon (o REVOKE de 0729 só cobria `PUBLIC`) | Revogado por nome de `PUBLIC`, `anon`, `authenticated`; só `service_role` |
+| Privilégios padrão do Supabase davam EXECUTE/ALL a anon em todo objeto novo | `ALTER DEFAULT PRIVILEGES`: funções e tabelas novas nascem fechadas — toda RPC de client precisa de `GRANT` explícito |
+
+**Guarda contra regressão:** `scripts/test-security-rest.mjs` (CI) tenta, pela API REST com a chave publicável — sem sessão e com sessão de outro jogador — PATCH em `players.score/user_id/kicked_at/is_bot`, PATCH `rooms.host_id`, INSERT em `players/rooms/rounds/room_words/room_messages/reactions/votes/round_extensions`, PATCH/DELETE em `definitions`, SELECT de `room_words.meaning`, `apply_similarity_bonus`, `insert_truth_definition`, sobrescrever voto/definição alheios, tirar jogador da sala, comandar bots; confere o estado no banco depois de cada tentativa; joga uma partida legítima de 2 rodadas com a pontuação original; e compara a lista de funções executáveis por `anon` com uma **allowlist** (função nova exposta sem decisão explícita quebra o CI).
+
+**Riscos residuais (M2)**
+
+| Risco | Severidade | Plano |
+|---|---|---|
+| Transições de fase (`choose_word`, `start_shuffling`, `finish_reveal`, `advance_*`, `extend_*`) sem dono — qualquer sessão com o id da sala aciona (SM-03) | baixa | servidor valida fase/prazo/quórum; exigir membro da sala |
+| `get_or_create_daily_challenge`, `admin_*` executáveis por anon (checam papel/idempotentes) | info | restringir a `authenticated` |
+| Linhas legadas com `user_id NULL` | baixa | expiram com as salas |
+| Falha do login anônimo (ex.: limite de 30/h por IP do Supabase) agora impede jogar — antes jogava sem proteção | média p/ eventos com muitos aparelhos na mesma rede | elevar o limite em Auth → Rate limits se necessário; o client tenta 3x e mostra aviso |

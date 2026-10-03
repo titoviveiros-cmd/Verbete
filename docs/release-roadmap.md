@@ -1,6 +1,8 @@
 # Verbete — Roadmap de release (lançamento gratuito)
 > Auditoria Master Release · 2026-10-02 · HEAD `e811635` (código de app: `17bb348`/`bb08c58`) · produção web `17bb348` · SOMENTE LEITURA (nenhum código de produto alterado)
 
+> **Status 2026-10-03:** M1 + M1b + parte do M2 (TI-01, T-03, regressões de RLS e SM-01) **prontos em código** na branch `m1-hardening` (PR #1, rascunho) — produção inalterada. Relatório, pendências e comandos de produção: `docs/m1-preprod-report.md`.
+
 ## Roadmap de implementação (após autorização — NADA executado nesta auditoria)
 | Marco | Conteúdo (IDs) | Esforço |
 |---|---|---|
