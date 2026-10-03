@@ -1005,6 +1005,7 @@ export type Database = {
       finish_reveal: { Args: { p_room_id: string }; Returns: Json };
       get_app_config: { Args: { p_key: string }; Returns: string };
       get_ballot: { Args: { p_room_id: string }; Returns: Json };
+      get_client_config: { Args: never; Returns: Json };
       get_daily_leaderboard: {
         Args: { p_limit?: number };
         Returns: {
