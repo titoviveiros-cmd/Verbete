@@ -13,7 +13,7 @@ O teste de ponta a ponta das edges, criado nesta rodada, achou um problema que a
 | Item | Valor |
 |---|---|
 | SHA inicial | `dd443af` (= origin/master = commit da auditoria) |
-| SHA final de código | `d5cb048` — CI verde: run [37131431289](https://github.com/titoviveiros-cmd/Verbete/actions/runs/37131431289). O commit seguinte só adiciona este relatório e a seção M1 de `docs/security-audit.md` |
+| SHA final de código | `d5cb048` — CI verde: run [37131431289](https://github.com/titoviveiros-cmd/Verbete/actions/runs/37131431289). Os commits seguintes só alteram documentação (este relatório e a seção M1 de `docs/security-audit.md`) |
 | Produção web | `17bb348` (inalterada) |
 | Commit local não publicado | `ci: deno check, Android build on PRs, native bundle smoke, 90-day AAB` (branch local `m1-workflows`, rebaseada no SHA final) — o token desta máquina não tem o escopo `workflow`. O mesmo efeito já roda no CI do PR via `ci-deno-check.mjs` e `ci-android.mjs` |
 
@@ -22,7 +22,7 @@ O teste de ponta a ponta das edges, criado nesta rodada, achou um problema que a
 | # | Exigência | Resultado | Evidência |
 |---|---|---|---|
 | 1 | CI totalmente verde no HEAD | ✅ | run 37131431289 em `d5cb048`: `build-and-test` ✅ e `integration` ✅ (13 suítes + Playwright) |
-| 2 | lint + typecheck | ✅ | lint 0 erros (60 avisos antigos de `exhaustive-deps`/`react-refresh`); `tsc --noEmit` limpo; `deno check` das 2 edges limpo |
+| 2 | lint + typecheck | ✅ | lint **0 erros**; 60 avisos, todos dívida anterior (30 `exhaustive-deps`, 20 `any` explícito, 10 `react-refresh`) — nenhum novo: os 5 que caem em linhas tocadas pelo M1 são casts `as any` antigos de `submitDefinition` que só mudaram de indentação; `tsc --noEmit` limpo; `deno check` das 2 edges limpo |
 | 3 | unitários | ✅ | 107/107 (16 arquivos) (Vitest) |
 | 4 | SQL / integração | ✅ | Supabase local do zero (93 migrations antigas + 5 do M1) + suítes da seção 6 |
 | 5 | segurança (negativos) | ✅ | `test-security-rest` 100/100: escrita direta recusada em 10 tabelas, verdade/bônus/funções internas fechadas, sessão obrigatória, allowlist de 45 funções; `test-identity` 13/13; rollback não reabre furos |
@@ -68,7 +68,8 @@ O teste de ponta a ponta das edges, criado nesta rodada, achou um problema que a
 | `1ae8af9` | CI | `deno check` das edges no CI do PR |
 | `0f2e431` | ops | ferramenta segura para alerta, versão mínima e manutenção |
 | `d5cb048` | testes | a sonda de produção validada contra o banco M1 no CI |
-| (este) | docs | relatório final com as 18 provas (só documentação) |
+| `2d5f42f` | docs | relatório final com as 18 provas (só documentação) |
+| (este) | docs | precisão do item 2 (lint) e da contagem da sonda |
 
 ## 5. Arquivos e migrations
 
@@ -102,7 +103,7 @@ O teste de ponta a ponta das edges, criado nesta rodada, achou um problema que a
 | `test-ops` | fora do CI | 6/6 | 0 |
 | `test-ops-health` (tick, heartbeat, alertas, config remota, manutenção) | — | 20/20 | 0 |
 | `test-rollback` (3 rollbacks + ferramentas do runbook) | — | 20/20 | 0 |
-| `test-probe-local` (a sonda de produção contra o banco M1 do CI) | — | 1/1 | 0 |
+| `test-probe-local` (a sonda de produção contra o banco M1 do CI, incluindo as edges servidas pelo Supabase local) | — | 1/1 (sonda: 15/15 checagens, "PRODUÇÃO M1 OK") | 0 |
 | `ci-android` (trava negativa, build, smoke, Gradle, APK) | — | 9/9 (+10 checagens do smoke do bundle) | 0 |
 | Playwright (smoke, partida multiplayer, og:image ×2, compartilhar) | 2 | 5/5 | 0 |
 
@@ -116,7 +117,8 @@ O teste de ponta a ponta das edges, criado nesta rodada, achou um problema que a
 | `1d7a0c5`, `ca5fc3a` | ❌ | o pré-voo novo mostrou a chave de serviço sem privilégio de tabela (42501) — corrigido com a migration espelho em `06cf28e` |
 | `e7319a3` | ✅ | 11/11 suítes, Playwright 5/5 |
 | `1ae8af9`, `0f2e431` | ✅ | 12/12 suítes, Playwright 5/5 |
-| `d5cb048` | ✅ | 13/13 suítes (+ validação da sonda de produção), Playwright 5/5 |
+| `d5cb048` | ✅ | 13/13 suítes (+ validação da sonda de produção), Playwright 5/5 — SHA final de código |
+| `2d5f42f` | ✅ | 1ª versão deste relatório (só documentação) |
 
 Alguns logs do CI mostram avisos de limite de download do Docker Hub (`toomanyrequests`) ao subir o Supabase local; o `supabase start` se recuperou — é instabilidade da infraestrutura do CI, não do produto, e pode um dia derrubar um run sem relação com o código (basta rodar de novo).
 
