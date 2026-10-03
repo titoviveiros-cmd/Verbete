@@ -6,6 +6,7 @@
 // ./logic.ts e ../_shared/ai.ts, cobertas por testes.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
+import { isUuid, readJsonObject } from "../_shared/input.ts";
 import {
   dropAlreadyServed,
   dropNearTruth,
@@ -64,15 +65,15 @@ Deno.serve(async (req) => {
   const t0 = Date.now();
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   try {
-    const body = await req.json();
-    const wordId = typeof body?.word_id === "string" ? body.word_id : "";
+    const body = await readJsonObject(req);
+    const wordId = isUuid(body?.word_id) ? body.word_id : "";
     const personas = body?.personas;
     // Memória por rodada (opcional/retrocompatível): com room_id+round,
     // textos já servidos NUNCA se repetem — sugestão de um jogador não pode
     // reaparecer como cédula de bot (vazava que a alternativa era falsa).
-    const memRoomId = typeof body?.room_id === "string" ? body.room_id : "";
-    const memRound = Number.isFinite(Number(body?.round))
-      ? Number(body.round)
+    const memRoomId = isUuid(body?.room_id) ? body.room_id : "";
+    const memRound = Number.isInteger(Number(body?.round))
+      ? Number(body?.round)
       : null;
     if (!wordId) {
       return new Response(JSON.stringify({ error: "word_id required" }), {

@@ -252,6 +252,22 @@ try {
         ev.payload.status === 503,
       `${short(r.json)} tentativas=${calls.length - before} ${short(ev)}`,
     );
+
+    const junkFrom = (
+      await row(`SELECT COALESCE(max(id), 0) AS id FROM public.ops_events`)
+    ).id;
+    const junk = await fetch("http://127.0.0.1:8000/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "lixo",
+    });
+    r = await callEdge({ word_id: "w1", count: 2 });
+    const junkEv = await lastEvent("bot_ai_%", junkFrom);
+    check(
+      "pedido malformado (JSON inválido, id não-UUID) → 400, sem evento de erro de IA",
+      junk.status === 400 && r.status === 400 && !junkEv,
+      `HTTP ${junk.status}/${r.status} ${short(junkEv)}`,
+    );
   } finally {
     await stopEdge(edge);
   }
@@ -374,6 +390,27 @@ try {
         ev?.kind === "judge_ai_error" &&
         ev.payload.attempts === 2,
       `${short(r.json)} ${short(ev)}`,
+    );
+
+    const junkFrom = (
+      await row(`SELECT COALESCE(max(id), 0) AS id FROM public.ops_events`)
+    ).id;
+    const junkCalls = calls.length;
+    r = await callEdge({ room_id: "lixo", round: 1, candidates: [{ id: "x" }] });
+    const junk = await fetch("http://127.0.0.1:8000/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "lixo",
+    });
+    const junkBody = await junk.json().catch(() => null);
+    const junkEv = await lastEvent("judge_ai_%", junkFrom);
+    check(
+      "pedido malformado → nada julgado, IA não chamada, sem evento de erro",
+      short(r.json) === short({ matches: [] }) &&
+        short(junkBody) === short({ matches: [] }) &&
+        calls.length === junkCalls &&
+        !junkEv,
+      `${short(r.json)} ${short(junkBody)} ${short(junkEv)}`,
     );
 
     // ----- cadeia completa de produção: fim da votação → pg_net → edge

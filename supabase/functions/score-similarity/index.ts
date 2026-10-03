@@ -5,6 +5,7 @@
 // envia a resposta, evitando que ela seja interceptada / usada para cheating.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, parseJsonObject, type OpsEvent } from "../_shared/ai.ts";
+import { isUuid, readJsonObject } from "../_shared/input.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,11 +38,11 @@ Deno.serve(async (req) => {
   const t0 = Date.now();
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   try {
-    const body = await req.json();
-    const roomId = typeof body?.room_id === "string" ? body.room_id : "";
+    const body = await readJsonObject(req);
+    const roomId = isUuid(body?.room_id) ? body.room_id : "";
     const round = Number(body?.round);
     const candidatesRaw = body?.candidates;
-    if (!roomId || !Number.isFinite(round) || !Array.isArray(candidatesRaw) || candidatesRaw.length === 0) {
+    if (!roomId || !Number.isInteger(round) || !Array.isArray(candidatesRaw) || candidatesRaw.length === 0) {
       return json({ matches: [] });
     }
     const MAX_CANDIDATES = 20;
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
       .map((c: { id: unknown } | string) =>
         String(typeof c === "object" && c !== null ? (c as { id: unknown }).id : c).slice(0, 64),
       )
-      .filter((id: string) => id.length > 0);
+      .filter(isUuid);
 
     // Só julga rodada JÁ PONTUADA (linha em rounds, inserida por
     // advance_voting_to_reveal antes de chamar esta função). Durante a
