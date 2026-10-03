@@ -3,7 +3,8 @@
 // Recebe { room_id, round, candidates: [{id, text}] } e devolve { matches: [id, ...] }.
 // IMPORTANTE: palavra e verdade são buscadas AQUI (service role); o cliente nunca
 // envia a resposta, evitando que ela seja interceptada / usada para cheating.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { callChat, exceptionEvent, parseJsonObject, type OpsEvent } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,8 +12,21 @@ const corsHeaders = {
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+const json = (body: unknown) =>
+  new Response(JSON.stringify(body), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+// Telemetria nunca derruba o pedido.
+async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
+  try {
+    await admin.from("ops_events").insert({ kind: ev.kind, payload: ev.payload });
+  } catch (e) {
+    console.warn("ops_events insert failed", e);
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -20,17 +34,15 @@ Deno.serve(async (req) => {
   // Sem gate de autenticação: a palavra e a definição verdadeira são buscadas
   // server-side (service role); o cliente não envia nada explorável. Jogadores
   // anônimos (convidados) precisam poder ganhar o bônus de equivalência ≥80%.
-
-
+  const t0 = Date.now();
+  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   try {
     const body = await req.json();
     const roomId = typeof body?.room_id === "string" ? body.room_id : "";
     const round = Number(body?.round);
     const candidatesRaw = body?.candidates;
     if (!roomId || !Number.isFinite(round) || !Array.isArray(candidatesRaw) || candidatesRaw.length === 0) {
-      return new Response(JSON.stringify({ matches: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ matches: [] });
     }
     const MAX_CANDIDATES = 20;
     // Auditoria 2026-07-29: o texto do chamador é IGNORADO — aceitamos só os
@@ -44,33 +56,27 @@ Deno.serve(async (req) => {
       )
       .filter((id: string) => id.length > 0);
 
-    // Busca a palavra DA RODADA JULGADA (via rounds) — usar a palavra
-    // "atual" da sala quebrava quando a sala já tinha avançado de rodada.
-    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    let wid: string | null = null;
+    // Só julga rodada JÁ PONTUADA (linha em rounds, inserida por
+    // advance_voting_to_reveal antes de chamar esta função). Durante a
+    // votação a função respondia na hora quando o id era o da verdade
+    // (filtrada antes da IA) e devagar para os falsos — um oráculo de tempo
+    // que entregava a resposta (SEC-05). A palavra vem da rodada julgada:
+    // usar a palavra "atual" da sala quebrava quando ela já tinha avançado.
     const { data: roundRow } = await admin
       .from("rounds")
       .select("word_id")
       .eq("room_id", roomId)
       .eq("round", round)
       .maybeSingle();
-    wid = (roundRow as any)?.word_id ?? null;
-    if (!wid) {
-      const { data: room } = await admin
-        .from("rooms").select("current_word_id").eq("id", roomId).maybeSingle();
-      wid = (room as any)?.current_word_id ?? null;
-    }
-    if (!wid) {
-      return new Response(JSON.stringify({ matches: [], error: "word_not_found" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const wid: string | null = (roundRow as { word_id?: string } | null)?.word_id ?? null;
+    if (!wid) return json({ matches: [], error: "round_not_scored" });
+
     let word = "";
     const { data: w1 } = await admin.from("words").select("word").eq("id", wid).maybeSingle();
-    if (w1) word = String((w1 as any).word ?? "");
+    if (w1) word = String((w1 as { word?: string }).word ?? "");
     else {
       const { data: w2 } = await admin.from("room_words").select("word").eq("id", wid).maybeSingle();
-      if (w2) word = String((w2 as any).word ?? "");
+      if (w2) word = String((w2 as { word?: string }).word ?? "");
     }
 
     const { data: truthDef } = await admin
@@ -80,12 +86,8 @@ Deno.serve(async (req) => {
       .eq("round", round)
       .eq("is_truth", true)
       .maybeSingle();
-    const truth = String((truthDef as any)?.text ?? "").slice(0, 400);
-    if (!word || !truth) {
-      return new Response(JSON.stringify({ matches: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const truth = String((truthDef as { text?: string } | null)?.text ?? "").slice(0, 400);
+    if (!word || !truth) return json({ matches: [] });
 
     // Textos REAIS das candidatas, restritos à sala/rodada e nunca a verdade.
     const { data: candRows } = await admin
@@ -102,11 +104,7 @@ Deno.serve(async (req) => {
         text: String(r.text ?? "").slice(0, 300),
       }),
     );
-    if (candidates.length === 0) {
-      return new Response(JSON.stringify({ matches: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (candidates.length === 0) return json({ matches: [] });
 
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) throw new Error("GEMINI_API_KEY missing");
@@ -129,50 +127,55 @@ Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdow
 
     // flash-lite: pool de quota gratuita separado e maior — o flash comum
     // estourou o free tier no playtest e TODAS as rodadas perderam o bônus
-    // silenciosamente (429 -> matches vazio).
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "gemini-flash-lite-latest",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
+    // silenciosamente (429 -> matches vazio). Agora: timeout de 8s por
+    // tentativa, 1 nova tentativa em falha transitória e evento de erro
+    // (alerta no /admin/ops e no webhook) quando o julgamento não acontece.
+    const chat = await callChat({
+      fetchFn: fetch,
+      apiKey,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
     });
-
-    if (!r.ok) {
-      const t = await r.text();
-      console.error("AI gateway error", r.status, t);
-      // Erro VISÍVEL no corpo — a resposta fica gravada em net._http_response
-      // e a próxima investigação não precisa adivinhar a causa.
-      return new Response(JSON.stringify({ matches: [], error: `ai_${r.status}`, detail: t.slice(0, 160) }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (!chat.ok) {
+      console.error("AI gateway error", chat.reason, chat.status ?? "");
+      await logEvent(admin, {
+        kind: "judge_ai_error",
+        payload: {
+          fn: "score-similarity",
+          reason: chat.reason,
+          ...(chat.status ? { status: chat.status } : {}),
+          candidates: candidates.length,
+          attempts: chat.attempts,
+          latency_ms: Date.now() - t0,
+        },
       });
+      return json({ matches: [], error: chat.status ? `ai_${chat.status}` : `ai_${chat.reason}` });
     }
 
-    const data = await r.json();
-    const content: string = data?.choices?.[0]?.message?.content ?? "";
-    let matches: string[] = [];
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-      matches = Array.isArray(parsed.matches) ? parsed.matches.map(String) : [];
-    } catch (e) {
-      console.error("parse failed", e, content);
+    const parsed = parseJsonObject(chat.content);
+    const rawMatches = parsed?.matches;
+    if (!Array.isArray(rawMatches)) {
+      await logEvent(admin, {
+        kind: "judge_ai_error",
+        payload: {
+          fn: "score-similarity",
+          reason: "invalid_response",
+          candidates: candidates.length,
+          attempts: chat.attempts,
+          latency_ms: Date.now() - t0,
+        },
+      });
+      return json({ matches: [], error: "ai_invalid_response" });
     }
+    const validIds = new Set(candidates.map((c: { id: string }) => c.id));
+    const matches = rawMatches.map(String).filter((id) => validIds.has(id));
 
     // Aplica o bônus (near_truth=true + score+3) direto no banco via RPC
-    // SECURITY DEFINER, service-role only. Antes esse passo era feito pelo
-    // client depois de receber `matches` de volta — o que só cobria o
-    // caminho onde um navegador estava vivo pra aplicar a resposta. Agora
-    // é a própria edge function que persiste, então tanto uma chamada
-    // vinda do client quanto uma vinda do backstop server-side (pg_net
-    // dentro de advance_voting_to_reveal) resultam no bônus aplicado.
+    // SECURITY DEFINER, service-role only. Idempotente e presa à sala/rodada
+    // (auditoria 2026-07-29): replay não soma de novo.
     if (matches.length > 0) {
-      // Assinatura nova (auditoria): idempotente e presa à sala/rodada —
-      // replay não soma de novo (near_truth já true = 0 linhas).
       const { error: bonusError } = await admin.rpc("apply_similarity_bonus", {
         p_room_id: roomId,
         p_round: round,
@@ -181,15 +184,20 @@ Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdow
       if (bonusError) console.error("apply_similarity_bonus failed", bonusError);
     }
 
-    return new Response(JSON.stringify({ matches }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    await logEvent(admin, {
+      kind: "judge_ai_success",
+      payload: {
+        fn: "score-similarity",
+        candidates: candidates.length,
+        matched: matches.length,
+        attempts: chat.attempts,
+        latency_ms: Date.now() - t0,
+      },
     });
+    return json({ matches });
   } catch (e) {
     console.error("score-similarity error", e);
-    return new Response(JSON.stringify({ matches: [], error: String(e) }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    await logEvent(admin, exceptionEvent("judge_ai_error", "score-similarity", e, Date.now() - t0));
+    return json({ matches: [], error: "internal_error" });
   }
 });
-
-

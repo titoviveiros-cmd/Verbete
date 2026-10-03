@@ -2,7 +2,17 @@
 // Recebe { word_id, count, personas? } e devolve { definitions: string[] }.
 // IMPORTANTE: o significado da palavra é buscado AQUI (service role), nunca aceito
 // do cliente — assim ele não trafega no navegador e não pode ser usado para cheating.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+// A lógica pura (parse, anti-vazamento, memória por rodada, eventos) vive em
+// ./logic.ts e ../_shared/ai.ts, cobertas por testes.
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
+import {
+  dropAlreadyServed,
+  dropNearTruth,
+  outcomeEvent,
+  parseDefinitions,
+  servedRows,
+} from "./logic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,8 +42,16 @@ const DEFAULT_PERSONAS = ["conciso", "analitico", "funcional", "descritivo", "co
 
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Telemetria nunca derruba o pedido.
+async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
+  try {
+    await admin.from("ops_events").insert({ kind: ev.kind, payload: ev.payload });
+  } catch (e) {
+    console.warn("ops_events insert failed", e);
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -43,6 +61,8 @@ Deno.serve(async (req) => {
   // templates (causa das definições repetidas do playtest). Abuso é contido
   // adiante: a palavra pedida precisa ser a palavra CORRENTE de uma sala em
   // fase de escrita — fora disso, 403.
+  const t0 = Date.now();
+  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   try {
     const body = await req.json();
     const wordId = typeof body?.word_id === "string" ? body.word_id : "";
@@ -62,8 +82,6 @@ Deno.serve(async (req) => {
     const count = Math.min(Math.max(1, Number(body?.count) || 3), 10);
 
     // Busca palavra + significado server-side (service role), tentando words depois room_words.
-    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
     // Validação de contexto: só gera para a palavra corrente de uma sala
     // em fase de escrita/embaralhamento (substitui o gate de login).
     const { data: activeRoom } = await admin
@@ -147,75 +165,33 @@ REGRA MAIS IMPORTANTE — a definição deve ser INCORRETA: se um professor de p
 Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v., bot., med.) nem parênteses iniciais de área. NUNCA use a própria palavra dentro da definição. TODAS as definições DEVEM respeitar o tipo gramatical da palavra (verbo→ação, substantivo→coisa, adjetivo→qualidade, etc.). Devolva APENAS JSON: {"definitions":["...","...","..."]} na MESMA ORDEM dos estilos abaixo, sem markdown.`;
     const user = `Palavra: ${word}\nDefinição verdadeira (PROIBIDO copiar, parafrasear ou usar sinônimos — a falsa deve significar OUTRA coisa): ${meaning}${categoryRule}\n\nEstilos a usar (na ordem):\n${personaInstructions}\n\nGere ${count} definições falsas convincentes, uma por estilo, TODAS coerentes com o tipo gramatical indicado e NENHUMA com o mesmo sentido da verdadeira.`;
 
-    // Endpoint OpenAI-compatível do Google AI — mesmo formato de mensagens
-    // que o gateway anterior, só muda URL/credencial/nome do modelo.
-    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "gemini-flash-lite-latest",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
+    // Endpoint OpenAI-compatível do Google AI; timeout de 8s por tentativa e
+    // 1 nova tentativa em falha transitória (timeout, rede, 429, 5xx).
+    const chat = await callChat({
+      fetchFn: fetch,
+      apiKey,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
     });
+    if (!chat.ok) console.error("AI gateway error", chat.reason, chat.status ?? "");
 
-    if (!r.ok) {
-      const t = await r.text();
-      console.error("AI gateway error", r.status, t);
-      return new Response(JSON.stringify({ error: "ai_failed", definitions: [] }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = await r.json();
-    const content: string = data?.choices?.[0]?.message?.content ?? "";
-    let defs: string[] = [];
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-      defs = Array.isArray(parsed.definitions) ? parsed.definitions.slice(0, count) : [];
-    } catch (e) {
-      console.error("parse failed", e, content);
-    }
+    const parsed = chat.ok ? parseDefinitions(chat.content, count) : null;
+    if (chat.ok && parsed === null) console.error("parse failed: resposta do modelo sem 'definitions'");
 
     // Pós-filtro anti-vazamento (playtest 2026-07-21: sugestão da IA era a
     // própria verdade com outras palavras): descarta candidata lexicalmente
     // próxima do significado real (Dice/trigramas sobre texto normalizado).
-    const normTxt = (s: string) =>
-      s
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim();
-    const grams = (s: string): Set<string> => {
-      const n = ` ${normTxt(s)} `;
-      const out = new Set<string>();
-      for (let i = 0; i <= n.length - 3; i++) out.add(n.slice(i, i + 3));
-      return out;
-    };
-    const dice = (a: string, b: string): number => {
-      const ga = grams(a);
-      const gb = grams(b);
-      if (ga.size === 0 || gb.size === 0) return 0;
-      let inter = 0;
-      for (const g of ga) if (gb.has(g)) inter++;
-      return (2 * inter) / (ga.size + gb.size);
-    };
-    if (meaning) {
-      const before = defs.length;
-      defs = defs.filter((d) => dice(d, meaning) < 0.45);
-      if (defs.length < before) {
-        console.warn(
-          `anti-vazamento: ${before - defs.length} candidata(s) descartada(s) por proximidade com a verdade`,
-        );
-      }
+    const leak = dropNearTruth(parsed ?? [], meaning);
+    let defs = leak.kept;
+    if (leak.dropped > 0) {
+      console.warn(`anti-vazamento: ${leak.dropped} candidata(s) descartada(s) por proximidade com a verdade`);
     }
 
     // Memória por rodada: exclui o que já foi servido (a qualquer jogador,
     // como sugestão OU cédula de bot) e registra o que vai ser servido agora.
+    let droppedServed = 0;
     if (memRoomId && memRound !== null) {
       const { data: served } = await admin
         .from("ai_served_defs")
@@ -223,34 +199,45 @@ Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v.,
         .eq("room_id", memRoomId)
         .eq("round", memRound);
       const servedNorms: string[] = (served ?? []).map((r: { norm_text: string }) => r.norm_text);
-      const before = defs.length;
-      defs = defs.filter((d) => {
-        const n = norm(d);
-        return !servedNorms.some((s) => s === n || dice(s, n) > 0.6);
-      });
-      if (defs.length < before) {
-        console.warn(
-          `memória da rodada: ${before - defs.length} candidata(s) já servida(s) descartada(s)`,
-        );
+      const fresh = dropAlreadyServed(defs, servedNorms);
+      defs = fresh.kept;
+      droppedServed = fresh.dropped;
+      if (droppedServed > 0) {
+        console.warn(`memória da rodada: ${droppedServed} candidata(s) já servida(s) descartada(s)`);
       }
       if (defs.length > 0) {
-        await admin.from("ai_served_defs").upsert(
-          defs.map((d) => ({
-            room_id: memRoomId,
-            round: memRound,
-            norm_text: norm(d),
-          })),
-          { onConflict: "room_id,round,norm_text", ignoreDuplicates: true },
-        );
+        await admin.from("ai_served_defs").upsert(servedRows(defs, memRoomId, memRound), {
+          onConflict: "room_id,round,norm_text",
+          ignoreDuplicates: true,
+        });
       }
     }
 
+    await logEvent(
+      admin,
+      outcomeEvent({
+        chat,
+        parsedCount: parsed === null ? null : parsed.length,
+        requested: count,
+        returned: defs.length,
+        droppedLeak: leak.dropped,
+        droppedServed,
+        latencyMs: Date.now() - t0,
+      }),
+    );
+
+    if (!chat.ok || parsed === null) {
+      return new Response(JSON.stringify({ error: "ai_failed", definitions: [] }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ definitions: defs, personas: chosen }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("bot-definitions error", e);
-    return new Response(JSON.stringify({ error: String(e), definitions: [] }), {
+    await logEvent(admin, exceptionEvent("bot_ai_error", "bot-definitions", e, Date.now() - t0));
+    return new Response(JSON.stringify({ error: "internal_error", definitions: [] }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
