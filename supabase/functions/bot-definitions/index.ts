@@ -48,7 +48,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // Telemetria nunca derruba o pedido.
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
   try {
-    await admin.from("ops_events").insert({ kind: ev.kind, payload: ev.payload });
+    const { error } = await admin.from("ops_events").insert({ kind: ev.kind, payload: ev.payload });
+    if (error) console.warn("ops_events insert failed", error.code, error.message);
   } catch (e) {
     console.warn("ops_events insert failed", e);
   }
