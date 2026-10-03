@@ -57,13 +57,16 @@ const statusOf = async (id) => (await row(`SELECT status FROM public.rooms WHERE
 // ---------------------------------------------------------------------------
 console.log("— tick: só transições reais contam");
 const zombie = await mkRoom("choosing", {
-  // categoria inexistente: advance_choosing_to_writing não acha palavra e só
-  // rearma o prazo (era o ciclo das salas-zumbi de julho)
-  categories: [`inexistente_${tag}`],
-  nivel: "insano",
   ends: new Date(Date.now() - 60_000).toISOString(),
   phase_started_at: new Date(Date.now() - 40 * 60_000).toISOString(),
 });
+// Sem palavra elegível (get_random_words cai em qualquer palavra publicada
+// quando o filtro esvazia — só esgota com TODAS já usadas): o avanço vira
+// noop_no_words e só rearma o prazo, o ciclo das salas-zumbi de julho.
+await db.query(
+  `UPDATE public.rooms SET used_word_ids = (SELECT array_agg(id) FROM public.words) WHERE id = $1`,
+  [zombie],
+);
 const t1 = (await row(`SELECT public.tick_stalled_rooms() AS t`)).t;
 check("sala-zumbi sem palavra elegível continua em choosing", (await statusOf(zombie)) === "choosing");
 check(

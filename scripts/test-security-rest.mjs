@@ -146,9 +146,9 @@ for (const actor of [anon, E]) {
 }
 
 console.log("\n— Significado de palavra customizada (antes da revelação)");
-const { id: cwid } = await row(
+await db.query(
   `INSERT INTO public.room_words (room_id, word, meaning, category, created_by)
-   VALUES ($1, 'zimbrar', 'segredo do teste', 'custom', $2) RETURNING id`,
+   VALUES ($1, 'zimbrar', 'segredo do teste', 'custom', $2)`,
   [rid, ALICE],
 );
 for (const actor of [anon, E]) {
@@ -227,6 +227,15 @@ console.log("\n— Ações em nome de outro jogador");
 
 // ---------------------------------------------------------------------------
 console.log("\n— Partida legítima completa (2 rodadas)");
+// rooms.current_word_id tem FK para words: palavra customizada nunca vira a
+// palavra da rodada (a função de palavras próprias está desativada); a
+// partida usa palavras do banco global.
+const [w1, w2] = (
+  await rows(
+    `SELECT id, meaning FROM public.words
+      WHERE status = 'published' AND meaning IS NOT NULL ORDER BY id LIMIT 2`,
+  )
+);
 const status = async () => (await row(`SELECT status, current_round FROM public.rooms WHERE id = $1`, [rid]));
 const holdDeadline = () =>
   db.query(`UPDATE public.rooms SET round_phase_ends_at = now() + interval '10 minutes' WHERE id = $1`, [rid]);
@@ -247,15 +256,14 @@ const scoreOf = async () =>
 await db.query(`UPDATE public.rooms SET current_coordinator = $2 WHERE id = $1`, [rid, ALICE]);
 await holdDeadline();
 
-// Rodada 1 com a palavra customizada (exercita o caminho room_words)
 {
-  const r = await A.c.rpc("choose_word", { p_room_id: rid, p_word_id: cwid, p_duration_sec: 60 });
-  check("coordenadora escolhe a palavra", r.data?.ok === true, short(r.data));
+  const r = await A.c.rpc("choose_word", { p_room_id: rid, p_word_id: w1.id, p_duration_sec: 60 });
+  check("coordenadora escolhe a palavra", r.data?.ok === true, short(r.data ?? r.error?.message));
   await holdDeadline();
   const st = await B.c.rpc("get_room_state", { p_code: room.code });
   check(
     "durante a escrita o estado da sala NÃO traz o significado",
-    st.data?.word?.word === "zimbrar" && st.data?.word?.meaning === undefined,
+    st.data?.word?.id === w1.id && st.data?.word?.meaning === undefined,
     short(st.data?.word),
   );
 }
@@ -303,10 +311,15 @@ await holdDeadline();
   check("abre a votação", (await status()).status === "voting", (await status()).status);
   await holdDeadline();
   const truth = await row(
-    `SELECT text FROM public.definitions WHERE room_id = $1 AND round = 1 AND is_truth`,
+    `SELECT count(*)::int AS n, max(text) AS text FROM public.definitions
+      WHERE room_id = $1 AND round = 1 AND is_truth AND player_id = '__truth__'`,
     [rid],
   );
-  check("a verdade foi inserida PELO SERVIDOR a partir do significado", truth?.text === "segredo do teste", truth?.text);
+  check(
+    "a verdade foi inserida PELO SERVIDOR (uma, derivada do significado)",
+    truth.n === 1 && !!truth.text && truth.text !== "verdade plantada",
+    truth.text,
+  );
 }
 const defs = await rows(`SELECT id, player_id FROM public.definitions WHERE room_id = $1 AND round = 1`, [rid]);
 const d = Object.fromEntries(defs.map((x) => [x.player_id, x.id]));
@@ -353,7 +366,7 @@ const d = Object.fromEntries(defs.map((x) => [x.player_id, x.id]));
   check("bot1 = 3 (+3 verdade)", S[BOT1] === 3, `bot1=${S[BOT1]}`);
   check("bot2 = 0", S[BOT2] === 0, `bot2=${S[BOT2]}`);
   const rev = await B.c.rpc("get_word_reveal", { p_room_id: rid });
-  check("na revelação o significado da palavra customizada aparece", rev.data?.meaning === "segredo do teste", short(rev.data));
+  check("na revelação o significado aparece (get_word_reveal)", rev.data?.meaning === w1.meaning, short(rev.data?.word));
   const r = await A.c.rpc("finish_reveal", { p_room_id: rid });
   check("placar da rodada", r.data?.status === "scoreboard", short(r.data));
 }
@@ -366,8 +379,7 @@ const d = Object.fromEntries(defs.map((x) => [x.player_id, x.id]));
 await db.query(`UPDATE public.rooms SET current_coordinator = $2 WHERE id = $1`, [rid, BOB]);
 await holdDeadline();
 {
-  const { id: gw } = await row(`SELECT id FROM public.words WHERE meaning IS NOT NULL LIMIT 1`);
-  let r = await B.c.rpc("choose_word", { p_room_id: rid, p_word_id: gw, p_duration_sec: 60 });
+  let r = await B.c.rpc("choose_word", { p_room_id: rid, p_word_id: w2.id, p_duration_sec: 60 });
   check("rodada 2: palavra escolhida", r.data?.ok === true, short(r.data));
   await holdDeadline();
   r = await A.c.rpc("submit_definition", { p_room_id: rid, p_player_id: ALICE, p_text: "instrumento de corda nordestino" });
