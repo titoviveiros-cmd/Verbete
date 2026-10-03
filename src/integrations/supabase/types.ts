@@ -862,6 +862,17 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      add_bot: {
+        Args: {
+          p_actor_id: string;
+          p_avatar: string;
+          p_bot_id: string;
+          p_color: string;
+          p_nickname: string;
+          p_room_id: string;
+        };
+        Returns: Json;
+      };
       admin_list_words: {
         Args: { p_limit?: number; p_offset?: number; p_status?: string };
         Returns: Json;
@@ -994,6 +1005,7 @@ export type Database = {
       finish_reveal: { Args: { p_room_id: string }; Returns: Json };
       get_app_config: { Args: { p_key: string }; Returns: string };
       get_ballot: { Args: { p_room_id: string }; Returns: Json };
+      get_client_config: { Args: never; Returns: Json };
       get_daily_leaderboard: {
         Args: { p_limit?: number };
         Returns: {
@@ -1152,6 +1164,7 @@ export type Database = {
         };
         Returns: undefined;
       };
+      migrate_host: { Args: { p_room_id: string }; Returns: Json };
       phase_secs: {
         Args: { p_base: number; p_room_id: string };
         Returns: number;

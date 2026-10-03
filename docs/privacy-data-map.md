@@ -16,3 +16,15 @@
 | Login Google | OAuth | Sim | auth.identities | Google | SIM | login | Google | conta | deleteAccount |
 
 **Data Safety (Play) derivada:** coleta email (opcional, conta) + IDs de dispositivo (funcionalidade); criptografia em trânsito SIM; exclusão solicitável SIM (in-app + /support). **[NÃO VERIFICADO]**: retenção exata de logs de infra dos provedores.
+
+## Atualização M1 (2026-10-03)
+
+| Item | Antes | Depois |
+|---|---|---|
+| Gemini (Google) como processador (PV-02) | não citado em /privacy | declarado: recebe palavra, verdade e textos dos jogadores (definições, palpites do diário); sem nome/e-mail/ids |
+| Google Fonts | não citado | declarado (IP do aparelho chega ao Google) |
+| Exclusão de conta (PV-05) | /support e comentário diziam "anonimiza" | texto alinhado ao código: apaga conta, perfil, stats, conquistas, histórico e diário; nas salas fica só o apelido |
+| Telemetria das edge functions | — | novos eventos `bot_ai_*`/`judge_ai_*` em `ops_events`: só contagens, motivo, latência — sem texto de jogo |
+| Permissões do app Android | INTERNET | INTERNET + VIBRATE (normal, sem prompt) |
+| Chat/blefes sem TTL | gap | **segue gap** (M2): retenção das salas é decisão de produto |
+| E-mail de contato | `privacy@verbete.app` (domínio inexistente) | **pendente do dono**: definir e-mail real |

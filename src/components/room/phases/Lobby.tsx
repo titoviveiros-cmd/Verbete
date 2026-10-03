@@ -21,6 +21,8 @@ import {
 } from "@/lib/room";
 import { AvatarBubble } from "@/components/AvatarBubble";
 import { Mascot } from "@/components/Mascot";
+import { roomInviteUrl } from "@/lib/app-url";
+import { shareInvite } from "@/lib/share";
 import { playJoin, playBotJoin, playKick, playUITap } from "@/lib/sound";
 import { scrollbarClip } from "@/lib/utils";
 
@@ -108,42 +110,24 @@ export function Lobby({
     prevIdsRef.current = ids;
   }, [players, playerId]);
 
-  const buildShareUrl = () => {
-    const host = location.hostname;
-    const isPreviewHost =
-      /^id-preview--[0-9a-f-]+\.lovable\.app$/i.test(host) ||
-      /\.lovableproject\.com$/i.test(host) ||
-      host === "localhost" ||
-      host.startsWith("127.");
-    if (isPreviewHost) {
-      return {
-        url: null as string | null,
-        warn: "Para convidar amigos sem login, clique em Publish (canto superior direito) e compartilhe o link público gerado.",
-      };
-    }
-    return {
-      url: `${location.origin}/?join=${code}`,
-      warn: null as string | null,
-    };
-  };
-
   const handleShare = async () => {
-    const { url, warn } = buildShareUrl();
-    setShareWarn(warn);
-    if (!url) return;
-    try {
-      if (navigator.share)
-        await navigator.share({
-          title: "Verbete",
-          text: `Bora jogar Verbete? Sala ${code} 👇`,
-          url,
-        });
-      else {
-        await navigator.clipboard.writeText(url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-      }
-    } catch {}
+    // Link público canônico (nunca location.origin: no app nativo ele é
+    // https://localhost).
+    const url = roomInviteUrl(code);
+    setShareWarn(null);
+    const outcome = await shareInvite({
+      title: "Verbete",
+      text: `Bora jogar Verbete? Sala ${code} 👇`,
+      url,
+    });
+    if (outcome === "copied") {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } else if (outcome === "failed") {
+      setShareWarn(
+        `Não deu para abrir o compartilhamento. Link da sala: ${url}`,
+      );
+    }
   };
 
   return (
@@ -235,7 +219,7 @@ export function Lobby({
           </p>
           <div className="flex justify-center gap-1.5 flex-wrap">
             <button
-              onClick={() => addBot(roomId, players.length)}
+              onClick={() => addBot(roomId, playerId, players.length)}
               disabled={players.length >= 12}
               className="btn-pop bg-mint text-accent-foreground py-1.5 px-3 text-xs flex items-center gap-1 disabled:opacity-50"
             >
@@ -245,7 +229,7 @@ export function Lobby({
               <button
                 onClick={() => {
                   for (let i = 0; i < botsNeeded; i++) {
-                    addBot(roomId, players.length + i);
+                    addBot(roomId, playerId, players.length + i);
                   }
                 }}
                 className="btn-pop bg-mint/80 text-accent-foreground py-1.5 px-3 text-xs"

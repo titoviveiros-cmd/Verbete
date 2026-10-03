@@ -452,7 +452,7 @@ function RoomPage() {
     const key = `${room.id}:${room.host_id}->${heir.id}`;
     if (migrateTriedRef.current === key) return;
     migrateTriedRef.current = key;
-    migrateHost(room.id, room.host_id, heir.id).then((ok) => {
+    migrateHost(room.id).then((ok) => {
       if (!ok) migrateTriedRef.current = null;
     });
   }, [room?.id, room?.host_id, players, playerId]);

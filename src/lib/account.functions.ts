@@ -4,9 +4,12 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 /**
  * Deleta a conta do usuário autenticado.
- * - Anonimiza histórico de partidas (mantém estatísticas agregadas sem PII).
- * - Remove perfil, stats, conquistas, tentativas diárias.
+ * - Apaga histórico de partidas, perfil, stats, conquistas e tentativas
+ *   diárias (a política de privacidade e o /support descrevem exatamente
+ *   isto — manter os três alinhados).
  * - Remove o registro em auth.users (logout automático na próxima sessão).
+ * - Nas salas jogadas fica só o apelido da partida (players.user_id passa a
+ *   apontar para um usuário inexistente).
  *
  * Apple App Store Guideline 5.1.1(v) exige que apps com criação de conta
  * ofereçam exclusão in-app desde 2022.
@@ -16,7 +19,7 @@ export const deleteAccount = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { userId } = context;
 
-    // 1) Anonimiza histórico (mantém para estatísticas agregadas / antifraude)
+    // 1) Histórico de partidas
     await supabaseAdmin.from("match_history").delete().eq("user_id", userId);
 
     // 2) Remove dados pessoais explícitos

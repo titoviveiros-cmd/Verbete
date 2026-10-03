@@ -32,7 +32,39 @@ type Summary = {
     stalled_advances: number;
     sessions_with_errors: number;
   };
+  monitor?: {
+    last_tick_at: string | null;
+    last_health_check_at: string | null;
+    tick_errors: number;
+    residue_rooms: number;
+    ai: {
+      bot_success: number;
+      bot_fallback: number;
+      bot_error: number;
+      judge_success: number;
+      judge_error: number;
+    };
+    alerts: Array<{
+      at: string;
+      kind: string;
+      severity: string;
+      message: string;
+      notified: boolean;
+    }>;
+  };
 };
+
+const SEVERITY_ICON: Record<string, string> = {
+  critical: "🚨",
+  high: "🔴",
+  warning: "🟡",
+};
+
+function minutesAgo(iso: string | null): number | null {
+  return iso
+    ? Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+    : null;
+}
 
 type OpsEvent = {
   id: number;
@@ -50,6 +82,12 @@ const KIND_ICON: Record<string, string> = {
   rpc_failure: "📡",
   reconnect: "🔌",
   stalled_advance: "⏰",
+  tick_error: "🧨",
+  bot_ai_success: "🤖",
+  bot_ai_fallback: "🪫",
+  bot_ai_error: "🤕",
+  judge_ai_success: "🧠",
+  judge_ai_error: "😵",
 };
 
 const WINDOWS = [
@@ -126,6 +164,8 @@ function AdminOpsPage() {
 
   const f = summary?.funnel;
   const h = summary?.health;
+  const m = summary?.monitor;
+  const tickAge = minutesAgo(m?.last_tick_at ?? null);
 
   return (
     <div className="mobile-shell pt-4 gap-3">
@@ -212,6 +252,75 @@ function AdminOpsPage() {
                 {h.stalled_advances}
               </span>
             </div>
+          </div>
+        )}
+        {m && (
+          <div className="sticker space-y-1.5">
+            <p className="font-display text-sm text-sun">📟 Monitor</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+              <span className="text-muted-foreground">Último tick do cron</span>
+              <span
+                className={
+                  "font-display text-right " +
+                  (tickAge === null || tickAge > 5
+                    ? "text-destructive"
+                    : "text-mint")
+                }
+              >
+                {tickAge === null ? "nunca" : `há ${tickAge} min`}
+              </span>
+              <span className="text-muted-foreground">Erros no tick</span>
+              <span
+                className={
+                  "font-display text-right " +
+                  (m.tick_errors > 0 ? "text-destructive" : "text-mint")
+                }
+              >
+                {m.tick_errors}
+              </span>
+              <span className="text-muted-foreground">
+                IA bots (ok/fallback/erro)
+              </span>
+              <span
+                className={
+                  "font-display text-right " +
+                  (m.ai.bot_error > 0 ? "text-destructive" : "")
+                }
+              >
+                {m.ai.bot_success}/{m.ai.bot_fallback}/{m.ai.bot_error}
+              </span>
+              <span className="text-muted-foreground">Juiz IA (ok/erro)</span>
+              <span
+                className={
+                  "font-display text-right " +
+                  (m.ai.judge_error > 0 ? "text-destructive" : "")
+                }
+              >
+                {m.ai.judge_success}/{m.ai.judge_error}
+              </span>
+              <span className="text-muted-foreground">
+                Salas-resíduo (+1 dia paradas)
+              </span>
+              <span className="font-display text-right">{m.residue_rooms}</span>
+            </div>
+            {m.alerts.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhum alerta no período.
+              </p>
+            ) : (
+              <ul className="space-y-1 text-xs">
+                {m.alerts.map((a) => (
+                  <li key={a.at + a.kind} className="flex gap-1.5">
+                    <span aria-hidden>{SEVERITY_ICON[a.severity] ?? "⚠️"}</span>
+                    <span className="flex-1">{a.message}</span>
+                    <span className="text-muted-foreground shrink-0">
+                      {new Date(a.at).toLocaleString("pt-BR")}
+                      {a.notified ? " · avisado" : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         <p className="font-display text-sm text-sun pt-1">🧾 Últimos eventos</p>
