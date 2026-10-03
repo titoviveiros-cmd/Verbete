@@ -495,6 +495,18 @@ try {
     priv.svc && !priv.anon && !priv.auth,
     short(priv),
   );
+  // a mesma lista que a sonda de produção confere (scripts/probe-m1-prod.mjs)
+  const { rows: missing } = await db.query(
+    `SELECT t.tbl, t.priv
+       FROM (VALUES ('rooms','SELECT'), ('rounds','SELECT'), ('words','SELECT'), ('room_words','SELECT'),
+                    ('definitions','SELECT'), ('ai_served_defs','INSERT'), ('ops_events','INSERT')) AS t(tbl, priv)
+      WHERE NOT has_table_privilege('service_role', 'public.' || t.tbl, t.priv)`,
+  );
+  check(
+    "chave de serviço tem tudo o que as edges usam",
+    missing.length === 0,
+    short(missing),
+  );
 } catch (e) {
   check(
     "a suíte roda até o fim sem exceção",
