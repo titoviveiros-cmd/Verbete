@@ -46,18 +46,23 @@ if (PROBE_DB === "linked" || PROBE_DB === "local") {
       ["node_modules/supabase/dist/supabase.js", "db", "query", `--${PROBE_DB}`, "--output-format", "json", "-f", file],
       { encoding: "utf8" },
     );
+    // --linked (Management API) devolve {rows: [...]}; --local devolve o array puro
     const out = r.stdout ?? "";
-    const json = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
+    const start = [out.indexOf("["), out.indexOf("{")].filter((i) => i >= 0).sort((a, b) => a - b)[0];
     let parsed = null;
-    try {
-      parsed = JSON.parse(json);
-    } catch {
-      /* cai no erro abaixo */
+    if (start !== undefined) {
+      const end = out.lastIndexOf(out[start] === "[" ? "]" : "}");
+      try {
+        parsed = JSON.parse(out.slice(start, end + 1));
+      } catch {
+        /* cai no erro abaixo */
+      }
     }
-    if (r.status !== 0 || !Array.isArray(parsed?.rows)) {
+    const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.rows) ? parsed.rows : null;
+    if (r.status !== 0 || !rows) {
       throw new Error(`db query --${PROBE_DB} falhou: ${(out + (r.stderr ?? "")).trim().slice(0, 300)}`);
     }
-    return parsed.rows;
+    return rows;
   };
 } else {
   db = new pg.Client({
