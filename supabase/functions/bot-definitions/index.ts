@@ -84,13 +84,16 @@ Deno.serve(async (req) => {
     // Busca palavra + significado server-side (service role), tentando words depois room_words.
     // Validação de contexto: só gera para a palavra corrente de uma sala
     // em fase de escrita/embaralhamento (substitui o gate de login).
-    const { data: activeRoom } = await admin
+    const { data: activeRoom, error: roomError } = await admin
       .from("rooms")
       .select("id")
       .eq("current_word_id", wordId)
       .in("status", ["writing", "shuffling"])
       .limit(1)
       .maybeSingle();
+    // Falha do banco não pode se passar por "palavra fora de rodada" (403
+    // silencioso): vira exceção, evento bot_ai_error e log.
+    if (roomError) throw new Error(`rooms lookup failed: ${roomError.code ?? ""} ${roomError.message}`);
     if (!activeRoom) {
       return new Response(JSON.stringify({ error: "no_active_round_for_word", definitions: [] }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },

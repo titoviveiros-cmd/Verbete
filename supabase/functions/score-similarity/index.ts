@@ -62,12 +62,15 @@ Deno.serve(async (req) => {
     // (filtrada antes da IA) e devagar para os falsos — um oráculo de tempo
     // que entregava a resposta (SEC-05). A palavra vem da rodada julgada:
     // usar a palavra "atual" da sala quebrava quando ela já tinha avançado.
-    const { data: roundRow } = await admin
+    const { data: roundRow, error: roundError } = await admin
       .from("rounds")
       .select("word_id")
       .eq("room_id", roomId)
       .eq("round", round)
       .maybeSingle();
+    // Falha do banco não pode se passar por "rodada não pontuada" (bônus
+    // perdido em silêncio): vira exceção, evento judge_ai_error e log.
+    if (roundError) throw new Error(`rounds lookup failed: ${roundError.code ?? ""} ${roundError.message}`);
     const wid: string | null = (roundRow as { word_id?: string } | null)?.word_id ?? null;
     if (!wid) return json({ matches: [], error: "round_not_scored" });
 
