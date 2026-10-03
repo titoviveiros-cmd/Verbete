@@ -3,7 +3,10 @@
 // segue no M1 para as outras suítes).
 // Envs: DB_URL.
 import pg from "pg";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const db = new pg.Client({
   connectionString: process.env.DB_URL,
@@ -117,6 +120,35 @@ try {
   check("regra antiga restaurada e executável", !!c.r && !("finished_lobby" in c.r), JSON.stringify(c.r).slice(0, 100));
 } finally {
   await db.query("ROLLBACK");
+}
+
+console.log("\n— Ferramentas do runbook de produção (mesmos comandos que o dono vai rodar)");
+const node = (args) =>
+  spawnSync(process.execPath, args, { encoding: "utf8", env: process.env });
+let t = node(["scripts/sql-apply.mjs", "supabase/rollback/m1_compat_old_client.sql"]);
+const policyAfterRehearsal = await one(
+  `SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'players' AND policyname = 'players public insert'`,
+);
+check(
+  "sql-apply sem --commit é ensaio: aplica sem erro e não grava nada",
+  t.status === 0 && /ENSAIO/.test(t.stdout) && policyAfterRehearsal.n === 0,
+  `exit=${t.status} política=${policyAfterRehearsal.n} ${(t.stdout + t.stderr).trim().slice(0, 120)}`,
+);
+const bad = join(tmpdir(), `m1-bad-${tag}.sql`);
+writeFileSync(bad, `CREATE TABLE public.tmp_rb_${tag} (id int);\nSELECT 1/0;\n`);
+t = node(["scripts/sql-apply.mjs", bad, "--commit"]);
+const leftover = await one(`SELECT to_regclass('public.tmp_rb_${tag}') IS NULL AS clean`);
+check(
+  "sql-apply --commit com erro no meio: tudo ou nada (nada gravado)",
+  t.status === 1 && leftover.clean,
+  `exit=${t.status} ${(t.stderr || t.stdout).trim().slice(0, 120)}`,
+);
+for (const f of [
+  "supabase/maintenance/m1_preflight_readonly.sql",
+  "supabase/maintenance/20261003_cleanup_zombie_rooms_v2_dryrun.sql",
+]) {
+  t = node(["scripts/sql-readonly.mjs", f]);
+  check(`sql-readonly roda ${f.split("/").pop()}`, t.status === 0, `exit=${t.status} ${t.stderr.trim().slice(0, 120)}`);
 }
 
 const after = await one(`SELECT to_regprocedure('public.migrate_host(uuid)') IS NOT NULL AS m1`);

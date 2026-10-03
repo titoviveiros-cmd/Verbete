@@ -5,7 +5,10 @@
 -- players, UPDATE de rooms.host_id). NÃO reabre furos que nenhum client usava:
 -- apply_similarity_bonus, insert_truth_definition, escrita direta em
 -- definitions/rounds/reactions/room_words/round_extensions seguem fechados.
--- Ordem em produção: PRIMEIRO voltar o web (wrangler rollback), depois isto.
+-- O espelho de privilégios da service_role (20261003090000) FICA: é o padrão
+-- do Supabase e as edges dependem dele.
+-- Ordem em produção (sem janela): m1_compat_old_client.sql → voltar o web
+-- (wrangler rollback) → isto → supabase migration repair --status reverted.
 -- Testado no CI dentro de uma transação (scripts/test-rollback.mjs).
 -- =============================================================================
 

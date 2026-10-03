@@ -3,10 +3,12 @@
 // leituras de catálogo (privilégios) + chamadas que DEVEM ser recusadas.
 // Se alguma recusa falhar, a sonda acusa ANTES de qualquer efeito (as
 // tentativas usam ids inexistentes / sala inexistente).
-// Envs: SUPA_URL, ANON (chave publicável), DB_URL (postgres), APP_URL.
+// Envs: SUPA_URL, ANON (chave publicável), DB_URL (postgres), APP_URL,
+// EXPECT_BUILD (opcional: SHA do deploy web, confere o meta verbete-build).
 import pg from "pg";
+import { httpGet } from "./lib/http-doh.mjs";
 
-const { SUPA_URL, ANON, DB_URL } = process.env;
+const { SUPA_URL, ANON, DB_URL, EXPECT_BUILD } = process.env;
 const APP_URL = process.env.APP_URL ?? "https://jogo.verbete.workers.dev";
 let fails = 0;
 const check = (name, ok, detail = "") => {
@@ -28,9 +30,15 @@ const q = async (sql) => (await db.query(sql)).rows;
 
 console.log("— Catálogo (somente leitura)");
 const mig = await q(
-  `SELECT version FROM supabase_migrations.schema_migrations WHERE version >= '20261003100000' ORDER BY version`,
+  `SELECT version FROM supabase_migrations.schema_migrations WHERE version >= '20261003000000' ORDER BY version`,
 );
-check("4 migrations do M1 aplicadas", mig.length === 4, mig.map((m) => m.version).join(", "));
+check("5 migrations do M1 aplicadas", mig.length === 5, mig.map((m) => m.version).join(", "));
+const svc = await q(`
+  SELECT t.tbl, t.priv
+    FROM (VALUES ('rooms','SELECT'), ('rounds','SELECT'), ('words','SELECT'), ('room_words','SELECT'),
+                 ('definitions','SELECT'), ('ai_served_defs','INSERT'), ('ops_events','INSERT')) AS t(tbl, priv)
+   WHERE NOT has_table_privilege('service_role', 'public.' || t.tbl, t.priv)`);
+check("chave de serviço (edges) lê/grava o que precisa", svc.length === 0, JSON.stringify(svc));
 const writable = await q(`
   SELECT r.role, t.tbl, p.priv
     FROM unnest(ARRAY['anon','authenticated']) r(role)
@@ -80,9 +88,32 @@ check("SELECT room_words.meaning recusado", r.status >= 400, `HTTP ${r.status}`)
 r = await rest("rpc/get_client_config", {});
 check("get_client_config responde (objeto)", r.status === 200 && r.text.trim().startsWith("{"), r.text.slice(0, 80));
 
+console.log("\n— Edges (lixo na entrada: a versão nova recusa sem tocar o banco nem a IA)");
+const edge = async (name) => {
+  const r = await fetch(`${SUPA_URL}/functions/v1/${name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "lixo",
+  });
+  return { status: r.status, text: (await r.text()).slice(0, 120) };
+};
+let e = await edge("bot-definitions");
+check("bot-definitions publicada (versão M1)", e.status === 400 && /word_id required/.test(e.text), `HTTP ${e.status} ${e.text}`);
+e = await edge("score-similarity");
+check("score-similarity publicada (versão M1)", e.status === 200 && e.text.trim() === '{"matches":[]}', `HTTP ${e.status} ${e.text}`);
+
 console.log("\n— Web");
-const og = await fetch(`${APP_URL}/og-verbete.jpg`, { method: "HEAD" });
-check("og:image 200 image/jpeg", og.status === 200 && /image\/jpeg/.test(og.headers.get("content-type") ?? ""), `HTTP ${og.status} ${og.headers.get("content-type")}`);
+const og = await httpGet(`${APP_URL}/og-verbete.jpg`, "HEAD");
+check("og:image 200 image/jpeg", og.status === 200 && /image\/jpeg/.test(og.type), `HTTP ${og.status} ${og.type}`);
+if (EXPECT_BUILD) {
+  const home = await httpGet(`${APP_URL}/`);
+  const build = home.body.match(/name="verbete-build" content="([^"]*)"/)?.[1] ?? "";
+  check(
+    "web servindo o build esperado",
+    build !== "" && build.slice(0, 7) === EXPECT_BUILD.slice(0, 7),
+    `servindo ${build || "?"}, esperado ${EXPECT_BUILD.slice(0, 7)}`,
+  );
+}
 
 await db.end();
 console.log(fails ? `\n${fails} FALHA(S)` : "\nPRODUÇÃO M1 OK");
