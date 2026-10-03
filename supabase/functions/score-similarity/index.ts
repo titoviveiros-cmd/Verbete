@@ -133,6 +133,7 @@ Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdow
     const chat = await callChat({
       fetchFn: fetch,
       apiKey,
+      url: Deno.env.get("GEMINI_CHAT_URL"),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

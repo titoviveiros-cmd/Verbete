@@ -43,6 +43,21 @@ describe("callChat (Gemini via endpoint OpenAI-compatível)", () => {
     });
   });
 
+  it("usa o endpoint do Google por padrão e aceita um alternativo", async () => {
+    const fetchFn = vi.fn(async () => ok("{}"));
+    await callChat({ fetchFn, apiKey: "k", messages });
+    await callChat({
+      fetchFn,
+      apiKey: "k",
+      messages,
+      url: "http://127.0.0.1:9/chat",
+    });
+    expect(fetchFn.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "http://127.0.0.1:9/chat",
+    ]);
+  });
+
   it("4xx não transitório (401) não repete", async () => {
     const fetchFn = vi.fn(async () => new Response("nope", { status: 401 }));
     const r = await callChat({ fetchFn, apiKey: "k", messages, backoffMs: 1 });

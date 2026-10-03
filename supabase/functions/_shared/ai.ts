@@ -25,6 +25,7 @@ function retriable(r: AttemptResult): boolean {
 
 async function attempt(
   fetchFn: FetchFn,
+  url: string,
   apiKey: string,
   messages: Array<{ role: string; content: string }>,
   timeoutMs: number,
@@ -32,7 +33,7 @@ async function attempt(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetchFn(GEMINI_CHAT_URL, {
+    const r = await fetchFn(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -72,17 +73,20 @@ export async function callChat(opts: {
   fetchFn: FetchFn;
   apiKey: string;
   messages: Array<{ role: string; content: string }>;
+  /** Endpoint alternativo (testes de ponta a ponta com Gemini simulado). */
+  url?: string;
   timeoutMs?: number;
   retries?: number;
   backoffMs?: number;
 }): Promise<ChatResult> {
+  const url = opts.url || GEMINI_CHAT_URL;
   const timeoutMs = opts.timeoutMs ?? 8000;
   const retries = opts.retries ?? 1;
   const backoffMs = opts.backoffMs ?? 700;
   let last: ChatResult = { ok: false, reason: "network", attempts: 0 };
   for (let i = 0; i <= retries; i++) {
     if (i > 0) await new Promise((res) => setTimeout(res, backoffMs * i));
-    const res = await attempt(opts.fetchFn, opts.apiKey, opts.messages, timeoutMs);
+    const res = await attempt(opts.fetchFn, url, opts.apiKey, opts.messages, timeoutMs);
     last = { ...res, attempts: i + 1 };
     if (!retriable(res)) return last;
   }
