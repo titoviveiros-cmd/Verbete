@@ -235,7 +235,7 @@ export function Lobby({
           </p>
           <div className="flex justify-center gap-1.5 flex-wrap">
             <button
-              onClick={() => addBot(roomId, players.length)}
+              onClick={() => addBot(roomId, playerId, players.length)}
               disabled={players.length >= 12}
               className="btn-pop bg-mint text-accent-foreground py-1.5 px-3 text-xs flex items-center gap-1 disabled:opacity-50"
             >
@@ -245,7 +245,7 @@ export function Lobby({
               <button
                 onClick={() => {
                   for (let i = 0; i < botsNeeded; i++) {
-                    addBot(roomId, players.length + i);
+                    addBot(roomId, playerId, players.length + i);
                   }
                 }}
                 className="btn-pop bg-mint/80 text-accent-foreground py-1.5 px-3 text-xs"

@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { setStored, regeneratePlayerId } from "./player-id";
-import { ensureAnonSession } from "./auth-session";
+import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
 import { scalePhaseSecs } from "./game-times";
 import {
   sanitizeDefinition,
@@ -135,18 +135,15 @@ export interface Vote {
   definition_id: string;
 }
 
-function genCode(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
 export async function createRoom(
   hostId: string,
   nickname: string,
   avatar: string,
   color: string,
 ) {
-  // Single-RPC creation (rooms+player insert in one transaction). Falls back to legacy path on error.
-  await ensureAnonSession();
+  // Criação atômica (sala + jogador host) numa única RPC — o client não tem
+  // permissão de escrita direta nas tabelas de jogo.
+  if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   const cleanNick = sanitizeNickname(nickname);
   const callCreate = (pid: string) =>
     supabase.rpc("create_room_with_host", {
@@ -160,45 +157,18 @@ export async function createRoom(
   if (error && String(error.message ?? "").includes("player_id_taken")) {
     ({ data, error } = await callCreate(regeneratePlayerId()));
   }
-  if (!error && data) {
-    const room = data as unknown as Room;
-    // Amarra a identidade auth ao jogador do host (idempotente).
-    supabase
-      .rpc("claim_player_identity", {
-        p_player_id: room.host_id,
-      })
-      .then(
-        () => {},
-        () => {},
-      );
-    return room;
-  }
-
-  // Fallback (RPC unavailable)
-  let code = genCode();
-  for (let i = 0; i < 5; i++) {
-    const { data: existing } = await supabase
-      .from("rooms")
-      .select("id")
-      .eq("code", code)
-      .maybeSingle();
-    if (!existing) break;
-    code = genCode();
-  }
-  const { data: room, error: roomErr } = await supabase
-    .from("rooms")
-    .insert({ code, host_id: hostId, status: "lobby" })
-    .select()
-    .single();
-  if (roomErr || !room) throw roomErr ?? new Error("create_failed");
-  await supabase.from("players").insert({
-    id: hostId,
-    room_id: room.id,
-    nickname: cleanNick,
-    avatar,
-    color,
-  });
-  return room as unknown as Room;
+  if (error || !data) throw error ?? new Error("create_failed");
+  const room = data as unknown as Room;
+  // Amarra a identidade auth ao jogador do host (idempotente).
+  supabase
+    .rpc("claim_player_identity", {
+      p_player_id: room.host_id,
+    })
+    .then(
+      () => {},
+      () => {},
+    );
+  return room;
 }
 
 export async function joinRoom(
@@ -208,7 +178,7 @@ export async function joinRoom(
   avatar: string,
   color: string,
 ) {
-  await ensureAnonSession();
+  if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   const { data: room, error } = await supabase
     .from("rooms")
     .select("*")
@@ -252,17 +222,7 @@ export async function joinRoom(
     effectiveId = regeneratePlayerId();
     ({ error: rpcErr } = await callRejoin(effectiveId));
   }
-  if (rpcErr) {
-    // Fallback legado
-    await supabase.from("players").upsert({
-      id: effectiveId,
-      room_id: room.id,
-      nickname: cleanNick,
-      avatar,
-      color,
-      is_connected: true,
-    });
-  }
+  if (rpcErr) throw rpcErr;
   // Amarra a identidade auth ao jogador (idempotente; ignora sem sessão).
   supabase
     .rpc("claim_player_identity", {
@@ -290,26 +250,18 @@ export async function leaveRoom(playerId: string) {
   await supabase.rpc("leave_room", { p_player_id: playerId });
 }
 
-// Promove `newHostId` a host da sala, mas SÓ se o host atual continuar sendo
-// `expectedCurrentHostId` (evita corrida quando vários clientes tentam migrar
-// ao mesmo tempo). Returns true se a promoção foi efetiva.
-export async function migrateHost(
-  roomId: string,
-  expectedCurrentHostId: string,
-  newHostId: string,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("rooms")
-    .update({ host_id: newHostId })
-    .eq("id", roomId)
-    .eq("host_id", expectedCurrentHostId)
-    .select("id")
-    .maybeSingle();
+// Pede ao servidor a migração de host. Quem é o herdeiro (humano vivo mais
+// antigo) e se o host atual realmente saiu é decidido lá, sob lock — o
+// client só dispara. Returns true se a sala tem um host presente ao final.
+export async function migrateHost(roomId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("migrate_host", {
+    p_room_id: roomId,
+  });
   if (error) {
     console.error("migrateHost failed", error);
     return false;
   }
-  return !!data;
+  return (data as { ok?: boolean } | null)?.ok === true;
 }
 
 export async function kickPlayer(
@@ -342,8 +294,8 @@ export async function kickPlayer(
     });
 }
 
-export async function addBot(roomId: string, index: number) {
-  const id = "bot_" + Math.random().toString(36).slice(2, 10);
+export async function addBot(roomId: string, actorId: string, index: number) {
+  const id = "bot_" + Math.random().toString(36).slice(2, 10).padEnd(4, "0");
   const row = {
     id,
     room_id: roomId,
@@ -378,10 +330,17 @@ export async function addBot(roomId: string, index: number) {
     );
   };
   supabase
-    .from("players")
-    .insert(row)
-    .then(({ error }) => {
-      if (error) rollbackOptimisticBot();
+    .rpc("add_bot", {
+      p_room_id: roomId,
+      p_actor_id: actorId,
+      p_bot_id: id,
+      p_nickname: row.nickname,
+      p_avatar: row.avatar,
+      p_color: row.color,
+    })
+    .then(({ data, error }) => {
+      if (error || (data as { ok?: boolean } | null)?.ok !== true)
+        rollbackOptimisticBot();
     }, rollbackOptimisticBot);
 }
 
@@ -424,23 +383,23 @@ export async function fetchThreeWords(
   roomId?: string,
   nivel: NivelFilter = "aleatorio",
 ): Promise<Word[]> {
-  // 1) Coleta palavras customizadas da sala (se houver) ainda não usadas
+  // 1) Coleta palavras customizadas da sala (se houver) ainda não usadas.
+  // Só colunas não-reveladoras: o significado chega via get_word_reveal().
   let customPool: Word[] = [];
   if (roomId) {
     const { data: cw } = await supabase
       .from("room_words")
-      .select("id,word,meaning,category,created_at")
+      .select("id,word,category,created_at")
       .eq("room_id", roomId);
     if (cw && cw.length > 0) {
-      customPool = (cw as any[])
+      customPool = cw
         .filter((w) => !excludeIds.includes(w.id))
         .map((w) => ({
           id: w.id,
           word: w.word,
-          meaning: w.meaning,
           category: w.category ?? "custom",
           rarity: 2,
-        })) as Word[];
+        }));
     }
   }
 
@@ -481,52 +440,6 @@ export async function fetchThreeWords(
   // 3) Mescla: pega até 3 customs (sorteadas) + completa com globais
   const pickedCustom = shuffle(customPool).slice(0, 3);
   return shuffle([...pickedCustom, ...globalPool]).slice(0, 3);
-}
-
-export type RoomWord = {
-  id: string;
-  room_id: string;
-  word: string;
-  meaning: string;
-  category: string | null;
-  created_by: string | null;
-  created_at: string;
-};
-
-export async function fetchRoomWords(roomId: string): Promise<RoomWord[]> {
-  const { data } = await supabase
-    .from("room_words")
-    .select("*")
-    .eq("room_id", roomId)
-    .order("created_at", { ascending: false });
-  return (data as RoomWord[]) ?? [];
-}
-
-export async function addRoomWord(
-  roomId: string,
-  playerId: string,
-  word: string,
-  meaning: string,
-) {
-  const cleanWord = word.trim().slice(0, 40);
-  const cleanMeaning = meaning.trim().slice(0, 220);
-  if (!cleanWord || !cleanMeaning) return null;
-  const { data, error } = await supabase
-    .from("room_words")
-    .insert({
-      room_id: roomId,
-      created_by: playerId,
-      word: cleanWord,
-      meaning: cleanMeaning,
-    })
-    .select()
-    .single();
-  if (error) return null;
-  return data as RoomWord;
-}
-
-export async function deleteRoomWord(id: string) {
-  await supabase.from("room_words").delete().eq("id", id);
 }
 
 export async function setNivel(
@@ -692,12 +605,13 @@ export async function submitDefinition(
   round: number,
   playerId: string,
   text: string,
-  isTruth = false,
   word?: string,
 ) {
   // Passa a palavra-alvo para o sanitizer detectar tentativas de "colar a resposta"
   // mesmo com acento/maiúscula/separadores que sobreviveriam à normalização básica.
-  const clean = sanitizeDefinition(text, 140, isTruth ? undefined : word);
+  // (A definição VERDADEIRA é inserida só pelo servidor, em
+  // advance_writing_to_voting — o client nunca a envia.)
+  const clean = sanitizeDefinition(text, 140, word);
   // Dedup de texto agora é 100% server-side (submit_definition devolve
   // reason 'duplicate_definition') — o client não lê mais as definições
   // da rodada (Fase 1/S1).
@@ -706,7 +620,7 @@ export async function submitDefinition(
   // (`pending_${player}_${round}`). O reducer do realtime dedupica por
   // (player_id, round) quando o INSERT real chega, substituindo in-place.
   const pendingId = `pending_${playerId}_${round}`;
-  if (typeof window !== "undefined" && !isTruth) {
+  if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("definition:optimistic-add", {
         detail: {
@@ -725,46 +639,31 @@ export async function submitDefinition(
     );
   }
   try {
-    if (isTruth) {
-      // Definição verdadeira (chamada pelo host na transição p/ votação)
-      const { data, error } = await supabase.rpc("insert_truth_definition", {
-        p_room_id: roomId,
-        p_round: round,
-        p_text: clean,
-      });
-      if (error) throw error;
-      if (data && (data as any).ok === false) {
-        throw new Error(
-          `insert_truth_definition rejected: ${(data as any).reason}`,
+    const { data, error } = await supabase.rpc("submit_definition", {
+      p_room_id: roomId,
+      p_player_id: playerId,
+      p_text: clean,
+    });
+    if (error) throw error;
+    if (data && (data as any).ok === false) {
+      if ((data as any).reason === "duplicate_definition")
+        throw new DuplicateDefinitionError();
+      if ((data as any).reason === "too_similar")
+        throw new DuplicateDefinitionError(
+          "✋ Ficou muito parecida com outra definição desta rodada — muda umas palavras!",
         );
-      }
-    } else {
-      const { data, error } = await supabase.rpc("submit_definition", {
-        p_room_id: roomId,
-        p_player_id: playerId,
-        p_text: clean,
-      });
-      if (error) throw error;
-      if (data && (data as any).ok === false) {
-        if ((data as any).reason === "duplicate_definition")
-          throw new DuplicateDefinitionError();
-        if ((data as any).reason === "too_similar")
-          throw new DuplicateDefinitionError(
-            "✋ Ficou muito parecida com outra definição desta rodada — muda umas palavras!",
-          );
-        throw new Error(`submit_definition rejected: ${(data as any).reason}`);
-      }
-      // Guarda o id da PRÓPRIA definição: na votação as cédulas chegam sem
-      // autor (S1), então este id é a única forma de bloquear o self-vote
-      // na UI (o servidor também bloqueia via trigger).
-      const realId = (data as any)?.id;
-      if (realId && typeof window !== "undefined") {
-        setStored(`mydef:${roomId}:${round}`, String(realId));
-      }
+      throw new Error(`submit_definition rejected: ${(data as any).reason}`);
+    }
+    // Guarda o id da PRÓPRIA definição: na votação as cédulas chegam sem
+    // autor (S1), então este id é a única forma de bloquear o self-vote
+    // na UI (o servidor também bloqueia via trigger).
+    const realId = (data as any)?.id;
+    if (realId && typeof window !== "undefined") {
+      setStored(`mydef:${roomId}:${round}`, String(realId));
     }
   } catch (e) {
     // Rollback do otimismo se a inserção falhou (ex.: erro de rede).
-    if (typeof window !== "undefined" && !isTruth) {
+    if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("definition:optimistic-rollback", {
           detail: { roomId, pendingId },
@@ -862,24 +761,9 @@ export async function botSubmitDefinitions(
       },
     };
     if (word?.meaning) used.add(norm(humanizeMeaning(word.meaning)));
-
-    // Carrega definições já existentes nessa rodada (humanos + verdade) para
-    // que os bots evitem repetir o que já foi enviado.
-    try {
-      const { data: existing } = await supabase
-        .from("definitions")
-        .select("text")
-        .eq("room_id", roomId)
-        .eq("round", round);
-      if (Array.isArray(existing)) {
-        for (const row of existing) {
-          const t = (row as { text?: string }).text;
-          if (typeof t === "string" && t.length > 0) used.add(norm(t));
-        }
-      }
-    } catch (e) {
-      console.warn("botSubmitDefinitions: failed to load existing defs", e);
-    }
+    // As definições alheias da rodada não são legíveis pelo client (S1):
+    // a deduplicação contra humanos/verdade é do servidor
+    // (submit_bot_definitions_bulk + memória ai_served_defs da edge).
 
     // Pool de fallback embaralhado para evitar colisões aleatórias.
     const fallbackPool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
@@ -944,25 +828,10 @@ export async function generateAiDefinitionForPlayer(
   ];
   const persona = personas[Math.floor(Math.random() * personas.length)];
 
-  // Evita colisão com definições já enviadas na rodada: sem a chave de IA,
-  // bots e o "gerar automática" sorteiam do MESMO pool de templates — sem
-  // este dedup, o jogador recebia "definição igual" ao tentar enviar.
+  // As definições da rodada não são legíveis pelo client (S1); colisão com
+  // texto já enviado é barrada no servidor (submit_definition devolve
+  // duplicate_definition e a UI pede para reescrever).
   const used = new Set<string>();
-  if (roomId && round != null) {
-    try {
-      const { data: existing } = await supabase
-        .from("definitions")
-        .select("text")
-        .eq("room_id", roomId)
-        .eq("round", round);
-      for (const row of existing ?? []) {
-        const t = (row as { text?: string }).text;
-        if (t) used.add(normalizeDefText(t));
-      }
-    } catch {
-      /* dedup é melhor-esforço */
-    }
-  }
 
   try {
     const { data } = await supabase.functions.invoke("bot-definitions", {
@@ -1168,45 +1037,10 @@ export async function nextRound(room: Room, _players: Player[]) {
 }
 
 export async function restartGame(roomId: string) {
-  // Single-transaction reset via server RPC
+  // Reset numa única transação no servidor (só o host; used_word_ids é
+  // preservado — palavras já usadas continuam excluídas após reiniciar).
   const { error } = await supabase.rpc("reset_room", { p_room_id: roomId });
-  if (!error) return;
-  // Fallback (RPC unavailable): legacy sequential reset
-  const { data: ps } = await supabase
-    .from("players")
-    .select("id")
-    .eq("room_id", roomId);
-  if (ps) {
-    await Promise.all(
-      ps.map((p) =>
-        supabase
-          .from("players")
-          .update({
-            score: 0,
-            coordinator_count: 0,
-            writing_extensions: 0,
-            voting_extensions: 0,
-          })
-          .eq("id", p.id),
-      ),
-    );
-  }
-  await Promise.all([
-    supabase.from("definitions").delete().eq("room_id", roomId),
-    supabase.from("votes").delete().eq("room_id", roomId),
-    supabase.from("rounds").delete().eq("room_id", roomId),
-  ]);
-  // IMPORTANT: do NOT clear used_word_ids — palavras já usadas continuam excluídas mesmo após reiniciar
-  await supabase
-    .from("rooms")
-    .update({
-      status: "lobby",
-      current_round: 0,
-      current_coordinator: null,
-      current_word_id: null,
-      round_phase_ends_at: null,
-    })
-    .eq("id", roomId);
+  if (error) console.error("reset_room failed", error);
 }
 
 // ============================================================
@@ -1269,13 +1103,20 @@ export async function joinPublicRoom(
   avatar: string,
   color: string,
 ): Promise<Room> {
+  if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   const cleanNick = sanitizeNickname(nickname);
-  const { data, error } = await supabase.rpc("join_public_room", {
-    p_player_id: playerId,
-    p_nickname: cleanNick,
-    p_avatar: avatar,
-    p_color: color,
-  });
+  const callJoin = (pid: string) =>
+    supabase.rpc("join_public_room", {
+      p_player_id: pid,
+      p_nickname: cleanNick,
+      p_avatar: avatar,
+      p_color: color,
+    });
+  let { data, error } = await callJoin(playerId);
+  // S4: id local pertence a outra identidade — gera um novo e tenta 1x.
+  if (error && String(error.message ?? "").includes("player_id_taken")) {
+    ({ data, error } = await callJoin(regeneratePlayerId()));
+  }
   if (error) {
     if (String(error.message ?? "").includes("player_banned")) {
       throw new Error(
