@@ -58,7 +58,7 @@
 
 ## M1 (2026-10-03) — autoridade do servidor, sessão obrigatória e allowlist
 
-Origem: Master Release Audit (`docs/audit-verbete-2-release.md`) + análise final do M1. Migrations `20261003100000` (lote A), `20261003110000` (E), `20261003120000` (F), `20261003130000` (H).
+Origem: Master Release Audit (`docs/audit-verbete-2-release.md`) + análise final do M1. Migrations `20261003090000` (espelho dos privilégios da `service_role`), `20261003100000` (lote A), `20261003110000` (E), `20261003120000` (F), `20261003130000` (H).
 
 **O que mudou no modelo**
 
@@ -74,8 +74,10 @@ Origem: Master Release Audit (`docs/audit-verbete-2-release.md`) + análise fina
 | `room_words.meaning` legível durante a rodada | Ilegível pela API; chega só por `get_word_reveal()` na revelação |
 | `apply_similarity_bonus` executável por anon (o REVOKE de 0729 só cobria `PUBLIC`) | Revogado por nome de `PUBLIC`, `anon`, `authenticated`; só `service_role` |
 | Privilégios padrão do Supabase davam EXECUTE/ALL a anon em todo objeto novo | `ALTER DEFAULT PRIVILEGES`: funções e tabelas novas nascem fechadas — toda RPC de client precisa de `GRANT` explícito |
+| Edges públicas (sem JWT) aceitavam qualquer corpo; falha de banco virava "palavra fora de rodada"/"rodada não pontuada" em silêncio | Entrada validada antes de tocar o banco (JSON objeto, UUIDs, rodada inteira) → 400 sem evento; falha de banco vira exceção, log e evento `*_ai_error` |
+| Num banco montado só pelas migrations, a `service_role` não tinha privilégio de tabela (as edges levavam 42501) | `20261003090000` espelha o padrão do Supabase hospedado (ALL em tabelas/sequências de `public`); no-op em produção |
 
-**Guarda contra regressão:** `scripts/test-security-rest.mjs` (CI) tenta, pela API REST com a chave publicável — sem sessão e com sessão de outro jogador — PATCH em `players.score/user_id/kicked_at/is_bot`, PATCH `rooms.host_id`, INSERT em `players/rooms/rounds/room_words/room_messages/reactions/votes/round_extensions`, PATCH/DELETE em `definitions`, SELECT de `room_words.meaning`, `apply_similarity_bonus`, `insert_truth_definition`, sobrescrever voto/definição alheios, tirar jogador da sala, comandar bots; confere o estado no banco depois de cada tentativa; joga uma partida legítima de 2 rodadas com a pontuação original; e compara a lista de funções executáveis por `anon` com uma **allowlist** (função nova exposta sem decisão explícita quebra o CI).
+**Guarda contra regressão:** `scripts/test-security-rest.mjs` (CI) tenta, pela API REST com a chave publicável — sem sessão e com sessão de outro jogador — PATCH em `players.score/user_id/kicked_at/is_bot`, PATCH `rooms.host_id`, INSERT em `players/rooms/rounds/room_words/room_messages/reactions/votes/round_extensions`, PATCH/DELETE em `definitions`, SELECT de `room_words.meaning`, `apply_similarity_bonus`, `insert_truth_definition`, sobrescrever voto/definição alheios, tirar jogador da sala, comandar bots; confere o estado no banco depois de cada tentativa; joga uma partida legítima de 2 rodadas com a pontuação original; e compara a lista de funções executáveis por `anon` com uma **allowlist** (função nova exposta sem decisão explícita quebra o CI). `scripts/test-edges-e2e.mjs` serve as duas edges em Deno e confere entrada malformada (400, sem banco nem IA), texto do chamador ignorado, verdade fora das candidatas, replay idempotente e a lista de privilégios da `service_role` que a sonda de produção (`scripts/probe-m1-prod.mjs`) também confere.
 
 **Riscos residuais (M2)**
 
