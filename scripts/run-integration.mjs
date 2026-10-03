@@ -17,6 +17,7 @@ const SUITES = [
   "test-ops.mjs",
   "test-ops-health.mjs",
   "test-rollback.mjs",
+  "test-probe-local.mjs",
   "ci-android.mjs",
 ];
 

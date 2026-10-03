@@ -4,11 +4,12 @@
 // Se alguma recusa falhar, a sonda acusa ANTES de qualquer efeito (as
 // tentativas usam ids inexistentes / sala inexistente).
 // Envs: SUPA_URL, ANON (chave publicável), DB_URL (postgres), APP_URL,
-// EXPECT_BUILD (opcional: SHA do deploy web, confere o meta verbete-build).
+// EXPECT_BUILD (opcional: SHA do deploy web, confere o meta verbete-build),
+// SKIP_WEB=1 (só no CI, que valida esta sonda contra o banco local no M1).
 import pg from "pg";
 import { httpGet } from "./lib/http-doh.mjs";
 
-const { SUPA_URL, ANON, DB_URL, EXPECT_BUILD } = process.env;
+const { SUPA_URL, ANON, DB_URL, EXPECT_BUILD, SKIP_WEB } = process.env;
 const APP_URL = process.env.APP_URL ?? "https://jogo.verbete.workers.dev";
 let fails = 0;
 const check = (name, ok, detail = "") => {
@@ -18,13 +19,17 @@ const check = (name, ok, detail = "") => {
 const rest = async (path, body) => {
   const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     method: body === undefined ? "GET" : "POST",
-    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "application/json" },
+    // só a apikey (chave publicável sb_publishable_…): o gateway trata como anon
+    headers: { apikey: ANON, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: r.status, text: await r.text() };
 };
 
-const db = new pg.Client({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
+const db = new pg.Client({
+  connectionString: DB_URL,
+  ssl: /supabase\.(co|com)/.test(DB_URL ?? "") ? { rejectUnauthorized: false } : false,
+});
 await db.connect();
 const q = async (sql) => (await db.query(sql)).rows;
 
@@ -102,10 +107,14 @@ check("bot-definitions publicada (versão M1)", e.status === 400 && /word_id req
 e = await edge("score-similarity");
 check("score-similarity publicada (versão M1)", e.status === 200 && e.text.trim() === '{"matches":[]}', `HTTP ${e.status} ${e.text}`);
 
-console.log("\n— Web");
-const og = await httpGet(`${APP_URL}/og-verbete.jpg`, "HEAD");
-check("og:image 200 image/jpeg", og.status === 200 && /image\/jpeg/.test(og.type), `HTTP ${og.status} ${og.type}`);
-if (EXPECT_BUILD) {
+if (SKIP_WEB) {
+  console.log("\n— Web: pulado (SKIP_WEB)");
+} else {
+  console.log("\n— Web");
+  const og = await httpGet(`${APP_URL}/og-verbete.jpg`, "HEAD");
+  check("og:image 200 image/jpeg", og.status === 200 && /image\/jpeg/.test(og.type), `HTTP ${og.status} ${og.type}`);
+}
+if (EXPECT_BUILD && !SKIP_WEB) {
   const home = await httpGet(`${APP_URL}/`);
   const build = home.body.match(/name="verbete-build" content="([^"]*)"/)?.[1] ?? "";
   check(
