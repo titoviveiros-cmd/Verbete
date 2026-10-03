@@ -151,6 +151,25 @@ for (const f of [
   check(`sql-readonly roda ${f.split("/").pop()}`, t.status === 0, `exit=${t.status} ${t.stderr.trim().slice(0, 120)}`);
 }
 
+const original = (await one(`SELECT value FROM public.app_config WHERE key = 'client.maintenance'`))?.value;
+t = node(["scripts/set-app-config.mjs", "client.maintenance", "on"]);
+const cfgOn = (await one(`SELECT public.get_client_config() AS c`)).c;
+t = original === undefined
+  ? node(["scripts/set-app-config.mjs", "client.maintenance", "--delete"])
+  : node(["scripts/set-app-config.mjs", "client.maintenance", original]);
+const restored = (await one(`SELECT value FROM public.app_config WHERE key = 'client.maintenance'`))?.value;
+check(
+  "set-app-config liga a manutenção (o app lê via get_client_config) e volta ao valor anterior",
+  cfgOn?.maintenance === "on" && t.status === 0 && restored === original,
+  `${JSON.stringify(cfgOn)} restaurado=${restored}`,
+);
+const denied = [
+  node(["scripts/set-app-config.mjs", "supabase_anon_key", "x"]).status,
+  node(["scripts/set-app-config.mjs", "client.maintenance", "talvez"]).status,
+  node(["scripts/set-app-config.mjs", "ops_alert_webhook_url", "http://inseguro"]).status,
+];
+check("set-app-config recusa chave fora da lista e valor inválido", denied.every((s) => s === 2), JSON.stringify(denied));
+
 const after = await one(`SELECT to_regprocedure('public.migrate_host(uuid)') IS NOT NULL AS m1`);
 check("banco do CI segue no M1 após os testes (transações desfeitas)", after.m1);
 
