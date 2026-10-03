@@ -43,7 +43,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Como excluo minha conta?",
-    a: 'Acesse seu Perfil → Zona de perigo → "Excluir conta". A ação é permanente: removemos seu perfil e anonimizamos seu histórico de partidas.',
+    a: 'Acesse seu Perfil → Zona de perigo → "Excluir conta". A ação é permanente: apagamos sua conta, perfil, estatísticas, conquistas e histórico de partidas. Nas salas em que você jogou fica só o apelido usado na partida, sem vínculo com a conta.',
   },
   {
     q: "Posso jogar offline?",
