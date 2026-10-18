@@ -91,7 +91,9 @@ export function ReportButton({
         }}
         aria-label="Reportar definição"
         title="Reportar"
-        className="opacity-40 hover:opacity-100 transition text-base shrink-0 px-1 py-0.5"
+        // Alvo de toque de 40px (o 🚩 continua pequeno e discreto); a cédula
+        // reserva 48px à direita para ele não cobrir o texto.
+        className="opacity-40 hover:opacity-100 transition text-base shrink-0 min-w-10 min-h-10 flex items-center justify-center rounded-full"
       >
         🚩
       </button>

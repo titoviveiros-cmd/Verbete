@@ -14,6 +14,7 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     setDefinitions,
     setVotes,
     optimisticPlayerIdsRef,
+    reloadRef,
   } = ctx;
   const roomId = room?.id;
 
@@ -113,6 +114,13 @@ export function useRoomOptimistic(ctx: RoomCtx) {
         ),
       );
     };
+    // Escrita de configuração recusada/falhou: volta para a verdade do servidor.
+    const onConfigResync = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        { roomId?: string } | undefined;
+      if (detail?.roomId !== roomId) return;
+      void reloadRef.current?.();
+    };
     const onPlayersClearTeam = (e: Event) => {
       const detail = (e as CustomEvent).detail as
         { roomId?: string } | undefined;
@@ -125,6 +133,7 @@ export function useRoomOptimistic(ctx: RoomCtx) {
       ["player:optimistic-update", onPlayerUpdate as EventListener],
       ["players:optimistic-clear-team", onPlayersClearTeam as EventListener],
       ["room:optimistic-update", onRoomUpdate as EventListener],
+      ["room:config-resync", onConfigResync as EventListener],
       ["definition:optimistic-add", onDefAdd as EventListener],
       [
         "definitions:optimistic-replace-round",

@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Definition, Vote, Word } from "@/lib/room";
+import { withPendingConfig } from "@/lib/room-config-writer";
 import type { RoundExtension } from "@/hooks/use-room";
 import type { RoomCtx } from "./ctx";
 
@@ -49,7 +50,7 @@ export function useRoomData(ctx: RoomCtx) {
           setLoading(false);
           return;
         }
-        setRoom(payload.room);
+        setRoom(withPendingConfig(payload.room));
         lastRoomSigRef.current = `${payload.room.status}|${payload.room.current_round}|${payload.room.current_word_id ?? ""}`;
         lastEventAtRef.current = Date.now();
         setPlayers((payload.players ?? []).filter((p) => !p.kicked_at));
@@ -80,7 +81,7 @@ export function useRoomData(ctx: RoomCtx) {
         setLoading(false);
         return;
       }
-      setRoom(r as unknown as Room);
+      setRoom(withPendingConfig(r as unknown as Room));
       const [{ data: ps }, { data: sync }, { data: rxs }] = await Promise.all([
         supabase
           .from("players")

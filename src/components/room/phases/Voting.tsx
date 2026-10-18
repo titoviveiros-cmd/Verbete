@@ -486,7 +486,7 @@ function VotingImpl({
                 onClick={() => handleVote(d.id)}
                 className={
                   "sticker relative w-full flex-1 !rounded-2xl !pl-3 !py-3 text-left flex gap-3 items-center transition " +
-                  (isMine ? "!pr-3 " : "!pr-11 ") +
+                  (isMine ? "!pr-3 " : "!pr-12 ") +
                   (isPicked ? "ring-neon" : "")
                 }
               >
@@ -532,7 +532,9 @@ function VotingImpl({
         })}
       </div>
 
-      <div className="shrink-0 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground font-display px-2">
+      {/* .float-lane: no celular em pé, este bloco ocupa a faixa do chat e do
+          ▾ — a lista termina acima deles e o 🚩 da última cédula fica livre. */}
+      <div className="float-lane shrink-0 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground font-display px-2">
         <span className="eyebrow tabular-nums">
           {roundVotes.length}/{voters.length} votaram
         </span>
