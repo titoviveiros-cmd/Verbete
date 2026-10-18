@@ -20,7 +20,7 @@ function applyTheme(t: Theme) {
   const root = document.documentElement;
   if (t === "light") root.classList.add("light");
   else root.classList.remove("light");
-  const color = t === "light" ? "#fbf3e3" : "#1a0f2e";
+  const color = t === "light" ? "#fbf3e3" : "#150a2c";
   let meta = document.querySelector(
     'meta[name="theme-color"]',
   ) as HTMLMetaElement | null;
