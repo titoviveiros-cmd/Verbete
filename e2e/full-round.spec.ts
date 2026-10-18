@@ -104,7 +104,7 @@ test("host + convidado jogam uma rodada completa", async ({ browser }) => {
   //    habilitada — a do escritor está bloqueada para ele, então ele vota
   //    na verdade obrigatoriamente.
   for (const p of pages) {
-    const cedula = p.locator("button:has(span.text-sun):not([disabled])");
+    const cedula = p.locator("button:has(.token):not([disabled])");
     await expect(cedula.first()).toBeVisible({ timeout: 60_000 });
     await cedula.first().click();
   }

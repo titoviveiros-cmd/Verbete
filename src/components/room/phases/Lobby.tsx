@@ -153,7 +153,7 @@ export function Lobby({
             onClick={handleShare}
             className="btn-pop btn-gold py-2.5 !px-3.5 text-base max-[389px]:text-sm shrink-0"
           >
-            {copied ? "✅ Copiado!" : "📲 Convidar"}
+            {copied ? "✅ Copiado!" : "📲 Compartilhar"}
           </button>
         </div>
         {shareWarn && (

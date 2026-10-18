@@ -183,7 +183,7 @@ for (const withBot of [false, true]) {
       // 7) votação: cada humano vota na primeira cédula habilitada
       for (const p of pages) {
         const cedula = () =>
-          p.locator("button:has(span.text-sun):not([disabled])").first();
+          p.locator("button:has(.token):not([disabled])").first();
         await visibleOrReload(p, names.get(p)!, cedula, stalls, 90_000, 90_000);
         await cedula().click({ force: true });
       }
