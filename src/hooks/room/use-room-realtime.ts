@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Vote } from "@/lib/room";
 import type { RoundExtension } from "@/hooks/use-room";
 import { reportOpsEvent } from "@/lib/ops";
+import { withPendingConfig } from "@/lib/room-config-writer";
 import type { RoomCtx } from "./ctx";
 
 export function useRoomRealtime(ctx: RoomCtx) {
@@ -48,7 +49,9 @@ export function useRoomRealtime(ctx: RoomCtx) {
           lastEventAtRef.current = Date.now();
           if (p.new) {
             const nr = p.new as unknown as Room;
-            setRoom(nr);
+            // Eco atrasado de uma configuração antiga do host não desfaz o
+            // último toque (room-config-writer); para os demais, no-op.
+            setRoom(withPendingConfig(nr, "realtime"));
             // Relay: anuncia para os outros clientes a nova assinatura
             // (status, round). Quem não recebeu o postgres_changes via DB
             // ainda assim escuta esse broadcast e se cura sozinho.

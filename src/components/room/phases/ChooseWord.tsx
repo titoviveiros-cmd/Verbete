@@ -57,7 +57,17 @@ export function ChooseWord({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col items-center justify-center gap-4 lg:gap-6"
+      // Celular deitado (short:), escolhendo entre as 3 cartas: cartas +
+      // título não cabiam na altura útil e a última descia para baixo da
+      // barra de reações. Só nesse estado o bloco começa no topo, fica mais
+      // compacto e, se ainda faltar altura, rola dentro da área útil (que
+      // termina acima da barra). "Sortear palavra" segue centralizado.
+      className={
+        "flex-1 flex flex-col items-center justify-center gap-4 lg:gap-6" +
+        (phase === "ready"
+          ? " short:justify-start short:gap-2 short:min-h-0 short:overflow-y-auto short:overflow-x-hidden no-scrollbar"
+          : "")
+      }
     >
       {phase !== "ready" && (
         <div className="relative short:hidden">
@@ -73,7 +83,14 @@ export function ChooseWord({
           <Mascot mood="thinking" size={140} className="relative" />
         </div>
       )}
-      <div className="text-center flex flex-col items-center">
+      {/* Escolhendo a palavra no celular deitado, o próprio coordenador não
+          precisa do cabeçalho com o nome dele: a altura vai para as cartas. */}
+      <div
+        className={
+          "text-center flex flex-col items-center" +
+          (phase === "ready" ? " short:hidden" : "")
+        }
+      >
         <p className="eyebrow">Coordenador da rodada</p>
         <div className="flex items-center gap-2.5 mt-1.5">
           {coord && (
@@ -110,7 +127,7 @@ export function ChooseWord({
       </div>
 
       {isCoordinator ? (
-        <div className="w-full flex flex-col items-center gap-4">
+        <div className="w-full flex flex-col items-center gap-4 short:gap-2">
           {phase === "idle" && (
             <motion.button
               initial={{ scale: 0.9, opacity: 0 }}
@@ -129,12 +146,12 @@ export function ChooseWord({
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full flex flex-col gap-3"
+              className="w-full flex flex-col gap-3 short:gap-2"
             >
-              <p className="text-center font-display text-pink text-xl">
+              <p className="text-center font-display text-pink text-xl short:text-lg">
                 {picking ? "Confirmando palavra…" : "Escolha uma palavra rara!"}
               </p>
-              <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3">
+              <div className="flex flex-col gap-3 short:gap-2 lg:grid lg:grid-cols-3">
                 {words.map((w, i) => (
                   <motion.button
                     key={w.id}
@@ -151,7 +168,7 @@ export function ChooseWord({
                     onCopy={(e) => e.preventDefault()}
                     onContextMenu={(e) => e.preventDefault()}
                     className={
-                      "w-full sticker text-left transition !px-4 !py-3 flex items-center gap-3 no-copy lg:flex-col lg:items-start lg:!py-5 " +
+                      "w-full sticker text-left transition !px-4 !py-3 short:!py-2 flex items-center gap-3 no-copy lg:flex-col lg:items-start lg:!py-5 " +
                       (picking && picking !== w.id
                         ? "opacity-40 pointer-events-none "
                         : "") +

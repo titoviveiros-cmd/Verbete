@@ -1,8 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
 import { scalePhaseSecs } from "./game-times";
+import { queueRoomConfig } from "./room-config-writer";
 import {
   sanitizeDefinition,
   sanitizeNickname,
@@ -360,19 +360,12 @@ export async function setWinCondition(
       }),
     );
   }
-  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  supabase
-    .rpc("host_update_room_config", {
-      p_room_id: roomId,
-      p_actor_id: actorId,
-      p_patch: { win_condition: condition, win_target: target },
-    })
-    .then(
-      ({ error }: { error: unknown }) => {
-        if (error) console.error("host_update_room_config" + " failed", error);
-      },
-      (e: unknown) => console.error("host_update_room_config" + " failed", e),
-    );
+  // Fila por sala: toques rápidos ("Rodadas" → "5 rod.") não podem chegar
+  // fora de ordem ao servidor (ver room-config-writer.ts).
+  void queueRoomConfig(roomId, actorId, {
+    win_condition: condition,
+    win_target: target,
+  });
 }
 
 // ---------- Game flow (driven by host browser) ----------
@@ -454,19 +447,7 @@ export async function setNivel(
       }),
     );
   }
-  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  supabase
-    .rpc("host_update_room_config", {
-      p_room_id: roomId,
-      p_actor_id: actorId,
-      p_patch: { nivel },
-    })
-    .then(
-      ({ error }: { error: unknown }) => {
-        if (error) console.error("host_update_room_config" + " failed", error);
-      },
-      (e: unknown) => console.error("host_update_room_config" + " failed", e),
-    );
+  void queueRoomConfig(roomId, actorId, { nivel });
 }
 
 export async function setCategories(
@@ -481,19 +462,7 @@ export async function setCategories(
       }),
     );
   }
-  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  supabase
-    .rpc("host_update_room_config", {
-      p_room_id: roomId,
-      p_actor_id: actorId,
-      p_patch: { categories },
-    })
-    .then(
-      ({ error }: { error: unknown }) => {
-        if (error) console.error("host_update_room_config" + " failed", error);
-      },
-      (e: unknown) => console.error("host_update_room_config" + " failed", e),
-    );
+  void queueRoomConfig(roomId, actorId, { categories });
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -1167,19 +1136,7 @@ export async function setRoomMode(
     }
   }
   // RPC já zera team_id de todos quando mode='individual'.
-  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  supabase
-    .rpc("host_update_room_config", {
-      p_room_id: roomId,
-      p_actor_id: actorId,
-      p_patch: { mode, teams: nextTeams } as unknown as Json,
-    })
-    .then(
-      ({ error }: { error: unknown }) => {
-        if (error) console.error("host_update_room_config" + " failed", error);
-      },
-      (e: unknown) => console.error("host_update_room_config" + " failed", e),
-    );
+  void queueRoomConfig(roomId, actorId, { mode, teams: nextTeams });
 }
 
 export async function setRoomTeams(
@@ -1194,19 +1151,7 @@ export async function setRoomTeams(
       }),
     );
   }
-  // .then() explícito: o builder é "thenable" e `void builder` NÃO dispara a request.
-  supabase
-    .rpc("host_update_room_config", {
-      p_room_id: roomId,
-      p_actor_id: actorId,
-      p_patch: { teams } as unknown as Json,
-    })
-    .then(
-      ({ error }: { error: unknown }) => {
-        if (error) console.error("host_update_room_config" + " failed", error);
-      },
-      (e: unknown) => console.error("host_update_room_config" + " failed", e),
-    );
+  void queueRoomConfig(roomId, actorId, { teams });
 }
 
 export async function assignPlayerToTeam(

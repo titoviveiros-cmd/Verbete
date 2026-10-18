@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { installSupabaseMock, type MockBackend } from "./supabase-mock";
+import { blockedButtons, floatingConflicts } from "./occlusion";
 import {
   ROOM_CODE,
   dailyBackend,
@@ -279,6 +280,120 @@ for (const screen of SCREENS) {
           path: join(SHOTS_DIR, `${screen.name}-${w}x${h}.png`),
         });
       }
+
+      // Nenhum botão cortado na lateral nem coberto por algo flutuante
+      // (barra de reações, chat, rodapé fixo). Depois da captura: rola a página.
+      expect(await blockedButtons(page), "botão cortado/coberto").toEqual([]);
     });
   }
+}
+
+// Alvos que ficavam embaixo dos controles flutuantes (micro-rodada
+// pré-loja): o 🚩 da última cédula sob o chat no celular em pé, e uma carta
+// de palavra sob a barra de reações no celular deitado. Tamanhos fixos (rodam
+// sempre, também no CI), incluindo os casos mais apertados.
+const FLOATING: Array<{
+  screen: string;
+  target: string;
+  sizes: Array<[number, number]>;
+}> = [
+  {
+    screen: "voting",
+    target: '[aria-label="Reportar definição"]',
+    sizes: [
+      [375, 812],
+      [390, 844],
+      [430, 932],
+      [375, 667],
+    ],
+  },
+  {
+    screen: "choosing-palavras",
+    target: "button.sticker",
+    sizes: [
+      [667, 375],
+      [640, 360],
+      [568, 320],
+      [844, 390],
+    ],
+  },
+];
+
+for (const f of FLOATING) {
+  const screen = SCREENS.find((s) => s.name === f.screen)!;
+  for (const [w, h] of f.sizes) {
+    test(`controles flutuantes: ${f.screen} @ ${w}x${h} — alvos inteiros e com folga`, async ({
+      page,
+    }) => {
+      test.setTimeout(90_000);
+      await page.setViewportSize({ width: w, height: h });
+      await installSupabaseMock(page, screen.backend());
+      if (screen.storage) {
+        await page.addInitScript((entries) => {
+          for (const [k, v] of Object.entries(entries))
+            localStorage.setItem(k, v);
+        }, screen.storage);
+      }
+      await page.goto(screen.path);
+      await screen.ready(page);
+      expect(
+        await floatingConflicts(page, f.target),
+        "alvo sob controle flutuante",
+      ).toEqual([]);
+      const overflow = await page.evaluate(() => {
+        const el = document.scrollingElement ?? document.documentElement;
+        return el.scrollWidth - window.innerWidth;
+      });
+      expect(overflow, "rolagem horizontal na página").toBeLessThanOrEqual(1);
+    });
+  }
+}
+
+// Denúncia e voto são alvos separados: o 🚩 (inclusive o da última cédula,
+// perto do chat) abre a denúncia sem votar; tocar na cédula vota uma vez.
+for (const [w, h] of [
+  [375, 812],
+  [390, 844],
+] as const) {
+  test(`votação @ ${w}x${h}: 🚩 abre a denúncia sem votar e a cédula vota uma vez`, async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: w, height: h });
+    const log = await installSupabaseMock(page, roomBackend("voting"));
+    await page.addInitScript((entries) => {
+      for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
+    }, roomStorage("voting"));
+    await page.goto(`/room/${ROOM_CODE}`);
+    await expect(
+      page.getByText("tambor de couro", { exact: false }),
+    ).toBeVisible();
+    await page.waitForTimeout(1200);
+    const votes = () =>
+      log.calls.filter((c) => c === "POST /rest/v1/rpc/cast_vote").length;
+
+    // Sem force: se o chat (ou qualquer coisa) interceptar o toque, reprova.
+    const lastFlag = page
+      .getByRole("button", { name: "Reportar definição" })
+      .last();
+    await lastFlag.scrollIntoViewIfNeeded();
+    await lastFlag.click();
+    const cancel = page.getByRole("button", { name: "Cancelar" });
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+    await expect(cancel).toBeHidden();
+    await page.waitForTimeout(400);
+    expect(votes(), "o 🚩 disparou voto").toBe(0);
+    await expect(page.getByLabel("Voto registrado")).toHaveCount(0);
+
+    // (o "✓ Voto registrado" é otimista e o polling do simulador, que não
+    // guarda votos, o apaga logo depois — por isso conta-se a chamada)
+    const ballot = page.locator("button:has(.token):not([disabled])").last();
+    await ballot.scrollIntoViewIfNeeded();
+    await ballot.click();
+    await expect.poll(votes, { timeout: 5_000 }).toBe(1);
+    await page.waitForTimeout(800);
+    expect(votes(), "um toque na cédula = um voto").toBe(1);
+    await expect(cancel).toBeHidden(); // votar não abre a denúncia
+  });
 }

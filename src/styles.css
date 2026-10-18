@@ -1139,3 +1139,18 @@ button:disabled,
     min-height: 100dvh;
   }
 }
+
+/* Faixa dos controles flutuantes da sala no celular em pé. O chat (bottom
+   120px, 40px de altura) e o ▾ das reações (bottom 76px) flutuam na borda
+   direita, sobre os 100px finais da área útil (o .room-shell já reserva 60px
+   para a barra de reações). O bloco com .float-lane no fim de uma fase ocupa
+   essa altura com folga, e nada da lista acima — ex.: o 🚩 da última cédula —
+   fica embaixo do chat; o padding lateral tira o conteúdo da faixa da borda.
+   Deitado ou no tablet a coluna do jogo é estreita e os botões flutuam fora
+   dela, então a regra não vale. */
+@media (max-width: 639.98px) and (min-height: 521px) {
+  .float-lane {
+    min-height: 104px;
+    padding-inline: 3rem;
+  }
+}
