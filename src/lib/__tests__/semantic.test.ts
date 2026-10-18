@@ -99,6 +99,48 @@ describe("calibre semântico único (Diário = multiplayer)", () => {
   });
 });
 
+describe("bateria de calibração (scripts/test-semantic-calibration.mjs)", () => {
+  it("30–50 pares, todas as categorias pedidas e os 6 exemplos obrigatórios", async () => {
+    // @ts-expect-error módulo .mjs sem tipos
+    const { CASES, BATCH } =
+      await import("../../../scripts/semantic-calibration-cases.mjs");
+    const cases = CASES as Array<{
+      cat: string;
+      truth: string;
+      guess: string;
+      expect: string;
+    }>;
+    expect(cases.length).toBeGreaterThanOrEqual(30);
+    expect(cases.length).toBeLessThanOrEqual(50);
+    const cats = new Set(cases.map((c) => c.cat));
+    for (const cat of [
+      "sinônimo direto",
+      "paráfrase",
+      "frase mais curta",
+      "frase mais longa",
+      "hiperônimo aceitável",
+      "hipônimo aceitável",
+      "parcialmente correta",
+      "apenas relacionado",
+      "conceito diferente",
+      "outra acepção",
+      "coloquial",
+      "erros leves",
+      "sem acentos",
+      "muito genérica",
+      "palavras da definição",
+    ])
+      expect(cats.has(cat)).toBe(true);
+    for (const e of SEMANTIC_EXAMPLES)
+      expect(
+        cases.some((c) => c.truth === e.truth && c.guess === e.guess),
+      ).toBe(true);
+    for (const c of cases)
+      expect(["alto", "baixo", "muito_baixo"]).toContain(c.expect);
+    expect(BATCH.candidates.length).toBeGreaterThan(1);
+  });
+});
+
 describe("leitura das respostas do modelo", () => {
   it("parseDailyScore: nota do palpite no formato do juiz; arredonda e limita 0–100", () => {
     const one = (score: unknown) =>
