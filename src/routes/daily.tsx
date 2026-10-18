@@ -57,6 +57,7 @@ function DailyPage() {
   const submit = useServerFn(submitDailyAttempt);
 
   const [data, setData] = useState<DailyChallenge | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [review, setReview] = useState<DailyReview | null>(null);
   const [board, setBoard] = useState<
     Awaited<ReturnType<typeof fetchDailyLeaderboard>>
@@ -118,6 +119,7 @@ function DailyPage() {
     if (busy) return;
     if (!guess.trim() && !expired) return;
     setBusy(true);
+    setSubmitError(null);
     try {
       const timeSeconds = Math.min(
         600,
@@ -156,6 +158,12 @@ function DailyPage() {
       }
     } catch (e) {
       console.error(e);
+      // Sem isto o envio automático do tempo esgotado repetia em laço.
+      setSubmitError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Não foi possível enviar agora — tente de novo.",
+      );
     } finally {
       setBusy(false);
     }
@@ -165,11 +173,11 @@ function DailyPage() {
   const alreadyDone = !!playedAttempt || !!result;
 
   useEffect(() => {
-    if (expired && !alreadyDone && !busy) {
+    if (expired && !alreadyDone && !busy && !submitError) {
       onSubmit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expired, alreadyDone, busy]);
+  }, [expired, alreadyDone, busy, submitError]);
 
   const displayResult = useMemo(() => {
     if (result) return result;
@@ -275,6 +283,14 @@ function DailyPage() {
             >
               {busy ? "Enviando..." : "Enviar palpite 🎯"}
             </button>
+            {submitError && (
+              <p
+                role="alert"
+                className="text-xs text-destructive font-display text-center"
+              >
+                {submitError}
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground text-center">
               Quanto mais rápido acertar, mais pontos. Um palpite por hora!
             </p>

@@ -19,6 +19,7 @@ import { installOpsCapture } from "@/lib/ops";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { RemoteGate } from "@/components/RemoteGate";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -310,7 +311,9 @@ function RootComponent() {
         <OfflineBanner />
         <ErrorBoundary>
           <main id="main">
-            <Outlet />
+            <RemoteGate>
+              <Outlet />
+            </RemoteGate>
           </main>
         </ErrorBoundary>
         <AchievementToaster />

@@ -151,25 +151,20 @@ export function useRoomData(ctx: RoomCtx) {
         setWord(data as unknown as Word);
         return;
       }
+      // Palavra customizada: idem — room_words.meaning não é legível pelo
+      // client (chega na revelação via get_word_reveal, como em words).
       const { data: cw } = await supabase
         .from("room_words")
-        .select("id,word,meaning,category")
+        .select("id,word,category")
         .eq("id", currentWordId)
         .maybeSingle();
       if (cw) {
-        const row = cw as {
-          id: string;
-          word: string;
-          meaning: string;
-          category: string | null;
-        };
         setWord({
-          id: row.id,
-          word: row.word,
-          meaning: row.meaning,
-          category: row.category ?? "custom",
+          id: cw.id,
+          word: cw.word,
+          category: cw.category ?? "custom",
           rarity: 2,
-        } as Word);
+        });
       } else {
         setWord(null);
       }

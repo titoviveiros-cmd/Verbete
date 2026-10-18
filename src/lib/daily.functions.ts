@@ -7,6 +7,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  callChat,
+  parseJsonObject,
+} from "../../supabase/functions/_shared/ai.ts";
+
+export const DAILY_EVAL_UNAVAILABLE =
+  "A avaliação está indisponível agora — sua tentativa NÃO foi gasta. Tente de novo em instantes.";
 
 const submitInput = z.object({
   guess: z.string().min(1).max(200),
@@ -19,45 +26,31 @@ function hourBucketIso(): string {
   return d.toISOString();
 }
 
+// null = avaliação indisponível (sem chave, Gemini fora após nova tentativa,
+// resposta inválida). Antes virava 0: o palpite era gravado como ERRADO e a
+// tentativa do dia era consumida sem o jogador saber (IA-04).
 async function scoreSemanticSimilarity(
   word: string,
   truth: string,
   guess: string,
-): Promise<number> {
+): Promise<number | null> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return 0;
+  if (!apiKey) return null;
   const system =
     'Você avalia equivalência semântica entre duas definições curtas (PT-BR) de uma palavra. Retorne APENAS JSON {"score": <inteiro 0-100>} representando o quanto a definição do jogador transmite o mesmo significado essencial da verdadeira. 100 = idêntico em significado (sinônimos / paráfrases contam). 80+ = essencialmente correto. 0 = sem relação. Ignore estilo, acentos, ordem, pontuação.';
   const user = `Palavra: ${word}\nDefinição verdadeira: "${truth}"\nDefinição do jogador: "${guess}"\n\nResponda só o JSON.`;
-  try {
-    const r = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gemini-flash-lite-latest",
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        }),
-      },
-    );
-    if (!r.ok) return 0;
-    const data = await r.json();
-    const content: string = data?.choices?.[0]?.message?.content ?? "";
-    const m = content.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(m ? m[0] : content);
-    const n = Math.round(Number(parsed?.score));
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(100, n));
-  } catch {
-    return 0;
-  }
+  const chat = await callChat({
+    fetchFn: fetch,
+    apiKey,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+  if (!chat.ok) return null;
+  const n = Math.round(Number(parseJsonObject(chat.content)?.score));
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, n));
 }
 
 export const submitDailyAttempt = createServerFn({ method: "POST" })
@@ -86,10 +79,24 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
       truth = String(w?.meaning ?? "");
     }
 
-    // 2) Calcula a semelhança semântica via IA (fallback 0 se falhar).
+    // 2) Calcula a semelhança semântica via IA. Indisponível = NÃO registra
+    // (a tentativa não é gasta) e o painel de saúde/alerta fica sabendo.
     const similarity = truth
       ? await scoreSemanticSimilarity(word, truth, data.guess)
       : 0;
+    if (similarity === null) {
+      await supabaseAdmin
+        .from("ops_events")
+        .insert({
+          kind: "judge_ai_error",
+          payload: { fn: "daily", reason: "unavailable" },
+        })
+        .then(
+          () => {},
+          () => {},
+        );
+      throw new Error(DAILY_EVAL_UNAVAILABLE);
+    }
 
     // 3) Registra via RPC de servidor (apenas service_role pode chamar).
     const { data: result, error } = await supabaseAdmin.rpc(

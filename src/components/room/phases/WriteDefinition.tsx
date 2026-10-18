@@ -274,7 +274,6 @@ export function WriteDefinition({
         room.current_round,
         me.id,
         text,
-        false,
         word.word,
       );
     } catch (e) {

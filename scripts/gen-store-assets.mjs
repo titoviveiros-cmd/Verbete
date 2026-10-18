@@ -1,11 +1,14 @@
 // Assets da ficha da Play Store (mesmo visual de gen-brand-assets.mjs):
 //   resources/store/icon-512.png        512×512 (ícone da ficha)
 //   resources/store/feature-1024x500.png feature graphic
+//   public/og-verbete.jpg               1200×630 (prévia de link: WhatsApp,
+//                                        Telegram, iMessage — og:image)
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const OUT = resolve(process.cwd(), "resources", "store");
+const PUBLIC = resolve(process.cwd(), "public");
 mkdirSync(OUT, { recursive: true });
 const BG = "#0f0a1f";
 const ROXO = "#4c1a8f";
@@ -53,8 +56,25 @@ const shots = [
       </div>
     </div>`,
   },
+  {
+    file: "og-verbete.jpg",
+    dir: PUBLIC,
+    w: 1200,
+    h: 630,
+    jpeg: true,
+    html: `<div style="display:flex;align-items:center;gap:64px;">
+      ${tileHtml(340)}
+      <div style="display:flex;flex-direction:column;gap:22px;align-items:flex-start;">
+        ${wordmarkHtml(140)}
+        <span style="font-family:'Nunito',sans-serif;font-weight:700;font-size:36px;color:rgba(255,255,255,0.85);">Invente. Engane. Descubra a verdade.</span>
+      </div>
+    </div>`,
+  },
 ];
+// `node scripts/gen-store-assets.mjs og-verbete.jpg` gera só esse arquivo.
+const only = process.argv[2];
 for (const s of shots) {
+  if (only && s.file !== only) continue;
   const pg = await browser.newPage({
     viewport: { width: s.w, height: s.h },
     deviceScaleFactor: 1,
@@ -62,8 +82,13 @@ for (const s of shots) {
   await pg.setContent(page(s.html), { waitUntil: "networkidle" });
   await pg.evaluate(() => document.fonts.ready);
   await pg.waitForTimeout(250);
-  await pg.screenshot({ path: resolve(OUT, s.file) });
+  const dir = s.dir ?? OUT;
+  await pg.screenshot(
+    s.jpeg
+      ? { path: resolve(dir, s.file), type: "jpeg", quality: 88 }
+      : { path: resolve(dir, s.file) },
+  );
   await pg.close();
-  console.log(`✔ resources/store/${s.file}`);
+  console.log(`✔ ${s.dir ? "public" : "resources/store"}/${s.file}`);
 }
 await browser.close();

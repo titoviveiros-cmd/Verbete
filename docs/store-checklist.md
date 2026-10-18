@@ -33,7 +33,20 @@ Em Settings → Secrets and variables → Actions do repo, crie:
 | `ANDROID_KEY_PASSWORD` | senha da chave |
 
 Depois: aba Actions → workflow "Android" → Run workflow → baixe o artifact
-`verbete-release-aab`.
+`verbete-release-aab`. **Arquive o AAB aprovado fora do GitHub** (o artifact
+expira: o candidato de agosto sumiu com 30 dias; desde o M1 a retenção é 90).
+
+### 1a'. Configuração pública do bundle nativo (M1)
+
+O app instalado empacota um bundle fixo, então a configuração pública vai
+no próprio build: `.env.capacitor` (versionado — só URL do Supabase, chave
+**publicável** e `VITE_APP_URL`, os mesmos valores que o site entrega a
+qualquer visitante). `vite build --mode capacitor` **falha** sem esses
+valores, com chave secreta/service_role ou com APP_URL local
+(`build/native-env.ts`), e embute o `versionCode` (trava remota de versão
+mínima) e o SHA do commit (rodapé do app). `scripts/smoke-native-bundle.mjs`
+confere o bundle gerado. Antes do M1 o CI gerava APK/AAB "verde" que não
+conectava ao servidor.
 
 ### 1b. Build local (alternativa, exige Android Studio)
 
@@ -80,8 +93,14 @@ IPv4/IPv6 do loopback).
 4. Classificação etária (questionário IARC): sem violência; interação entre
    usuários ON (chat) → provavelmente L/Everyone 10+ por "interação".
 5. Segurança dos dados: coleta e-mail (opcional, login), identificadores
-   anônimos; dados criptografados em trânsito; link da política:
-   https://jogo.verbete.workers.dev/privacy
+   anônimos (sessão anônima), conteúdo do jogo (definições, chat, palpites
+   do diário — compartilhados com o Google Gemini para bots e julgamento de
+   semelhança), registros de erro anônimos; dados criptografados em
+   trânsito; exclusão de conta no próprio app; sem anúncios. Permissões do
+   app: internet e vibração (normal, sem prompt). Link da política (texto
+   alinhado em 03/10): https://jogo.verbete.workers.dev/privacy
+   — **pendente: e-mail de contato real** (os `@verbete.app` da política
+   não existem).
 6. Público-alvo: 13+ (evita exigências de apps infantis).
 7. Upload do AAB no trilho **Teste interno** primeiro → testar → promover
    para Produção.
