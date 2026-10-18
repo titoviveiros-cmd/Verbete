@@ -433,15 +433,11 @@ function HomePage() {
               </Link>
             )}
 
-            {/* Rodapé */}
+            {/* Rodapé — sem a versão do build: ela fica na meta verbete-build
+                do HTML e no painel /admin/ops (área técnica). */}
             <div className="text-center mt-1">
               <p className="text-[12px] font-bold text-muted-foreground">
-                2 a 12 jogadores · Conta opcional ·{" "}
-                {"v" +
-                  ((import.meta.env.VITE_BUILD_ID as string) ?? "dev").slice(
-                    0,
-                    7,
-                  )}
+                2 a 12 jogadores · Conta opcional
               </p>
             </div>
           </motion.div>

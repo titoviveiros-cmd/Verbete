@@ -280,6 +280,6 @@ própria 8 · desktop 6 · mobile 6 · game feel 7 · prévia 7.
 | 14 | Prévia claramente do Verbete? | SIM | — |
 | 15 | Prévia parece da coleção? | PARCIAL | Personagem dentro do quadrado (o TITOKO é arte de personagem) — estilo ilustrado fica para arte dedicada |
 
-**Não corrigido de propósito:** a versão (`v <sha>`) no rodapé da Home —
-o KING proíbe infra no rodapé público, mas no Verbete ela é o ritual de
-playtest aprovado (conferir o build no aparelho); fica a critério do Tito.
+**Versão no rodapé (decisão do Tito, 18/10):** o `v <sha>` saiu do rodapé
+público da Home (regra da coleção). O build segue na meta `verbete-build` do
+HTML (o auto-update usa) e aparece no painel `/admin/ops` (só admin).
