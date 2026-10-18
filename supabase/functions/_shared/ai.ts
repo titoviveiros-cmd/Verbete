@@ -29,6 +29,7 @@ async function attempt(
   apiKey: string,
   messages: Array<{ role: string; content: string }>,
   timeoutMs: number,
+  temperature: number | undefined,
 ): Promise<AttemptResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -39,7 +40,11 @@ async function attempt(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ model: GEMINI_MODEL, messages }),
+      body: JSON.stringify({
+        model: GEMINI_MODEL,
+        messages,
+        ...(temperature === undefined ? {} : { temperature }),
+      }),
       signal: ctrl.signal,
     });
     if (!r.ok) {
@@ -78,6 +83,8 @@ export async function callChat(opts: {
   timeoutMs?: number;
   retries?: number;
   backoffMs?: number;
+  /** Omitida = padrão do modelo (geração criativa dos bots). */
+  temperature?: number;
 }): Promise<ChatResult> {
   const url = opts.url || GEMINI_CHAT_URL;
   const timeoutMs = opts.timeoutMs ?? 8000;
@@ -86,7 +93,7 @@ export async function callChat(opts: {
   let last: ChatResult = { ok: false, reason: "network", attempts: 0 };
   for (let i = 0; i <= retries; i++) {
     if (i > 0) await new Promise((res) => setTimeout(res, backoffMs * i));
-    const res = await attempt(opts.fetchFn, url, opts.apiKey, opts.messages, timeoutMs);
+    const res = await attempt(opts.fetchFn, url, opts.apiKey, opts.messages, timeoutMs, opts.temperature);
     last = { ...res, attempts: i + 1 };
     if (!retriable(res)) return last;
   }

@@ -1,16 +1,14 @@
 // Server functions para o Daily Word Challenge.
-// O scoring usa similaridade SEMÂNTICA (IA) — não letra a letra — para que
-// palpites como "extravagante, excêntrico" contem como acerto vs "extravagante,
-// esquisito". A verdade é buscada no servidor (service role) e nunca volta ao
-// cliente até a tentativa ser registrada.
+// O scoring usa similaridade SEMÂNTICA (IA) — não letra a letra — com a MESMA
+// rubrica do juiz do multiplayer (supabase/functions/_shared/semantic.ts): o
+// Diário guarda a nota 0–100 e o SQL considera correto >= 80. A verdade é
+// buscada no servidor (service role) e nunca volta ao cliente até a
+// tentativa ser registrada.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import {
-  callChat,
-  parseJsonObject,
-} from "../../supabase/functions/_shared/ai.ts";
+import { scoreGuess } from "../../supabase/functions/_shared/semantic.ts";
 
 export const DAILY_EVAL_UNAVAILABLE =
   "A avaliação está indisponível agora — sua tentativa NÃO foi gasta. Tente de novo em instantes.";
@@ -36,21 +34,8 @@ async function scoreSemanticSimilarity(
 ): Promise<number | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
-  const system =
-    'Você avalia equivalência semântica entre duas definições curtas (PT-BR) de uma palavra. Retorne APENAS JSON {"score": <inteiro 0-100>} representando o quanto a definição do jogador transmite o mesmo significado essencial da verdadeira. 100 = idêntico em significado (sinônimos / paráfrases contam). 80+ = essencialmente correto. 0 = sem relação. Ignore estilo, acentos, ordem, pontuação.';
-  const user = `Palavra: ${word}\nDefinição verdadeira: "${truth}"\nDefinição do jogador: "${guess}"\n\nResponda só o JSON.`;
-  const chat = await callChat({
-    fetchFn: fetch,
-    apiKey,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-  });
-  if (!chat.ok) return null;
-  const n = Math.round(Number(parseJsonObject(chat.content)?.score));
-  if (!Number.isFinite(n)) return null;
-  return Math.max(0, Math.min(100, n));
+  const res = await scoreGuess({ fetchFn: fetch, apiKey, word, truth, guess });
+  return res.ok ? res.score : null;
 }
 
 export const submitDailyAttempt = createServerFn({ method: "POST" })
