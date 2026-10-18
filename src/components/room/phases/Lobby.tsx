@@ -135,13 +135,13 @@ export function Lobby({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto no-scrollbar pb-2 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:grid-rows-[auto_1fr] lg:gap-x-6 lg:gap-y-3 lg:content-start"
+      className="flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto no-scrollbar pb-2 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:grid-rows-[auto_1fr] lg:gap-x-6 lg:gap-y-3 lg:content-center"
       style={scrollbarClip()}
     >
       <div className="flex flex-col gap-3 min-w-0 lg:col-start-1 lg:row-start-1">
         <div className="flex items-center justify-between gap-3 panel px-3 py-2.5">
           <div className="flex items-center gap-2 min-w-0">
-            <Mascot mood="excited" size={58} />
+            <Mascot mood="idle" size={58} className="max-[389px]:hidden" />
             <div className="min-w-0">
               <p className="eyebrow">Sala de espera</p>
               <p className="font-display text-lg leading-tight truncate">
@@ -151,7 +151,7 @@ export function Lobby({
           </div>
           <button
             onClick={handleShare}
-            className="btn-pop btn-gold py-2.5 px-4 text-base shrink-0"
+            className="btn-pop btn-gold py-2.5 !px-3.5 text-base max-[389px]:text-sm shrink-0"
           >
             {copied ? "✅ Copiado!" : "📲 Convidar"}
           </button>

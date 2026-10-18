@@ -643,7 +643,9 @@ function RoomPage() {
         <div
           className={
             "flex-1 min-w-0 min-h-0 flex flex-col w-full mx-auto " +
-            (room.status === "lobby" || room.status === "finished"
+            (room.status === "lobby" ||
+            room.status === "finished" ||
+            room.status === "scoreboard"
               ? "lg:max-w-[1080px]"
               : "lg:max-w-[820px]")
           }

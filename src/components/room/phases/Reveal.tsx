@@ -292,6 +292,10 @@ function RevealImpl({
         </motion.div>
       )}
       <div
+        // Região rolável alcançável pelo teclado (os botões saíram dela).
+        tabIndex={0}
+        role="region"
+        aria-label="Revelação da rodada"
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-3 w-full max-w-full"
         style={scrollbarClip()}
       >
@@ -525,32 +529,32 @@ function RevealImpl({
             </div>
           </div>
         )}
-
-        {truthShown && (
-          <div className="pt-1 flex flex-wrap items-center justify-center gap-2">
-            <ShareReplayButton
-              room={room}
-              word={word}
-              definitions={definitions}
-              votes={votes}
-              players={players}
-            />
-            {isHost && (
-              <button
-                onClick={() => {
-                  void playUITap("primary");
-                  void playTailFreeze();
-                  setTimeout(() => advanceAfterReveal(room, players), 1100);
-                }}
-                className="btn-pop btn-gold px-5 py-2.5 text-base font-display"
-                title="Pular contagem e ir direto ao placar"
-              >
-                ⏭ Avançar agora
-              </button>
-            )}
-          </div>
-        )}
       </div>
+      {/* Ações sempre à vista, fora da rolagem: o replay é a peça social. */}
+      {truthShown && (
+        <div className="shrink-0 flex flex-wrap items-center justify-center gap-2">
+          <ShareReplayButton
+            room={room}
+            word={word}
+            definitions={definitions}
+            votes={votes}
+            players={players}
+          />
+          {isHost && (
+            <button
+              onClick={() => {
+                void playUITap("primary");
+                void playTailFreeze();
+                setTimeout(() => advanceAfterReveal(room, players), 1100);
+              }}
+              className="btn-pop btn-gold px-5 py-2.5 text-base font-display"
+              title="Pular contagem e ir direto ao placar"
+            >
+              ⏭ Avançar agora
+            </button>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }

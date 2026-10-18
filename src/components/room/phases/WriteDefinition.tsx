@@ -379,7 +379,7 @@ export function WriteDefinition({
       exit={{ opacity: 0 }}
       // Rolagem própria (playtest mobile: barra de navegação do Safari cobria
       // o rodapé e não dava para ver todo o conteúdo). Barra clipada fora do shell.
-      className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:gap-6 lg:content-start"
+      className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:gap-6 lg:content-center"
       style={scrollbarClip()}
     >
       <div className="flex flex-col gap-4 min-w-0">
@@ -549,11 +549,11 @@ export function WriteDefinition({
                   handleAiGenerate();
                 }}
                 disabled={aiLoading}
-                className="btn-pop btn-plain !text-pink text-sm !py-2.5"
+                className="btn-pop btn-turq text-sm !py-2.5"
               >
                 {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
               </button>
-              <p className="text-center text-[12px] text-mint font-bold bg-mint/10 rounded-xl py-2 px-3 border border-mint/30">
+              <p className="text-center text-[12px] text-muted-foreground font-semibold">
                 ✏️ tudo será exibido em <b>letras minúsculas e sem acentos</b>
               </p>
             </div>

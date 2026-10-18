@@ -180,6 +180,14 @@ export function Finished({
     if (outcome === "copied") setTimeout(() => setShareNote(null), 2500);
   };
 
+  // Festa curta (regra da coleção: nada permanente): o Livro comemora
+  // nos primeiros segundos e depois só flutua.
+  const [celebrating, setCelebrating] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setCelebrating(false), 4500);
+    return () => clearTimeout(t);
+  }, []);
+
   const [viewingScoreboard, setViewingScoreboard] = useState(false);
   if (viewingScoreboard) {
     return (
@@ -212,7 +220,7 @@ export function Finished({
     {
       p: sorted[1],
       place: 2,
-      h: 70,
+      h: 78,
       medal: "🥈",
       tone: "#C0C0C0",
       block: "podium-silver",
@@ -220,7 +228,7 @@ export function Finished({
     {
       p: sorted[0],
       place: 1,
-      h: 104,
+      h: 124,
       medal: "👑",
       tone: "#f4c542",
       block: "podium-gold",
@@ -228,7 +236,7 @@ export function Finished({
     {
       p: sorted[2],
       place: 3,
-      h: 52,
+      h: 58,
       medal: "🥉",
       tone: "#CD7F32",
       block: "podium-bronze",
@@ -267,7 +275,7 @@ export function Finished({
               }}
             />
             <Mascot
-              mood="excited"
+              mood={celebrating ? "excited" : "idle"}
               size={64}
               className="relative -mb-1 short:hidden"
             />
@@ -292,26 +300,11 @@ export function Finished({
                 ? `${teamWinner.score} pts somando a equipe`
                 : `${winner?.score ?? 0} pts · Campeão da sala ${roomCode}`}
             </p>
-            <button
-              type="button"
-              onClick={handleShareResult}
-              className="btn-pop btn-violet relative text-sm px-4 py-2 mt-2.5"
-            >
-              📲 Compartilhar resultado
-            </button>
-            {shareNote && (
-              <p
-                role="status"
-                className="relative text-[12px] text-mint font-bold mt-1.5"
-              >
-                {shareNote}
-              </p>
-            )}
           </motion.div>
 
           {/* Fase 4 (aprovado 2026-07-20): PÓDIO com degraus — avatares sobem
               com quique, campeão maior no centro. */}
-          <div className="flex items-end justify-center gap-2.5 px-4 mt-1">
+          <div className="flex items-end justify-center gap-2.5 px-4 mt-1 border-b-2 border-[var(--c-line)]">
             {PODIUM.filter((x) => !!x.p).map(
               ({ p, place, h, medal, tone, block }) => (
                 <div
@@ -334,19 +327,27 @@ export function Finished({
                     className="flex flex-col items-center min-w-0 w-full"
                   >
                     <motion.span
-                      className="text-2xl leading-none mb-1"
+                      className={
+                        "leading-none mb-1 " +
+                        (place === 1 ? "text-4xl" : "text-2xl")
+                      }
                       animate={
                         place === 1
                           ? { rotate: [-8, 8, -8], y: [0, -2, 0] }
                           : {}
                       }
-                      transition={{ duration: 2, repeat: Infinity }}
+                      transition={{ duration: 2, repeat: 2 }}
                       aria-hidden
                     >
                       {medal}
                     </motion.span>
                     <span
-                      className="w-14 h-14 lg:w-16 lg:h-16 rounded-full flex items-center justify-center text-3xl lg:text-4xl"
+                      className={
+                        "rounded-full flex items-center justify-center " +
+                        (place === 1
+                          ? "w-[72px] h-[72px] lg:w-20 lg:h-20 text-4xl lg:text-5xl"
+                          : "w-14 h-14 lg:w-16 lg:h-16 text-3xl lg:text-4xl")
+                      }
                       style={{
                         background: `radial-gradient(circle at 30% 25%, ${p!.color}cc, ${p!.color})`,
                         boxShadow: `0 0 0 3px ${tone}, 0 0 22px -2px ${tone}aa, 0 4px 0 rgb(0 0 0 / 0.35)`,
@@ -386,6 +387,20 @@ export function Finished({
                   </motion.div>
                 </div>
               ),
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleShareResult}
+              className="btn-pop btn-violet text-sm px-4 py-2"
+            >
+              📲 Compartilhar resultado
+            </button>
+            {shareNote && (
+              <p role="status" className="text-[12px] text-mint font-bold">
+                {shareNote}
+              </p>
             )}
           </div>
         </div>
@@ -439,7 +454,12 @@ export function Finished({
                       {p.nickname}
                       {p.id === playerId ? " (você)" : ""}
                     </span>
-                    <span className="font-display text-sm text-sun tabular-nums">
+                    <span
+                      className={
+                        "font-display text-sm tabular-nums " +
+                        (i === 0 ? "text-sun" : "text-foreground/85")
+                      }
+                    >
                       {p.score} pts
                     </span>
                   </li>
@@ -523,9 +543,7 @@ export function Finished({
                         : undefined
                     }
                     transition={
-                      isGold
-                        ? { duration: 1.2, repeat: Infinity, repeatDelay: 2 }
-                        : undefined
+                      isGold ? { duration: 1.2, repeat: 1 } : undefined
                     }
                     className={
                       "shrink-0 leading-none " +
@@ -596,13 +614,13 @@ export function Finished({
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 240 }}
-              className="btn-gold rounded-2xl text-center py-2.5 border-2 shadow-[0_4px_0_0_var(--c-gold-edge)]"
+              className="chip self-center !px-4 !py-2 !text-base !text-mint !border-mint/40 bg-mint/10"
             >
-              <span className="font-display text-xl">
+              <span className="font-display text-lg">
                 ⚡ +{xpResult.xpGained} XP
               </span>
-              <span className="font-display text-sm ml-2 opacity-80">
-                Nível {xpResult.level}
+              <span className="font-display text-sm ml-1.5 text-muted-foreground">
+                · Nível {xpResult.level}
               </span>
             </motion.div>
           )}
@@ -611,7 +629,9 @@ export function Finished({
         </div>
       </div>
 
-      <div className="flex gap-2.5 mt-2 pt-2.5 border-t border-[var(--c-line)] bg-background/80 backdrop-blur-sm sticky bottom-0 lg:justify-center">
+      {/* max-lg:pr-12: faixa livre para o ▾ das reações e o chat, que
+          flutuam no canto direito do celular. */}
+      <div className="flex gap-2.5 mt-2 pt-2.5 border-t border-[var(--c-line)] bg-background/80 backdrop-blur-sm sticky bottom-0 lg:justify-center max-lg:pr-12">
         <button
           onClick={onLeave}
           className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[150px] text-sm sm:text-base !px-3 py-3 short:py-2 whitespace-nowrap"

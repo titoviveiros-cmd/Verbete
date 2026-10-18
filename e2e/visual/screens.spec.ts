@@ -5,7 +5,8 @@
 //
 //   npx playwright test e2e/visual                       → 390×844 (CI)
 //   VISUAL_VIEWPORTS=all SHOTS_DIR=… npx playwright test e2e/visual
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { installSupabaseMock, type MockBackend } from "./supabase-mock";
@@ -35,6 +36,13 @@ const VIEWPORTS =
     : ALL_VIEWPORTS.filter(([w, h]) => wanted.split(",").includes(`${w}x${h}`));
 const ONLY = process.env.VISUAL_SCREENS?.split(",");
 const SHOTS_DIR = process.env.SHOTS_DIR;
+// VISUAL_AXE=1: auditoria WCAG 2.1 AA (axe-core) em cada tela simulada.
+const AXE = process.env.VISUAL_AXE
+  ? readFileSync(
+      createRequire(import.meta.url).resolve("axe-core/axe.min.js"),
+      "utf8",
+    )
+  : null;
 
 type Screen = {
   name: string;
@@ -222,6 +230,48 @@ for (const screen of SCREENS) {
       expect(log.aborted, "chamadas ao Supabase sem resposta simulada").toEqual(
         [],
       );
+
+      if (AXE) {
+        await page.addScriptTag({ content: AXE });
+        const violations = await page.evaluate(async () => {
+          const w = window as unknown as {
+            axe: {
+              run: (
+                ctx: Document,
+                opts: object,
+              ) => Promise<{
+                violations: Array<{
+                  id: string;
+                  nodes: Array<{
+                    target: string[];
+                    any: Array<{ data?: { fgColor?: string } }>;
+                  }>;
+                }>;
+              }>;
+            };
+          };
+          const r = await w.axe.run(document, {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+          });
+          return r.violations
+            .map((v) => ({
+              id: v.id,
+              // Falso positivo conhecido (scripts/audit-a11y.mjs): o axe lê o
+              // contorno roxo do wordmark como cor do texto.
+              nodes: v.nodes
+                .filter(
+                  (n) =>
+                    !(
+                      v.id === "color-contrast" &&
+                      n.any[0]?.data?.fgColor?.toLowerCase() === "#4c1a8f"
+                    ),
+                )
+                .map((n) => n.target.join(" ")),
+            }))
+            .filter((v) => v.nodes.length > 0);
+        });
+        expect(violations, "violações WCAG (axe)").toEqual([]);
+      }
 
       if (SHOTS_DIR) {
         mkdirSync(SHOTS_DIR, { recursive: true });

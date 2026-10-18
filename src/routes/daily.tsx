@@ -224,7 +224,7 @@ function DailyPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:items-start">
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:items-start lg:my-auto">
         <div className="flex flex-col gap-4 min-w-0">
           {/* A palavra do desafio como verbete de dicionário + o Livro */}
           <div
@@ -494,7 +494,12 @@ function DailyPage() {
                       (mine ? "!border-pink/60" : "")
                     }
                   >
-                    <span className="font-display w-7 text-center text-lg text-sun tabular-nums">
+                    <span
+                      className={
+                        "font-display w-7 text-center text-lg tabular-nums " +
+                        (i === 0 ? "text-sun" : "text-muted-foreground")
+                      }
+                    >
                       {medal ?? i + 1}
                     </span>
                     <span className="text-xl">
@@ -511,7 +516,16 @@ function DailyPage() {
                     ) : (
                       <span className="text-muted-foreground text-xs">✗</span>
                     )}
-                    <span className="font-display text-lg text-sun tabular-nums">
+                    <span
+                      className={
+                        "font-display text-lg tabular-nums " +
+                        (i === 0
+                          ? "text-sun"
+                          : row.is_correct
+                            ? "text-foreground"
+                            : "text-muted-foreground")
+                      }
+                    >
                       {row.score}
                     </span>
                   </li>

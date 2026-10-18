@@ -347,7 +347,11 @@ function ScoreboardImpl({
         </p>
       </div>
       <div
-        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full"
+        // Região rolável alcançável pelo teclado (axe: scrollable-region-focusable).
+        tabIndex={0}
+        role="region"
+        aria-label="Placar da rodada"
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:content-start lg:[mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
         style={scrollbarClip()}
       >
         {sortedTeams.length > 0 && (
@@ -514,13 +518,13 @@ function ScoreboardImpl({
                   )}
                 </div>
               </div>
-              <ul className="mt-2 pl-14 space-y-1">
+              <ul className="mt-2.5 pl-14 flex flex-wrap gap-1.5">
                 {breakdown(p.id).map((r, idx) => (
                   <li
                     key={idx}
-                    className="text-[13px] lg:text-sm text-muted-foreground font-body"
+                    className="chip !font-semibold !text-[12px] text-foreground/85"
                   >
-                    • {r}
+                    {r}
                   </li>
                 ))}
               </ul>
@@ -575,7 +579,7 @@ function ScoreboardImpl({
       {isHost ? (
         <button
           onClick={() => nextRound(room, players)}
-          className="btn-pop btn-gold text-2xl py-3.5 shrink-0 lg:self-center lg:min-w-[360px]"
+          className="btn-pop btn-gold text-2xl py-3.5 shrink-0 lg:self-center lg:min-w-[360px] max-lg:mr-12"
         >
           ▶ Próxima rodada
         </button>

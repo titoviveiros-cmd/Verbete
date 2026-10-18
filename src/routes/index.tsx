@@ -26,7 +26,7 @@ const HomeStatsCard = lazy(() =>
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Verbete — o jogo de blefe com palavras raras" },
+      { title: "Verbete — blefe com palavras raras" },
       {
         name: "description",
         content:
@@ -34,12 +34,12 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:title",
-        content: "Verbete — o jogo de blefe com palavras raras",
+        content: "Verbete — blefe com palavras raras",
       },
       {
         property: "og:description",
         content:
-          "Invente significados, engane seus amigos e descubra a verdade. De 2 a 12 jogadores, direto no navegador.",
+          "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
       },
       { property: "og:url", content: `${APP_URL}/` },
     ],
@@ -213,7 +213,7 @@ function HomePage() {
         <ThemeToggle className="!w-11 !h-11 !text-base !opacity-100" />
       </div>
 
-      <div className="relative z-10 flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-12 lg:items-center">
+      <div className="relative z-10 flex-1 lg:min-h-0 flex flex-col lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-12 lg:items-center">
         {/* Herói — tile V + Livro Mascote + wordmark + tagline */}
         <div
           className={
@@ -256,10 +256,10 @@ function HomePage() {
               transition={{ delay: 0.45, type: "spring", stiffness: 160 }}
             >
               <div className="lg:hidden">
-                <Mascot mood="excited" size={74} />
+                <Mascot mood="idle" size={74} />
               </div>
               <div className="hidden lg:block">
-                <Mascot mood="excited" size={120} />
+                <Mascot mood="idle" size={120} />
               </div>
             </motion.div>
           </div>
@@ -360,7 +360,7 @@ function HomePage() {
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => setMode("join")}
-              className="btn-pop btn-violet w-full py-4 text-xl uppercase tracking-wide"
+              className="btn-pop btn-violet w-full py-4 !px-3 text-xl max-[389px]:text-lg uppercase tracking-wide whitespace-nowrap"
             >
               🔑 Entrar com código
             </motion.button>

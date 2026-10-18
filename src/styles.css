@@ -188,6 +188,17 @@
   --shadow-piece:
     inset 0 1px 0 rgb(255 255 255 / 0.09), 0 4px 0 0 rgb(10 4 24 / 0.55),
     0 16px 30px -16px rgb(0 0 0 / 0.65);
+  --stage-glow:
+    radial-gradient(
+      900px 520px at 50% -8%,
+      rgb(123 58 180 / 0.32),
+      transparent 62%
+    ),
+    radial-gradient(
+      700px 460px at 100% 100%,
+      rgb(255 63 174 / 0.1),
+      transparent 60%
+    );
 
   /* Background "page" — usado pelo body. Trocado no tema claro. */
   --page-bg: var(--gradient-night);
@@ -266,6 +277,11 @@
   --shadow-piece:
     inset 0 1px 0 rgb(255 255 255 / 0.9), 0 4px 0 0 rgb(138 90 42 / 0.2),
     0 16px 30px -16px rgb(138 90 42 / 0.3);
+  --stage-glow: radial-gradient(
+    900px 520px at 50% -8%,
+    rgb(255 210 140 / 0.35),
+    transparent 62%
+  );
 }
 
 @layer base {
@@ -482,9 +498,21 @@
     width: 2.25rem;
     height: 2.25rem;
     font-size: 1.15rem;
+    color: #ffffff;
+    background: linear-gradient(
+      180deg,
+      #b48cff,
+      var(--c-violet) 45%,
+      var(--c-purple)
+    );
+    border: 2px solid rgb(255 255 255 / 0.8);
+    box-shadow: 0 3px 0 0 var(--c-purple-edge);
+  }
+  /* A ficha da cédula escolhida vira ouro (ouro só no que importa). */
+  .token-gold {
     background: var(--gradient-sun);
     color: var(--c-on-gold);
-    border: 2px solid rgb(255 255 255 / 0.85);
+    border-color: rgb(255 255 255 / 0.9);
     box-shadow: 0 3px 0 0 var(--c-gold-edge);
   }
 
@@ -871,10 +899,13 @@
        com a mesma moldura arredondada e o brilho da coleção. */
     .mobile-shell.stage-wide {
       max-width: min(1240px, calc(100vw - 3rem));
-      height: min(calc(100dvh - 2rem), 960px);
-      min-height: min(calc(100dvh - 2rem), 960px);
-      max-height: min(calc(100dvh - 2rem), 960px);
-      margin-top: max(1rem, calc((100dvh - 960px) / 2));
+      height: min(calc(100dvh - 2rem), 880px);
+      min-height: min(calc(100dvh - 2rem), 880px);
+      max-height: min(calc(100dvh - 2rem), 880px);
+      margin-top: max(1rem, calc((100dvh - 880px) / 2));
+      /* O palco também tem a noite com brilho (não uma placa lisa). */
+      background:
+        var(--stage-glow), color-mix(in oklab, var(--c-night) 92%, transparent);
       padding: 1.25rem 2rem;
       border-radius: 32px;
     }

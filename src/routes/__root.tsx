@@ -22,6 +22,9 @@ import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { RemoteGate } from "@/components/RemoteGate";
 import { Toaster } from "@/components/ui/sonner";
+// Aplica o tema salvo antes do 1º paint em TODA página (o módulo age ao ser
+// importado); antes só as telas com o ThemeToggle o carregavam.
+import "@/hooks/use-theme";
 
 function NotFoundComponent() {
   return (
@@ -112,7 +115,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           name: "verbete-build",
           content: (import.meta.env.VITE_BUILD_ID as string) ?? "dev",
         },
-        { title: "Verbete — o jogo de blefe com palavras raras" },
+        { title: "Verbete — blefe com palavras raras" },
         {
           name: "description",
           content:
@@ -121,23 +124,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "author", content: "Verbete" },
         {
           property: "og:title",
-          content: "Verbete — o jogo de blefe com palavras raras",
+          content: "Verbete — blefe com palavras raras",
         },
         {
           property: "og:description",
           content:
-            "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.",
+            "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
         },
         { property: "og:type", content: "website" },
 
         {
           name: "twitter:title",
-          content: "Verbete — o jogo de blefe com palavras raras",
+          content: "Verbete — blefe com palavras raras",
         },
         {
           name: "twitter:description",
           content:
-            "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.",
+            "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
         },
         // Prévia de link (WhatsApp/Telegram/iMessage): nome com VERSÃO — o
         // WhatsApp guarda a prévia por endereço; trocar a arte = arquivo novo
