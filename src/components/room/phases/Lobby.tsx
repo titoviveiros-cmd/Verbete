@@ -135,313 +135,322 @@ export function Lobby({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar pb-2"
+      className="flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto no-scrollbar pb-2 lg:grid lg:grid-cols-[1.05fr_0.95fr] lg:grid-rows-[auto_1fr] lg:gap-x-6 lg:gap-y-3 lg:content-center"
       style={scrollbarClip()}
     >
-      <div className="flex items-center justify-center gap-3">
-        <Mascot mood="excited" size={70} />
-        <button
-          onClick={handleShare}
-          className="btn-pop bg-gradient-sun text-primary-foreground py-2 px-4 text-sm"
-        >
-          {copied ? "✅ Copiado!" : "📲 Compartilhar"}
-        </button>
-      </div>
-      {shareWarn && (
-        <p className="text-[11px] text-pink text-center font-display leading-tight">
-          {shareWarn}
-        </p>
-      )}
-
-      <div className="rounded-2xl bg-card/60 p-2 border border-white/10 shadow-soft flex flex-col shrink-0">
-        <h3 className="font-display text-[11px] uppercase text-muted-foreground tracking-wider mb-1.5 px-1">
-          Jogadores ({players.length}/12)
-        </h3>
-        <div className="grid grid-cols-4 gap-x-2 gap-y-3 content-start pt-1.5 px-1.5">
-          {[...players]
-            .sort((a, b) => {
-              const aHost = a.id === hostId ? 0 : 1;
-              const bHost = b.id === hostId ? 0 : 1;
-              if (aHost !== bHost) return aHost - bHost;
-              return (a.joined_at ?? "").localeCompare(b.joined_at ?? "");
-            })
-            .map((p) => {
-              const team =
-                mode === "teams"
-                  ? teams.find((t) => t.id === p.team_id)
-                  : undefined;
-              return (
-                <div key={p.id} className="relative w-[52px] mx-auto">
-                  <AvatarBubble
-                    emoji={p.avatar}
-                    color={p.color}
-                    size={52}
-                    label={(p.is_bot ? "🤖 " : "") + p.nickname}
-                    isYou={p.id === playerId}
-                  />
-                  {isHost && p.id !== playerId && (
-                    <button
-                      onClick={() => kickPlayer(roomId, playerId, p.id)}
-                      aria-label={`Remover ${p.nickname} da sala`}
-                      className="absolute top-0 right-1 w-4 h-4 bg-destructive rounded-full text-[9px] font-bold leading-none flex items-center justify-center"
-                    >
-                      <span aria-hidden="true">×</span>
-                    </button>
-                  )}
-                  {mode === "teams" && (
-                    <div
-                      className="mt-1 text-[9px] leading-none text-center font-display truncate"
-                      style={{ color: team?.color ?? "rgba(255,255,255,0.4)" }}
-                    >
-                      {team ? `${team.emoji} ${team.name}` : "— sem time"}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          {Array.from({ length: slotsLeft }).map((_, i) => (
-            <div
-              key={"e" + i}
-              className="flex items-center justify-center w-[52px] h-[52px] mx-auto rounded-full border-2 border-dashed border-white/15 text-white/30 text-base"
-            >
-              ?
+      <div className="flex flex-col gap-3 min-w-0 lg:col-start-1 lg:row-start-1">
+        <div className="flex items-center justify-between gap-3 panel px-3 py-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <Mascot mood="idle" size={58} className="max-[389px]:hidden" />
+            <div className="min-w-0">
+              <p className="eyebrow">Sala de espera</p>
+              <p className="font-display text-lg leading-tight truncate">
+                Chame a galera!
+              </p>
             </div>
-          ))}
+          </div>
+          <button
+            onClick={handleShare}
+            className="btn-pop btn-gold py-2.5 !px-3.5 text-base max-[389px]:text-sm shrink-0"
+          >
+            {copied ? "✅ Copiado!" : "📲 Compartilhar"}
+          </button>
         </div>
-      </div>
-
-      {players.length < 12 && (
-        <div className="rounded-2xl bg-pink/10 border border-pink/30 p-2.5 text-center space-y-1.5">
-          <p className="text-[11px] font-display text-pink leading-tight">
-            {players.length < 4
-              ? `Adicione +${4 - players.length} ${4 - players.length === 1 ? "jogador ou bot" : "jogadores ou bots"} para começar`
-              : `Quer mais caos? Adicione bots (até 12)`}
+        {shareWarn && (
+          <p className="text-[11px] text-pink text-center font-display leading-tight">
+            {shareWarn}
           </p>
-          <div className="flex justify-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => addBot(roomId, playerId, players.length)}
-              disabled={players.length >= 12}
-              className="btn-pop bg-mint text-accent-foreground py-1.5 px-3 text-xs flex items-center gap-1 disabled:opacity-50"
-            >
-              <span className="text-sm leading-none">🤖</span> +1 Bot
-            </button>
-            {botsNeeded > 1 && (
-              <button
-                onClick={() => {
-                  for (let i = 0; i < botsNeeded; i++) {
-                    addBot(roomId, playerId, players.length + i);
-                  }
-                }}
-                className="btn-pop bg-mint/80 text-accent-foreground py-1.5 px-3 text-xs"
+        )}
+
+        <div className="panel p-3 flex flex-col shrink-0">
+          <h3 className="eyebrow mb-2 px-1">Jogadores ({players.length}/12)</h3>
+          <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-2 gap-y-3 content-start pt-1 px-1">
+            {[...players]
+              .sort((a, b) => {
+                const aHost = a.id === hostId ? 0 : 1;
+                const bHost = b.id === hostId ? 0 : 1;
+                if (aHost !== bHost) return aHost - bHost;
+                return (a.joined_at ?? "").localeCompare(b.joined_at ?? "");
+              })
+              .map((p) => {
+                const team =
+                  mode === "teams"
+                    ? teams.find((t) => t.id === p.team_id)
+                    : undefined;
+                return (
+                  <div key={p.id} className="relative w-[52px] mx-auto">
+                    <AvatarBubble
+                      emoji={p.avatar}
+                      color={p.color}
+                      size={52}
+                      label={(p.is_bot ? "🤖 " : "") + p.nickname}
+                      isYou={p.id === playerId}
+                    />
+                    {isHost && p.id !== playerId && (
+                      <button
+                        onClick={() => kickPlayer(roomId, playerId, p.id)}
+                        aria-label={`Remover ${p.nickname} da sala`}
+                        className="absolute -top-0.5 right-0 w-5 h-5 bg-destructive text-white rounded-full text-[11px] font-bold leading-none flex items-center justify-center border-2 border-[var(--c-night)]"
+                      >
+                        <span aria-hidden="true">×</span>
+                      </button>
+                    )}
+                    {mode === "teams" && (
+                      <div
+                        className="mt-1 text-[9px] leading-none text-center font-display truncate"
+                        style={{
+                          color: team?.color ?? "rgba(255,255,255,0.4)",
+                        }}
+                      >
+                        {team ? `${team.emoji} ${team.name}` : "— sem time"}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            {Array.from({ length: slotsLeft }).map((_, i) => (
+              <div
+                key={"e" + i}
+                className="flex items-center justify-center w-[52px] h-[52px] mx-auto rounded-full border-2 border-dashed border-[var(--c-line)] text-[var(--c-faint)] opacity-70 text-base"
               >
-                Encher até 4 (+{botsNeeded} 🤖)
+                ?
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {players.length < 12 && (
+          <div className="rounded-2xl bg-mint/[0.07] border border-mint/30 p-3 text-center space-y-2">
+            <p className="text-[12px] font-bold text-mint leading-tight">
+              {players.length < 4
+                ? `Adicione +${4 - players.length} ${4 - players.length === 1 ? "jogador ou bot" : "jogadores ou bots"} para começar`
+                : `Quer mais caos? Adicione bots (até 12)`}
+            </p>
+            <div className="flex justify-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => addBot(roomId, playerId, players.length)}
+                disabled={players.length >= 12}
+                className="btn-pop btn-turq py-2 px-3.5 text-sm flex items-center gap-1"
+              >
+                <span className="text-sm leading-none">🤖</span> +1 Bot
               </button>
+              {botsNeeded > 1 && (
+                <button
+                  onClick={() => {
+                    for (let i = 0; i < botsNeeded; i++) {
+                      addBot(roomId, playerId, players.length + i);
+                    }
+                  }}
+                  className="btn-pop btn-turq py-2 px-3.5 text-sm"
+                >
+                  Encher até 4 (+{botsNeeded} 🤖)
+                </button>
+              )}
+            </div>
+            {humans === 1 && players.length < 4 && (
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                Dica: convide amigos pelo botão acima 👆
+              </p>
             )}
           </div>
-          {humans === 1 && players.length < 4 && (
-            <p className="text-[10px] text-muted-foreground leading-tight">
-              Dica: compartilhe a sala com amigos no botão acima 👆
-            </p>
-          )}
-        </div>
-      )}
+        )}
+      </div>
+      <div className="flex flex-col gap-3 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+        {isHost && (
+          <div className="panel p-3.5 space-y-3">
+            <ModeAndTeamsConfig
+              roomId={roomId}
+              actorId={playerId}
+              mode={mode}
+              teams={teams}
+              players={players}
+            />
 
-      {isHost && (
-        <div className="rounded-2xl bg-card/60 p-3 border border-white/10 shadow-soft space-y-2">
-          <ModeAndTeamsConfig
+            <div className="space-y-1.5">
+              <p className="eyebrow text-center">Como termina a partida?</p>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() =>
+                    setWinCondition(
+                      roomId,
+                      playerId,
+                      "rounds",
+                      winCondition === "rounds" ? winTarget : 10,
+                    )
+                  }
+                  aria-pressed={winCondition === "rounds"}
+                  className={
+                    "seg flex-1 py-2 text-[12px] leading-tight " +
+                    (winCondition === "rounds" ? "seg-on" : "")
+                  }
+                >
+                  <div>
+                    {winCondition === "rounds"
+                      ? `${winTarget} rodadas`
+                      : "Rodadas"}
+                  </div>
+                  <div className="text-[9px] opacity-80 normal-case">
+                    número fixo
+                  </div>
+                </button>
+                <button
+                  onClick={() =>
+                    setWinCondition(
+                      roomId,
+                      playerId,
+                      "score",
+                      winCondition === "score" ? winTarget : 15,
+                    )
+                  }
+                  aria-pressed={winCondition === "score"}
+                  className={
+                    "seg flex-1 py-2 text-[12px] leading-tight " +
+                    (winCondition === "score" ? "seg-on" : "")
+                  }
+                >
+                  <div>
+                    {winCondition === "score"
+                      ? `${winTarget} pts`
+                      : "Pontuação"}
+                  </div>
+                  <div className="text-[9px] opacity-80 normal-case">
+                    quem chegar 1º
+                  </div>
+                </button>
+              </div>
+
+              {winCondition === "rounds" && (
+                <div className="flex gap-1.5 pt-0.5">
+                  {[5, 10, 15, 20].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() =>
+                        setWinCondition(roomId, playerId, "rounds", n)
+                      }
+                      aria-pressed={winTarget === n}
+                      className={
+                        "seg flex-1 py-1.5 text-[11px] " +
+                        (winTarget === n ? "seg-on" : "")
+                      }
+                    >
+                      {n} rod.
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {winCondition === "score" && (
+                <div className="flex gap-1.5 pt-0.5">
+                  {[15, 20, 30, 50].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() =>
+                        setWinCondition(roomId, playerId, "score", n)
+                      }
+                      aria-pressed={winTarget === n}
+                      className={
+                        "seg flex-1 py-1.5 text-[11px] " +
+                        (winTarget === n ? "seg-on" : "")
+                      }
+                    >
+                      {n} pts
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="eyebrow text-center">Nível das palavras</p>
+              <div className="flex gap-1">
+                {NIVEL_META.map((n) => (
+                  <button
+                    key={n.value}
+                    onClick={() => {
+                      void playUITap();
+                      setNivel(roomId, playerId, n.value);
+                    }}
+                    aria-pressed={nivel === n.value}
+                    className={
+                      "seg flex-1 py-1.5 text-[11px] leading-tight " +
+                      (nivel === n.value ? "seg-on" : "")
+                    }
+                  >
+                    <div>{n.emoji}</div>
+                    <div>{n.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <CategoriesPicker
+              roomId={roomId}
+              actorId={playerId}
+              selected={categories}
+            />
+
+            {/* "Palavras próprias" removida do lobby a pedido (2026-07-19);
+              backend room_words segue intacto para eventual retorno. */}
+          </div>
+        )}
+
+        {!isHost && categories.length > 0 && (
+          <div className="panel p-2.5 text-center">
+            <p className="eyebrow">Categorias</p>
+            <p className="text-[11px] text-foreground/80 mt-0.5">
+              {categories.map((c) => CATEGORY_META[c]?.emoji ?? "🏷️").join(" ")}{" "}
+              <span className="text-muted-foreground">
+                ({categories.length})
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+      {/* Ação da sala: no desktop fica sob os jogadores (sempre à vista);
+          no celular continua no fim, depois das opções. */}
+      <div className="flex flex-col gap-3 min-w-0 lg:col-start-1 lg:row-start-2 lg:self-start">
+        {isHost ? (
+          <StartButton
+            canStart={canStart}
+            playersCount={players.length}
             roomId={roomId}
-            actorId={playerId}
+            players={players}
             mode={mode}
             teams={teams}
-            players={players}
           />
-
-          <div className="space-y-1.5">
-            <p className="font-display text-[11px] uppercase text-muted-foreground tracking-wider text-center">
-              Como termina a partida?
-            </p>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() =>
-                  setWinCondition(
-                    roomId,
-                    playerId,
-                    "rounds",
-                    winCondition === "rounds" ? winTarget : 10,
-                  )
-                }
-                className={
-                  "flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " +
-                  (winCondition === "rounds"
-                    ? "bg-pink text-primary-foreground border-pink"
-                    : "bg-input border-white/10")
-                }
-              >
-                <div>
-                  {winCondition === "rounds"
-                    ? `${winTarget} rodadas`
-                    : "Rodadas"}
-                </div>
-                <div className="text-[9px] opacity-80 normal-case">
-                  número fixo
-                </div>
-              </button>
-              <button
-                onClick={() =>
-                  setWinCondition(
-                    roomId,
-                    playerId,
-                    "score",
-                    winCondition === "score" ? winTarget : 15,
-                  )
-                }
-                className={
-                  "flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " +
-                  (winCondition === "score"
-                    ? "bg-pink text-primary-foreground border-pink"
-                    : "bg-input border-white/10")
-                }
-              >
-                <div>
-                  {winCondition === "score" ? `${winTarget} pts` : "Pontuação"}
-                </div>
-                <div className="text-[9px] opacity-80 normal-case">
-                  quem chegar 1º
-                </div>
-              </button>
-            </div>
-
-            {winCondition === "rounds" && (
-              <div className="flex gap-1.5 pt-0.5">
-                {[5, 10, 15, 20].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() =>
-                      setWinCondition(roomId, playerId, "rounds", n)
-                    }
-                    className={
-                      "flex-1 py-1 rounded-md text-[10px] font-display border " +
-                      (winTarget === n
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-input border-white/10")
-                    }
+        ) : (
+          <div className="panel text-center text-muted-foreground font-display py-4 text-base">
+            {mode === "teams" &&
+              (() => {
+                const myTeam = teams.find(
+                  (t) =>
+                    t.id === players.find((p) => p.id === playerId)?.team_id,
+                );
+                return myTeam ? (
+                  <p
+                    className="mb-1 font-display"
+                    style={{ color: myTeam.color }}
                   >
-                    {n} rod.
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {winCondition === "score" && (
-              <div className="flex gap-1.5 pt-0.5">
-                {[15, 20, 30, 50].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() =>
-                      setWinCondition(roomId, playerId, "score", n)
-                    }
-                    className={
-                      "flex-1 py-1 rounded-md text-[10px] font-display border " +
-                      (winTarget === n
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-input border-white/10")
-                    }
-                  >
-                    {n} pts
-                  </button>
-                ))}
-              </div>
-            )}
+                    {myTeam.emoji} Você está no time {myTeam.name}
+                  </p>
+                ) : (
+                  <p className="mb-1 text-pink">
+                    ⏳ Aguardando o host te colocar num time…
+                  </p>
+                );
+              })()}
+            Aguardando o host iniciar…
           </div>
-
-          <div className="space-y-1.5">
-            <p className="font-display text-[11px] uppercase text-muted-foreground tracking-wider text-center">
-              Nível das palavras
-            </p>
-            <div className="flex gap-1">
-              {NIVEL_META.map((n) => (
-                <button
-                  key={n.value}
-                  onClick={() => {
-                    void playUITap();
-                    setNivel(roomId, playerId, n.value);
-                  }}
-                  className={
-                    "flex-1 py-1.5 rounded-lg text-[10px] font-display border leading-tight " +
-                    (nivel === n.value
-                      ? "bg-pink text-primary-foreground border-pink"
-                      : "bg-input border-white/10")
-                  }
-                >
-                  <div>{n.emoji}</div>
-                  <div>{n.label}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <CategoriesPicker
-            roomId={roomId}
-            actorId={playerId}
-            selected={categories}
-          />
-
-          {/* "Palavras próprias" removida do lobby a pedido (2026-07-19);
-              backend room_words segue intacto para eventual retorno. */}
-        </div>
-      )}
-
-      {!isHost && categories.length > 0 && (
-        <div className="rounded-2xl bg-card/40 p-2 border border-white/10 text-center">
-          <p className="text-[10px] font-display uppercase text-muted-foreground tracking-wider">
-            Categorias
-          </p>
-          <p className="text-[11px] text-foreground/80 mt-0.5">
-            {categories.map((c) => CATEGORY_META[c]?.emoji ?? "🏷️").join(" ")}{" "}
-            <span className="text-muted-foreground">({categories.length})</span>
-          </p>
-        </div>
-      )}
-      {isHost ? (
-        <StartButton
-          canStart={canStart}
-          playersCount={players.length}
-          roomId={roomId}
-          players={players}
-          mode={mode}
-          teams={teams}
-        />
-      ) : (
-        <div className="text-center text-muted-foreground font-display py-2 text-sm">
-          {mode === "teams" &&
-            (() => {
-              const myTeam = teams.find(
-                (t) => t.id === players.find((p) => p.id === playerId)?.team_id,
-              );
-              return myTeam ? (
-                <p
-                  className="mb-1 font-display"
-                  style={{ color: myTeam.color }}
-                >
-                  {myTeam.emoji} Você está no time {myTeam.name}
-                </p>
-              ) : (
-                <p className="mb-1 text-pink">
-                  ⏳ Aguardando o host te colocar num time…
-                </p>
-              );
-            })()}
-          Aguardando o host iniciar…
-        </div>
-      )}
-      {/* Voltar ao início (pedido 2026-07-21) — o 🚪 do topo continua
+        )}
+        {/* Voltar ao início (pedido 2026-07-21) — o 🚪 do topo continua
           existindo; este é o caminho explícito e sem fricção no lobby. */}
-      <Link
-        to="/"
-        className="self-center mt-1 mb-2 flex items-center gap-1.5 text-sm font-display px-4 py-2 rounded-full bg-card/60 border border-white/10 hover:bg-card/80 transition text-muted-foreground"
-      >
-        ← Voltar para o início
-      </Link>
+        <Link
+          to="/"
+          className="glass-tile self-center mt-1 mb-2 flex items-center gap-1.5 text-sm font-display px-4 py-2 rounded-full transition text-muted-foreground"
+        >
+          ← Voltar para o início
+        </Link>
+      </div>
     </motion.div>
   );
 }
@@ -469,7 +478,7 @@ function CategoriesPicker({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between px-1">
-        <p className="font-display text-[11px] uppercase text-muted-foreground tracking-wider">
+        <p className="eyebrow">
           Categorias{" "}
           {selected.length > 0 && (
             <span className="text-foreground/70">({selected.length})</span>
@@ -490,11 +499,10 @@ function CategoriesPicker({
             <button
               key={cat}
               onClick={() => toggle(cat)}
+              aria-pressed={on}
               className={
-                "py-1.5 rounded-lg text-[10px] font-display border leading-tight flex flex-col items-center gap-0.5 " +
-                (on
-                  ? "bg-pink text-primary-foreground border-pink"
-                  : "bg-input border-white/10 text-foreground/80")
+                "seg py-1.5 text-[11px] leading-tight flex flex-col items-center gap-0.5 " +
+                (on ? "seg-on" : "")
               }
             >
               <span className="text-sm leading-none">{meta.emoji}</span>
@@ -539,28 +547,24 @@ function ModeAndTeamsConfig({
   };
   return (
     <div className="space-y-1.5">
-      <p className="font-display text-[11px] uppercase text-muted-foreground tracking-wider text-center">
-        Modo de jogo
-      </p>
+      <p className="eyebrow text-center">Modo de jogo</p>
       <div className="flex gap-1.5">
         <button
           onClick={() => switchMode("individual")}
+          aria-pressed={mode === "individual"}
           className={
-            "flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " +
-            (mode === "individual"
-              ? "bg-sun text-primary-foreground border-sun"
-              : "bg-input border-white/10")
+            "seg flex-1 py-2 text-[12px] leading-tight " +
+            (mode === "individual" ? "seg-on" : "")
           }
         >
           🙋 Individual
         </button>
         <button
           onClick={() => switchMode("teams")}
+          aria-pressed={mode === "teams"}
           className={
-            "flex-1 py-2 rounded-lg text-[11px] font-display border leading-tight " +
-            (mode === "teams"
-              ? "bg-sun text-primary-foreground border-sun"
-              : "bg-input border-white/10")
+            "seg flex-1 py-2 text-[12px] leading-tight " +
+            (mode === "teams" ? "seg-on" : "")
           }
         >
           👥 Equipes
@@ -579,11 +583,10 @@ function ModeAndTeamsConfig({
           const presetBtn = (key: keyof typeof TEAM_PRESETS, label: string) => (
             <button
               onClick={() => applyPreset(key)}
+              aria-pressed={activePreset === key}
               className={
-                "flex-1 py-1 rounded-md text-[10px] font-display border leading-tight " +
-                (activePreset === key
-                  ? "bg-sun text-primary-foreground border-sun"
-                  : "bg-input border-white/10")
+                "seg flex-1 py-1.5 text-[11px] leading-tight " +
+                (activePreset === key ? "seg-on" : "")
               }
             >
               {label}
@@ -600,14 +603,12 @@ function ModeAndTeamsConfig({
                 onClick={() =>
                   autoBalanceTeams(roomId, actorId, players, teams)
                 }
-                className="w-full py-1.5 rounded-md text-[11px] font-display border bg-mint/15 border-mint/40 text-mint"
+                className="btn-pop btn-turq w-full !py-2 text-[12px]"
               >
                 ⚖️ Distribuir automaticamente
               </button>
               <div className="space-y-1 pt-1">
-                <p className="font-display text-[10px] uppercase text-muted-foreground tracking-wider">
-                  Toque num jogador para mudar de time:
-                </p>
+                <p className="eyebrow">Toque num jogador para mudar de time:</p>
                 {players.map((p) => {
                   const currentTeam = teams.find((t) => t.id === p.team_id);
                   const nextTeam = (() => {
@@ -625,7 +626,7 @@ function ModeAndTeamsConfig({
                           nextTeam?.id ?? null,
                         )
                       }
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md bg-input border border-white/10 text-[11px]"
+                      className="seg w-full flex items-center gap-2 px-2 py-1.5 text-[12px]"
                     >
                       <span className="text-base">{p.avatar}</span>
                       <span className="font-display flex-1 text-left truncate">
@@ -704,7 +705,7 @@ function StartButton({
     <button
       disabled={!allOK || starting}
       onClick={onClick}
-      className="btn-pop bg-gradient-fun text-white text-lg py-3 disabled:opacity-50"
+      className="btn-pop btn-gold w-full text-xl py-4"
     >
       {label}
     </button>

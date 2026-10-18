@@ -359,7 +359,7 @@ function VotingImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden w-full max-w-full"
+      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden w-full max-w-full lg:justify-center lg:gap-3"
     >
       {/* Halo de urgência nos últimos 3s — vinheta vermelha pulsante */}
       {critical && (
@@ -375,16 +375,16 @@ function VotingImpl({
           }}
         />
       )}
-      <div className="shrink-0 flex items-center gap-2 rounded-2xl bg-gradient-fun px-3 py-1.5 shadow-pop w-full max-w-full">
+      <div className="word-hero shrink-0 flex items-center gap-3 px-4 py-2 lg:py-3 w-full max-w-full">
         <div
           className="flex-1 min-w-0 no-copy"
           onCopy={(e) => e.preventDefault()}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <p className="text-[9px] uppercase tracking-widest font-display opacity-80 leading-none">
-            A palavra é
+          <p className="eyebrow !text-white/85 !text-[10px] leading-none">
+            Qual é o significado de
           </p>
-          <h2 className="font-display text-stroke text-xl text-white leading-tight truncate capitalize">
+          <h2 className="font-display text-stroke text-2xl lg:text-3xl text-white leading-tight truncate capitalize">
             {word.word}
           </h2>
         </div>
@@ -396,9 +396,9 @@ function VotingImpl({
               : { duration: 0.2 }
           }
           className={
-            "font-display tabular-nums text-3xl leading-none shrink-0 " +
+            "font-display tabular-nums text-4xl leading-none shrink-0 " +
             (urgent
-              ? "text-destructive drop-shadow-[0_0_10px_rgba(255,80,80,0.5)]"
+              ? "text-[#ffe14d] drop-shadow-[0_0_12px_rgba(255,80,80,0.8)]"
               : "text-white")
           }
         >
@@ -406,9 +406,12 @@ function VotingImpl({
           <span className="text-sm opacity-70">s</span>
         </motion.div>
       </div>
-      <div className="shrink-0 h-1 w-full bg-card rounded-full overflow-hidden border border-white/10">
+      <div className="meter shrink-0 h-1.5">
         <motion.div
-          className={"h-full " + (urgent ? "bg-destructive" : "bg-sun")}
+          className={
+            "h-full rounded-full " +
+            (urgent ? "meter-fill-urgent" : "meter-fill-gold")
+          }
           animate={{ width: `${(remaining / timerMax) * 100}%` }}
           transition={{ duration: 0.5, ease: "linear" }}
         />
@@ -438,81 +441,107 @@ function VotingImpl({
       )}
 
       <div
-        className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pb-2 w-full max-w-full"
+        className="flex flex-col gap-2.5 flex-1 lg:flex-initial min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pt-1 pb-2 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start"
         style={scrollbarClip()}
         onCopy={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {ordered.map((d) => {
+        {ordered.map((d, i) => {
           // S1: as cédulas chegam sem autor — a própria é reconhecida pelo
           // id guardado no envio (fallback pro player_id em salas antigas).
           const isMine =
             d.id === myDefId || (d.player_id !== "" && d.player_id === me?.id);
           const isPicked = effectiveVoteDefId === d.id;
           return (
-            <motion.button
+            // A cédula (botão de voto) e o 🚩 de denúncia são IRMÃOS: botão
+            // dentro de botão confunde leitor de tela e toque (axe:
+            // nested-interactive — já existia antes desta rodada).
+            <div
               key={d.id}
-              whileTap={{ scale: 0.97 }}
-              animate={isPicked ? { scale: [1, 1.04, 1.02] } : { scale: 1 }}
-              transition={{ duration: 0.4 }}
-              disabled={hasVoted || isMine}
-              onClick={() => handleVote(d.id)}
-              className={
-                "relative w-full flex-1 min-h-[60px] rounded-2xl bg-card border-2 border-white/10 px-3 py-3 text-left flex gap-2 items-center transition shadow-pop " +
-                (isPicked ? "ring-4 ring-pink bg-pink/10" : "") +
-                (hasVoted && !isPicked ? " opacity-40" : "") +
-                (isMine ? " opacity-50" : "")
-              }
+              className="relative flex flex-1 min-h-[60px] lg:min-h-[92px]"
             >
-              <span className="font-display text-2xl text-sun w-6 shrink-0 leading-none">
-                {d.letter}
-              </span>
-              <p className="font-body text-base flex-1 leading-snug">
-                {d.text}
-              </p>
-              {isMine && (
-                <span className="text-[10px] text-mint font-display shrink-0">
-                  SUA
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                whileHover={hasVoted || isMine ? undefined : { y: -2 }}
+                // Cédulas entram em cascata (peças sendo distribuídas); depois
+                // só a escala reage à escolha. A opacidade (votou/sua) vive
+                // aqui porque o motion escreve style inline.
+                initial={{ opacity: 0, y: 14 }}
+                animate={{
+                  opacity: hasVoted && !isPicked ? 0.45 : isMine ? 0.6 : 1,
+                  y: 0,
+                  scale: isPicked ? [1, 1.04, 1.02] : 1,
+                }}
+                transition={{
+                  scale: { duration: 0.4 },
+                  opacity: { delay: i * 0.05, duration: 0.25 },
+                  y: {
+                    delay: i * 0.05,
+                    type: "spring",
+                    stiffness: 280,
+                    damping: 22,
+                  },
+                }}
+                disabled={hasVoted || isMine}
+                onClick={() => handleVote(d.id)}
+                className={
+                  "sticker relative w-full flex-1 !rounded-2xl !pl-3 !py-3 text-left flex gap-3 items-center transition " +
+                  (isMine ? "!pr-3 " : "!pr-11 ") +
+                  (isPicked ? "ring-neon" : "")
+                }
+              >
+                <span className={"token" + (isPicked ? " token-gold" : "")}>
+                  {d.letter}
                 </span>
-              )}
+                <p className="font-body text-base lg:text-[17px] font-semibold flex-1 leading-snug">
+                  {d.text}
+                </p>
+                {isMine && (
+                  <span className="chip !text-mint !border-mint/40 !text-[10px] shrink-0">
+                    SUA
+                  </span>
+                )}
+                {isPicked && (
+                  <motion.span
+                    initial={{ scale: 0, rotate: -30 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    className="ml-auto bg-[var(--v-neon)] text-white rounded-full w-7 h-7 flex items-center justify-center font-display text-sm shadow-md ring-2 ring-white shrink-0"
+                    aria-label="Voto registrado"
+                  >
+                    ✓
+                  </motion.span>
+                )}
+              </motion.button>
               {!isMine && (
-                <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+                <div
+                  className={
+                    "absolute right-2 top-1/2 -translate-y-1/2 z-10 " +
+                    (hasVoted && !isPicked ? "opacity-45" : "")
+                  }
+                >
                   <ReportButton
                     definition={d}
                     room={room}
                     players={players}
                     meId={me.id}
                   />
-                </span>
+                </div>
               )}
-              {isPicked && (
-                <motion.span
-                  initial={{ scale: 0, rotate: -30 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  className="ml-auto bg-pink text-white rounded-full w-6 h-6 flex items-center justify-center font-display text-sm shadow-md ring-2 ring-white shrink-0"
-                  aria-label="Voto registrado"
-                >
-                  ✓
-                </motion.span>
-              )}
-            </motion.button>
+            </div>
           );
         })}
       </div>
 
-      <div className="shrink-0 flex flex-col items-center gap-1 text-[11px] text-muted-foreground font-display px-2">
-        <span className="tabular-nums">
-          {roundVotes.length}/{voters.length}
+      <div className="shrink-0 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground font-display px-2">
+        <span className="eyebrow tabular-nums">
+          {roundVotes.length}/{voters.length} votaram
         </span>
         {pending.length > 0 ? (
           <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-full">
             {pending.slice(0, 6).map((p) => (
-              <span
-                key={p.id}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/60 border border-white/10"
-              >
+              <span key={p.id} className="chip !px-2 !py-0.5">
                 <span className="text-sm leading-none">{p.avatar}</span>
-                <span className="text-[11px] text-foreground/80 max-w-[80px] truncate">
+                <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
                   {p.nickname}
                 </span>
               </span>

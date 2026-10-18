@@ -75,13 +75,18 @@ export function Mascot({
               stroke="#1A0936"
               strokeWidth="3"
             />
+            {/* Pupilas "pensando" andam por transform (x), não pelo
+                atributo cx: animar cx gerava `<circle> attribute cx:
+                Expected length, "undefined"` no console. */}
             <motion.circle
               cx="-22"
               cy="0"
               r={isWow ? 8 : 6}
               fill="#1A0936"
-              animate={isThink ? { cx: [-26, -18, -26] } : {}}
-              transition={{ duration: 2, repeat: Infinity }}
+              animate={isThink ? { x: [-4, 4, -4] } : { x: 0 }}
+              transition={
+                isThink ? { duration: 2, repeat: Infinity } : { duration: 0 }
+              }
             />
             {/* right eye */}
             <circle
@@ -97,8 +102,10 @@ export function Mascot({
               cy="0"
               r={isWow ? 8 : 6}
               fill="#1A0936"
-              animate={isThink ? { cx: [18, 26, 18] } : {}}
-              transition={{ duration: 2, repeat: Infinity }}
+              animate={isThink ? { x: [-4, 4, -4] } : { x: 0 }}
+              transition={
+                isThink ? { duration: 2, repeat: Infinity } : { duration: 0 }
+              }
             />
             {/* mouth */}
             {isSad ? (

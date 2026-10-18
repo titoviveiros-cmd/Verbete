@@ -143,7 +143,7 @@ export function ReportButton({
                       type="button"
                       onClick={() => setOpen(false)}
                       disabled={sending}
-                      className="btn-pop bg-card border border-white/10 flex-1 text-sm disabled:opacity-50"
+                      className="btn-pop btn-plain border border-white/10 flex-1 text-sm"
                     >
                       Cancelar
                     </button>
@@ -151,7 +151,7 @@ export function ReportButton({
                       type="button"
                       onClick={submit}
                       disabled={sending}
-                      className="btn-pop bg-destructive text-destructive-foreground flex-1 text-sm disabled:opacity-50"
+                      className="btn-pop bg-destructive text-destructive-foreground flex-1 text-sm"
                     >
                       {sending ? "Enviando…" : "Enviar"}
                     </button>

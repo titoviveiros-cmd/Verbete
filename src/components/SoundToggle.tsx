@@ -33,8 +33,8 @@ export function SoundToggle({ className = "" }: { className?: string }) {
       aria-label={prefs.muted ? "Ativar som" : "Silenciar som"}
       aria-pressed={prefs.muted}
       className={
-        "w-9 h-9 rounded-full border border-white/15 bg-card/70 backdrop-blur " +
-        "flex items-center justify-center text-base shadow-soft active:scale-95 transition " +
+        "glass-tile w-8 h-8 sm:w-9 sm:h-9 rounded-full " +
+        "flex items-center justify-center text-base active:translate-y-px transition " +
         className
       }
     >

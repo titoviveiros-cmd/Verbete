@@ -80,7 +80,7 @@ function SupportPage() {
         <p className="text-sm mb-3">Resposta em até 48h úteis.</p>
         <a
           href="mailto:contato@verbete.app?subject=Suporte%20Verbete"
-          className="btn-pop bg-gradient-fun text-white inline-block"
+          className="btn-pop btn-gold inline-block"
         >
           contato@verbete.app
         </a>

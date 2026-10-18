@@ -86,13 +86,13 @@ function RankingPage() {
       <div className="flex items-center justify-between gap-2">
         <Link
           to={fromProfile ? "/profile" : "/"}
-          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+          className="btn-pop btn-plain text-xs px-3 py-2 font-display flex items-center gap-1"
         >
           <span>←</span> {fromProfile ? "Voltar" : "Início"}
         </Link>
         <Link
           to="/profile"
-          className="btn-pop bg-gradient-sun text-primary-foreground text-xs px-3 py-2 font-display flex items-center gap-1"
+          className="btn-pop btn-gold text-xs px-3 py-2 font-display flex items-center gap-1"
         >
           <span>👤</span> Meu perfil
         </Link>

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Mascot } from "@/components/Mascot";
 import { scrollbarClip } from "@/lib/utils";
+import { BUILD_ID } from "@/lib/app-version";
 
 // Fase 8 — painel de saúde (role admin): funil + erros/reconexões/backstop.
 export const Route = createFileRoute("/admin/ops")({
@@ -155,7 +156,7 @@ function AdminOpsPage() {
         <p className="text-sm text-muted-foreground text-center max-w-xs">
           Esta área é exclusiva para editores do Verbete.
         </p>
-        <Link to="/" className="btn-pop bg-gradient-fun text-white text-sm">
+        <Link to="/" className="btn-pop btn-gold text-sm">
           Voltar ao início
         </Link>
       </div>
@@ -170,7 +171,13 @@ function AdminOpsPage() {
   return (
     <div className="mobile-shell pt-4 gap-3">
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-2xl text-sun">🩺 Saúde do jogo</h1>
+        <div>
+          <h1 className="font-display text-2xl text-sun">🩺 Saúde do jogo</h1>
+          {/* Build deste app (saiu do rodapé público da Home). */}
+          <p className="text-[11px] text-muted-foreground font-mono">
+            build {BUILD_ID}
+          </p>
+        </div>
         <Link to="/" className="text-sm text-muted-foreground font-display">
           ← início
         </Link>

@@ -3,12 +3,21 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* Celular deitado / telas baixas: a barra de reações come ~60 px do fundo. */
+@custom-variant short (@media (max-height: 520px));
 
 /*
  * VERBETE — Design System
- * Cartoon party-game vibe: vibrant, playful, pseudo-3D.
- * Palette: deep purple-night background + sunny yellow + hot pink + mint + sky.
- * Typography: bold rounded display + crisp sans body (system stack for perf).
+ *
+ * Coleção (mesmo estúdio de KING e TITOKO): noite roxa, superfícies com
+ * relevo, botão "candy" com aresta dura que afunda no toque, ouro só no que
+ * importa (CTA principal, vitória, 1º lugar), turquesa = positivo/verdade,
+ * magenta = tensão/destaque, Nunito no corpo. Tokens --c-* = valores da
+ * coleção (KING-DESIGN-SYSTEM.md / theme.css do TITOKO).
+ *
+ * Personalidade Verbete: neon magenta da noite de jogo, palavras raras em
+ * destaque de "verbete de dicionário", display arredondado Fredoka e o
+ * Livro Mascote.
  */
 
 @theme inline {
@@ -45,6 +54,18 @@
   --color-sky: var(--sky);
   --color-grape: var(--grape);
 
+  /* Coleção */
+  --color-gold: var(--c-gold);
+  --color-turq: var(--c-turq);
+  --color-magenta: var(--c-magenta);
+  --color-violet: var(--c-violet);
+  --color-neon: var(--v-neon);
+  --color-night: var(--c-night);
+  --color-surface: var(--c-surface);
+  --color-line: var(--c-line);
+  --color-ink: var(--c-ink);
+  --color-faint: var(--c-faint);
+
   --font-display: "Fredoka", "Baloo 2", system-ui, sans-serif;
   --font-body: "Nunito", system-ui, -apple-system, sans-serif;
 }
@@ -52,101 +73,215 @@
 :root {
   --radius: 1.25rem;
 
-  /* Night-sky gradient background */
-  --background: oklch(0.22 0.09 290);
-  --foreground: oklch(0.98 0.01 90);
+  /* ===== Coleção — mesmos papéis e valores de KING e TITOKO ===== */
+  --c-night: #150a2c; /* um tom mais roxo que o KING (#140a24): a noite do Verbete */
+  --c-night-2: #1e1140;
+  --c-surface: #261650;
+  --c-surface-2: #311d66;
+  --c-ink: #f6f1ff;
+  --c-muted: #cbbfe8;
+  --c-faint: #a395cc;
+  --c-line: rgb(190 160 255 / 0.2);
+  --c-gold: #f4c542;
+  --c-gold-top: #ffe27a;
+  --c-gold-low: #c9971f;
+  --c-gold-edge: #7a5510;
+  --c-on-gold: #2a1606;
+  --c-turq: #2dd4bf;
+  --c-turq-edge: #0b5e54;
+  --c-on-turq: #06221e;
+  --c-magenta: #ff4f9e;
+  --c-violet: #9b6cff;
+  --c-purple: #6d28d9;
+  --c-purple-edge: #33126e;
 
-  --card: oklch(0.28 0.1 285);
-  --card-foreground: oklch(0.98 0.01 90);
-  --popover: oklch(0.28 0.1 285);
-  --popover-foreground: oklch(0.98 0.01 90);
+  /* ===== Personalidade Verbete: neon magenta da noite de jogo ===== */
+  --v-neon: #ff3fae;
+  --v-neon-2: #c026d3;
+  --v-neon-glow: rgb(255 63 174 / 0.45);
 
-  /* Primary = hot pink (CTA) */
-  --primary: oklch(0.72 0.22 0);
-  --primary-foreground: oklch(0.15 0.05 290);
+  /* ===== Papéis do tema (shadcn/Tailwind) apontando para a coleção ===== */
+  --background: var(--c-night);
+  --foreground: var(--c-ink);
 
-  /* Secondary = sunny yellow */
-  --secondary: oklch(0.88 0.18 95);
-  --secondary-foreground: oklch(0.2 0.06 290);
+  --card: var(--c-surface);
+  --card-foreground: var(--c-ink);
+  --popover: var(--c-surface);
+  --popover-foreground: var(--c-ink);
 
-  --muted: oklch(0.32 0.07 285);
-  --muted-foreground: oklch(0.78 0.04 280);
+  /* Primary = magenta (destaques/anéis); o CTA principal é o candy ouro */
+  --primary: var(--c-magenta);
+  --primary-foreground: #2b0418;
 
-  --accent: oklch(0.78 0.18 175); /* mint */
-  --accent-foreground: oklch(0.18 0.06 290);
+  --secondary: var(--c-gold);
+  --secondary-foreground: var(--c-on-gold);
 
-  --destructive: oklch(0.65 0.25 25);
-  --destructive-foreground: oklch(0.98 0.01 90);
+  --muted: #2a1a55;
+  --muted-foreground: var(--c-muted);
 
-  --border: oklch(0.4 0.08 285 / 0.5);
-  --input: oklch(0.32 0.07 285);
-  --ring: oklch(0.72 0.22 0);
+  --accent: var(--c-turq);
+  --accent-foreground: var(--c-on-turq);
 
-  /* Named accents */
-  --sun: oklch(0.88 0.18 95);
-  --pink: oklch(0.72 0.22 0);
-  --mint: oklch(0.82 0.16 175);
-  --sky: oklch(0.78 0.14 230);
-  --grape: oklch(0.55 0.2 305);
+  --destructive: #ff5a5f;
+  --destructive-foreground: #ffffff;
 
-  /* Gradients & shadows */
-  --gradient-night: radial-gradient(ellipse at top, oklch(0.32 0.13 290) 0%, oklch(0.18 0.08 285) 60%, oklch(0.12 0.05 280) 100%);
-  --gradient-fun: linear-gradient(135deg, oklch(0.72 0.22 0), oklch(0.78 0.2 320), oklch(0.55 0.2 305));
-  --gradient-sun: linear-gradient(135deg, oklch(0.9 0.2 95), oklch(0.78 0.2 50));
-  --gradient-mint: linear-gradient(135deg, oklch(0.85 0.16 175), oklch(0.7 0.18 200));
+  --border: var(--c-line);
+  --input: #22144a;
+  --ring: var(--c-magenta);
+
+  /* Acentos nomeados (usados no app inteiro): agora os da coleção */
+  --sun: var(--c-gold);
+  --pink: var(--c-magenta);
+  --mint: var(--c-turq);
+  --sky: #7cc4ff;
+  --grape: var(--c-violet);
+
+  /* Gradientes */
+  --gradient-night:
+    radial-gradient(
+      1100px 560px at 50% -12%,
+      rgb(123 58 180 / 0.42),
+      transparent 62%
+    ),
+    radial-gradient(
+      700px 480px at 100% 0%,
+      rgb(255 63 174 / 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      700px 520px at 0% 100%,
+      rgb(109 40 217 / 0.18),
+      transparent 60%
+    ),
+    var(--c-night);
+  --gradient-fun: linear-gradient(
+    135deg,
+    #ff4fb0 0%,
+    #d62bc5 48%,
+    #7b2cf0 100%
+  );
+  --gradient-sun: linear-gradient(
+    180deg,
+    var(--c-gold-top),
+    var(--c-gold) 50%,
+    var(--c-gold-low)
+  );
+  --gradient-mint: linear-gradient(
+    160deg,
+    #5eead4 0%,
+    var(--c-turq) 45%,
+    #14b8a6 100%
+  );
+  --gradient-piece: linear-gradient(
+    180deg,
+    var(--c-surface-2) 0%,
+    var(--c-surface) 100%
+  );
 
   /* Cor base usada por sombras e text-stroke — adapta entre temas */
-  --shadow-base: oklch(0.15 0.05 290);
-  --shadow-pop: 0 6px 0 0 oklch(0.15 0.05 290 / 0.6), 0 14px 30px -8px oklch(0.1 0.05 290 / 0.55);
-  --shadow-soft: 0 10px 30px -10px oklch(0.1 0.05 290 / 0.5);
-  --shadow-glow: 0 0 32px oklch(0.72 0.22 0 / 0.45);
+  --shadow-base: #10061f;
+  --shadow-pop:
+    0 5px 0 0 rgb(10 4 24 / 0.6), 0 14px 30px -10px rgb(0 0 0 / 0.55);
+  --shadow-soft: 0 10px 30px -10px rgb(0 0 0 / 0.5);
+  --shadow-glow: 0 0 32px var(--v-neon-glow);
+  /* Peça de jogo: luz no topo + aresta dura embaixo + sombra projetada */
+  --shadow-piece:
+    inset 0 1px 0 rgb(255 255 255 / 0.09), 0 4px 0 0 rgb(10 4 24 / 0.55),
+    0 16px 30px -16px rgb(0 0 0 / 0.65);
+  --stage-glow:
+    radial-gradient(
+      900px 520px at 50% -8%,
+      rgb(123 58 180 / 0.32),
+      transparent 62%
+    ),
+    radial-gradient(
+      700px 460px at 100% 100%,
+      rgb(255 63 174 / 0.1),
+      transparent 60%
+    );
 
   /* Background "page" — usado pelo body. Trocado no tema claro. */
   --page-bg: var(--gradient-night);
 }
 
-/* ---------- Tema claro (warm cream) ---------- */
+/* ---------- Tema claro (creme quente, mesmos papéis) ---------- */
 .light {
-  --background: oklch(0.98 0.02 90);
-  --foreground: oklch(0.22 0.06 290);
+  --c-night: #fbf3e3;
+  --c-night-2: #f6ead2;
+  --c-surface: #fffaf0;
+  --c-surface-2: #ffffff;
+  --c-ink: #241640;
+  --c-muted: #5b4b7d;
+  --c-faint: #7a6a9c;
+  --c-line: rgb(76 26 143 / 0.16);
+  --c-gold-edge: #a8740f;
+  --c-turq: #0b7166;
+  --c-turq-edge: #064c45;
+  --c-magenta: #d61f74;
+  --v-neon: #e0268f;
+  --v-neon-glow: rgb(224 38 143 / 0.3);
 
-  --card: oklch(1 0.005 90);
-  --card-foreground: oklch(0.22 0.06 290);
-  --popover: oklch(1 0.005 90);
-  --popover-foreground: oklch(0.22 0.06 290);
+  --background: var(--c-night);
+  --foreground: var(--c-ink);
 
-  --primary: oklch(0.65 0.22 0);
-  --primary-foreground: oklch(0.99 0.01 90);
+  --card: var(--c-surface);
+  --card-foreground: var(--c-ink);
+  --popover: var(--c-surface);
+  --popover-foreground: var(--c-ink);
 
-  --secondary: oklch(0.82 0.18 95);
-  --secondary-foreground: oklch(0.22 0.06 290);
+  --primary: var(--c-magenta);
+  --primary-foreground: #ffffff;
 
-  --muted: oklch(0.93 0.03 90);
-  --muted-foreground: oklch(0.45 0.04 280);
+  --secondary: var(--c-gold);
+  --secondary-foreground: var(--c-on-gold);
 
-  --accent: oklch(0.72 0.16 175);
-  --accent-foreground: oklch(0.22 0.06 290);
+  --muted: #f1e6d0;
+  --muted-foreground: var(--c-muted);
 
-  --destructive: oklch(0.6 0.24 25);
-  --destructive-foreground: oklch(0.99 0.01 90);
+  --accent: var(--c-turq);
+  --accent-foreground: #ffffff;
 
-  --border: oklch(0.55 0.04 285 / 0.25);
-  --input: oklch(0.95 0.02 90);
-  --ring: oklch(0.65 0.22 0);
+  --destructive: #d92d3a;
+  --destructive-foreground: #ffffff;
 
-  --sun: oklch(0.82 0.18 95);
-  --pink: oklch(0.65 0.22 0);
-  --mint: oklch(0.72 0.16 175);
-  --sky: oklch(0.68 0.14 230);
-  --grape: oklch(0.5 0.2 305);
+  --border: var(--c-line);
+  --input: #fff6e5;
+  --ring: var(--c-magenta);
 
-  --gradient-night: radial-gradient(ellipse at top, oklch(0.98 0.04 80) 0%, oklch(0.95 0.05 60) 55%, oklch(0.9 0.06 40) 100%);
+  --sun: #9a6200; /* ouro escuro: lê sobre o creme (≥4,5:1) */
+  --pink: var(--c-magenta);
+  --mint: var(--c-turq);
+  --sky: #2563eb;
+  --grape: #6d28d9;
+
+  --gradient-night:
+    radial-gradient(
+      1100px 560px at 50% -12%,
+      rgb(255 210 140 / 0.45),
+      transparent 62%
+    ),
+    radial-gradient(
+      700px 480px at 100% 0%,
+      rgb(255 120 190 / 0.14),
+      transparent 60%
+    ),
+    var(--c-night);
+  --gradient-piece: linear-gradient(180deg, #ffffff 0%, #fff7ea 100%);
   --page-bg: var(--gradient-night);
 
-  --shadow-base: oklch(0.55 0.08 30);
-  --shadow-pop: 0 6px 0 0 oklch(0.55 0.08 30 / 0.25), 0 14px 30px -8px oklch(0.55 0.08 30 / 0.25);
-  --shadow-soft: 0 10px 30px -10px oklch(0.55 0.08 30 / 0.25);
-  --shadow-glow: 0 0 32px oklch(0.65 0.22 0 / 0.4);
+  --shadow-base: #8a5a2a;
+  --shadow-pop:
+    0 5px 0 0 rgb(138 90 42 / 0.25), 0 14px 30px -10px rgb(138 90 42 / 0.25);
+  --shadow-soft: 0 10px 30px -10px rgb(138 90 42 / 0.25);
+  --shadow-glow: 0 0 32px var(--v-neon-glow);
+  --shadow-piece:
+    inset 0 1px 0 rgb(255 255 255 / 0.9), 0 4px 0 0 rgb(138 90 42 / 0.2),
+    0 16px 30px -16px rgb(138 90 42 / 0.3);
+  --stage-glow: radial-gradient(
+    900px 520px at 50% -8%,
+    rgb(255 210 140 / 0.35),
+    transparent 62%
+  );
 }
 
 @layer base {
@@ -154,7 +289,8 @@
     border-color: var(--color-border);
   }
 
-  html, body {
+  html,
+  body {
     height: 100%;
     overscroll-behavior-y: none;
     overflow-x: hidden;
@@ -163,7 +299,6 @@
 
   body {
     background: var(--page-bg);
-    background-attachment: fixed;
     color: var(--color-foreground);
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
@@ -172,41 +307,502 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  button, [role="button"], a {
+  button,
+  [role="button"],
+  a {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
 
-  h1, h2, h3, h4, .font-display {
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
     font-family: var(--font-display);
     font-weight: 700;
     letter-spacing: -0.01em;
   }
 }
 
+/* ---------- Peças da coleção (camada components: utilitários vencem) ---------- */
+@layer components {
+  /* Botão "candy" — a assinatura da coleção: borda clara, luz no topo,
+     aresta dura embaixo que afunda no toque (70 ms) e volta com quique.
+     Cor pela variante (.btn-gold/.btn-violet/.btn-neon/.btn-turq/.btn-plain)
+     ou por um bg-* utilitário. */
+  .btn-pop {
+    @apply relative inline-flex items-center justify-center gap-2 font-display font-bold rounded-2xl px-6 py-4 text-lg;
+    border: 2px solid rgb(255 255 255 / 0.16);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 5px 0 0 var(--btn-edge, rgb(10 4 24 / 0.6)),
+      0 12px 24px -12px var(--btn-glow, rgb(0 0 0 / 0.55));
+    transition:
+      transform 0.14s cubic-bezier(0.3, 1.4, 0.6, 1),
+      box-shadow 0.14s cubic-bezier(0.3, 1.4, 0.6, 1),
+      filter 0.14s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-pop:active:not(:disabled) {
+    transform: translateY(3px);
+    transition-duration: 0.07s;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 2px 0 0 var(--btn-edge, rgb(10 4 24 / 0.6)),
+      0 6px 14px -10px var(--btn-glow, rgb(0 0 0 / 0.55));
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-pop:hover:not(:disabled) {
+      filter: brightness(1.07);
+      transform: translateY(-1px);
+    }
+  }
+  /* Desabilitado: vira peça neutra (vidro + texto apagado), sem a cor da
+     variante — ouro a meia opacidade parecia barro. Vale para todas. */
+  .btn-pop:disabled,
+  .btn-pop:disabled:hover {
+    cursor: not-allowed;
+    color: var(--c-faint);
+    background: rgb(255 255 255 / 0.07);
+    border-color: var(--c-line);
+    text-shadow: none;
+    filter: none;
+    transform: none;
+    box-shadow: 0 3px 0 0 rgb(0 0 0 / 0.3);
+  }
+  .btn-gold {
+    background: var(--gradient-sun);
+    color: var(--c-on-gold);
+    border-color: rgb(255 255 255 / 0.85);
+    text-shadow: 0 1px 0 rgb(255 255 255 / 0.35);
+    --btn-edge: var(--c-gold-edge);
+    --btn-glow: rgb(244 197 66 / 0.55);
+  }
+  .btn-violet {
+    background: linear-gradient(180deg, var(--c-violet), var(--c-purple));
+    color: #ffffff;
+    border-color: rgb(255 255 255 / 0.24);
+    --btn-edge: var(--c-purple-edge);
+    --btn-glow: rgb(109 40 217 / 0.5);
+  }
+  .btn-neon {
+    background: linear-gradient(
+      180deg,
+      #ff74c4 0%,
+      var(--v-neon) 48%,
+      #c01c7d 100%
+    );
+    color: #ffffff;
+    border-color: rgb(255 255 255 / 0.6);
+    text-shadow: 0 1px 0 rgb(90 0 50 / 0.35);
+    --btn-edge: #6a0f45;
+    --btn-glow: var(--v-neon-glow);
+  }
+  .btn-turq {
+    background: rgb(45 212 191 / 0.12);
+    color: var(--c-turq);
+    border: 1.5px solid rgb(45 212 191 / 0.6);
+    --btn-edge: #06221e;
+    --btn-glow: rgb(45 212 191 / 0.25);
+  }
+  .btn-plain {
+    background: rgb(255 255 255 / 0.07);
+    color: var(--c-ink);
+    border: 1.5px solid var(--c-line);
+    --btn-edge: rgb(0 0 0 / 0.45);
+  }
+  .light .btn-plain {
+    background: rgb(255 255 255 / 0.85);
+    --btn-edge: rgb(138 90 42 / 0.25);
+  }
+  .light .btn-turq {
+    background: rgb(11 113 102 / 0.08);
+    border-color: rgb(11 113 102 / 0.55);
+    --btn-edge: rgb(6 76 69 / 0.35);
+  }
+
+  /* Peça de jogo (cédula, linha de placar, cartão de resultado): relevo,
+     luz no topo e aresta embaixo — nunca "card de painel admin". */
+  .sticker {
+    @apply relative rounded-3xl p-4;
+    background-color: var(--c-surface);
+    background-image: var(--gradient-piece);
+    border: 1px solid var(--c-line);
+    box-shadow: var(--shadow-piece);
+  }
+
+  /* Vidro (ações terciárias, botões redondos do topo): presente, mas
+     claramente abaixo das ações de jogo. */
+  .glass-tile {
+    color: var(--c-ink);
+    background: rgb(255 255 255 / 0.08);
+    border: 1.5px solid rgb(255 255 255 / 0.16);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.12),
+      0 3px 0 0 rgb(0 0 0 / 0.35),
+      0 10px 22px -14px rgb(0 0 0 / 0.6);
+  }
+  .light .glass-tile {
+    background: rgb(255 255 255 / 0.78);
+    border-color: var(--c-line);
+    box-shadow:
+      inset 0 1px 0 #ffffff,
+      0 3px 0 0 rgb(138 90 42 / 0.18),
+      0 10px 22px -14px rgb(138 90 42 / 0.3);
+  }
+
+  /* Campo de texto: poço escuro com anel neon no foco (o anel É o foco). */
+  .field {
+    color: var(--c-ink);
+    background-color: var(--input);
+    border: 1.5px solid var(--c-line);
+    border-radius: 1rem;
+    box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.28);
+    outline: none;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .field::placeholder {
+    color: var(--c-faint);
+  }
+  .field:focus,
+  .field:focus-visible {
+    outline: none;
+    border-color: var(--v-neon);
+    box-shadow:
+      inset 0 2px 6px rgb(0 0 0 / 0.28),
+      0 0 0 3px var(--v-neon-glow);
+  }
+  .light .field {
+    box-shadow: inset 0 2px 4px rgb(138 90 42 / 0.12);
+  }
+
+  /* Sobrancelha de seção (mesma tipografia da coleção). */
+  .eyebrow {
+    font-family: var(--font-body);
+    font-weight: 800;
+    font-size: 0.72rem;
+    line-height: 1.1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--c-faint);
+  }
+
+  /* Ficha com letra (cédulas A–F): moeda ouro com aresta. */
+  .token {
+    @apply inline-flex items-center justify-center shrink-0 rounded-full font-display font-bold leading-none;
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: 1.15rem;
+    color: #ffffff;
+    background: linear-gradient(
+      180deg,
+      #b48cff,
+      var(--c-violet) 45%,
+      var(--c-purple)
+    );
+    border: 2px solid rgb(255 255 255 / 0.8);
+    box-shadow: 0 3px 0 0 var(--c-purple-edge);
+  }
+  /* A ficha da cédula escolhida vira ouro (ouro só no que importa). */
+  .token-gold {
+    background: var(--gradient-sun);
+    color: var(--c-on-gold);
+    border-color: rgb(255 255 255 / 0.9);
+    box-shadow: 0 3px 0 0 var(--c-gold-edge);
+  }
+
+  /* A palavra da rodada como "verbete de dicionário": neon magenta da casa,
+     borda clara, aresta funda e as linhas da página por cima. */
+  .word-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background: radial-gradient(
+      120% 140% at 50% 0%,
+      #ff63c4 0%,
+      #d62bc5 42%,
+      #6d28d9 100%
+    );
+    border: 2px solid rgb(255 255 255 / 0.4);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.45),
+      0 5px 0 0 #4a0b5e,
+      0 18px 40px -16px var(--v-neon-glow);
+  }
+  .word-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      180deg,
+      transparent 0 17px,
+      rgb(255 255 255 / 0.07) 17px 18px
+    );
+  }
+  .word-hero > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* A VERDADE na revelação: peça turquesa (positivo, como na coleção) com
+     selo ouro. Cores fixas: lê igual nos dois temas. */
+  .truth-card {
+    border-radius: 1.5rem;
+    color: #06221e;
+    background: linear-gradient(160deg, #5eead4 0%, #2dd4bf 45%, #14b8a6 100%);
+    border: 2px solid rgb(255 255 255 / 0.65);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.55),
+      0 5px 0 0 #0b5e54,
+      0 0 44px -6px rgb(45 212 191 / 0.6);
+  }
+  .truth-seal {
+    display: inline-block;
+    margin-bottom: 8px;
+    transform: rotate(-3deg);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    color: var(--c-on-gold);
+    background: var(--gradient-sun);
+    border: 2px solid #ffffff;
+    box-shadow: 0 3px 0 0 var(--c-gold-edge);
+  }
+  /* Carimbo dos blefes eliminados. */
+  .bluff-stamp {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    transform: rotate(8deg);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 6px;
+    color: var(--c-magenta);
+    border: 2px solid currentColor;
+    opacity: 0.85;
+  }
+
+  /* Degraus do pódio: metal "candy" com luz no topo. */
+  .podium-block {
+    border-radius: 0.9rem 0.9rem 0 0;
+    border: 2px solid rgb(255 255 255 / 0.55);
+    border-bottom: 0;
+    overflow: hidden;
+  }
+  .podium-gold {
+    color: #2a1606;
+    background: linear-gradient(180deg, #ffe27a 0%, #f4c542 45%, #c9971f 100%);
+    box-shadow:
+      inset 0 2px 0 rgb(255 255 255 / 0.6),
+      0 0 34px -6px rgb(244 197 66 / 0.65);
+  }
+  .podium-silver {
+    color: #1f2430;
+    background: linear-gradient(180deg, #f4f6fb 0%, #c7ccd8 50%, #8f97a8 100%);
+    box-shadow:
+      inset 0 2px 0 rgb(255 255 255 / 0.7),
+      0 0 22px -8px rgb(199 204 216 / 0.5);
+  }
+  .podium-bronze {
+    color: #2a1405;
+    background: linear-gradient(180deg, #f6c193 0%, #cd7f32 50%, #8a4d18 100%);
+    box-shadow:
+      inset 0 2px 0 rgb(255 255 255 / 0.5),
+      0 0 22px -8px rgb(205 127 50 / 0.5);
+  }
+
+  /* Verso da cédula (embaralhamento): carta roxa com filete ouro e a marca. */
+  .card-back {
+    border-radius: 1rem;
+    background:
+      repeating-linear-gradient(
+        45deg,
+        rgb(255 255 255 / 0.05) 0 6px,
+        transparent 6px 12px
+      ),
+      radial-gradient(
+        120% 120% at 50% 0%,
+        #8b3cf5 0%,
+        #4c1a8f 60%,
+        #2a0f5c 100%
+      );
+    border: 2px solid rgb(255 255 255 / 0.35);
+    box-shadow:
+      inset 0 0 0 4px rgb(42 15 92 / 0.9),
+      inset 0 0 0 5.5px rgb(244 197 66 / 0.55),
+      0 4px 0 0 #1c0840,
+      0 14px 28px -12px rgb(0 0 0 / 0.65);
+  }
+
+  /* Barras (tempo, progresso, semelhança): trilho fundo + preenchimento. */
+  .meter {
+    width: 100%;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: rgb(0 0 0 / 0.32);
+    box-shadow:
+      inset 0 2px 3px rgb(0 0 0 / 0.4),
+      0 1px 0 rgb(255 255 255 / 0.06);
+  }
+  .light .meter {
+    background: rgb(76 26 143 / 0.1);
+  }
+  .meter-fill-gold {
+    background: linear-gradient(
+      90deg,
+      var(--c-gold-low),
+      var(--c-gold) 60%,
+      var(--c-gold-top)
+    );
+    box-shadow: 0 0 12px rgb(244 197 66 / 0.45);
+  }
+  .meter-fill-turq {
+    background: linear-gradient(90deg, #14b8a6, var(--c-turq) 60%, #5eead4);
+    box-shadow: 0 0 12px rgb(45 212 191 / 0.4);
+  }
+  .meter-fill-urgent {
+    background: linear-gradient(90deg, #ff5a5f, var(--c-magenta));
+    box-shadow: 0 0 14px rgb(255 90 95 / 0.55);
+  }
+
+  /* Controle segmentado (opções da sala): peça baixa; a escolhida acende
+     no neon da casa. */
+  .seg {
+    border-radius: 0.8rem;
+    font-family: var(--font-display);
+    color: var(--c-ink);
+    background: rgb(255 255 255 / 0.05);
+    border: 1px solid var(--c-line);
+    box-shadow: 0 2px 0 0 rgb(0 0 0 / 0.3);
+    transition:
+      transform 0.12s ease,
+      background 0.12s ease,
+      box-shadow 0.12s ease;
+  }
+  .seg:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 0 rgb(0 0 0 / 0.3);
+  }
+  .light .seg {
+    background: rgb(255 255 255 / 0.85);
+    box-shadow: 0 2px 0 0 rgb(138 90 42 / 0.15);
+  }
+  .seg-on,
+  .light .seg-on {
+    color: #ffffff;
+    background: linear-gradient(
+      180deg,
+      #ff74c4 0%,
+      var(--v-neon) 55%,
+      #c01c7d 100%
+    );
+    border-color: rgb(255 255 255 / 0.5);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.35),
+      0 2px 0 0 #6a0f45,
+      0 0 16px -4px var(--v-neon-glow);
+  }
+
+  /* Pílula informativa. */
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold leading-none;
+    background: rgb(255 255 255 / 0.07);
+    border: 1px solid var(--c-line);
+  }
+  .light .chip {
+    background: rgb(255 255 255 / 0.8);
+  }
+}
+
+/* Painel (contêiner de seção): vidro escuro, sem aresta de peça. Utilitário
+   de verdade (@utility) para aceitar variantes como lg:panel. */
+@utility panel {
+  border-radius: 22px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--c-surface) 88%, transparent),
+    color-mix(in oklab, var(--c-night-2) 88%, transparent)
+  );
+  border: 1px solid var(--c-line);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 18px 40px -26px rgb(0 0 0 / 0.75);
+}
+
 /* ---------- Custom utilities ---------- */
 @layer utilities {
-  .bg-gradient-fun { background: var(--gradient-fun); }
-  .bg-gradient-sun { background: var(--gradient-sun); }
-  .bg-gradient-mint { background: var(--gradient-mint); }
-  .bg-gradient-night { background: var(--gradient-night); }
+  .bg-gradient-fun {
+    background: var(--gradient-fun);
+  }
+  .bg-gradient-sun {
+    background: var(--gradient-sun);
+  }
+  .bg-gradient-mint {
+    background: var(--gradient-mint);
+  }
+  .bg-gradient-night {
+    background: var(--gradient-night);
+  }
 
-  .shadow-pop { box-shadow: var(--shadow-pop); }
-  .shadow-soft { box-shadow: var(--shadow-soft); }
-  .shadow-glow { box-shadow: var(--shadow-glow); }
-
-  /* Pseudo-3D chunky button */
-  .btn-pop {
-    @apply relative inline-flex items-center justify-center font-display font-bold rounded-2xl px-6 py-4 text-lg transition-transform active:translate-y-1;
+  .shadow-pop {
     box-shadow: var(--shadow-pop);
   }
-  .btn-pop:active { box-shadow: 0 2px 0 0 color-mix(in oklab, var(--shadow-base) 60%, transparent); }
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+  .shadow-piece {
+    box-shadow: var(--shadow-piece);
+  }
 
-  /* Sticker card (cédula de votação) */
-  .sticker {
-    @apply relative rounded-3xl bg-card p-4 border-2;
-    border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
-    box-shadow: var(--shadow-pop);
+  /* Ouro de título (coleção): degradê nobre só em títulos de vitória. */
+  .text-gold-grad {
+    background: linear-gradient(
+      180deg,
+      var(--c-gold-top) 0%,
+      var(--c-gold) 55%,
+      var(--c-gold-low) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Neon do Verbete em texto (palavra da rodada, destaques). */
+  .text-neon {
+    color: #ffffff;
+    text-shadow:
+      0 0 1px #ffffff,
+      0 0 14px var(--v-neon-glow),
+      0 0 32px var(--v-neon-glow);
+  }
+  /* Anéis de destaque: ouro (1º/vencedor) e neon (seleção). */
+  .ring-gold {
+    box-shadow:
+      0 0 0 2px var(--c-gold),
+      0 0 26px -4px rgb(244 197 66 / 0.6),
+      var(--shadow-piece);
+  }
+  .ring-neon {
+    box-shadow:
+      0 0 0 3px var(--v-neon),
+      0 0 30px -4px var(--v-neon-glow),
+      var(--shadow-piece);
   }
 
   .text-stroke {
@@ -215,8 +811,13 @@
   }
 
   /* Scroll containers */
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
   /* Anti-cópia — palavras do jogo / desafio diário */
   .no-copy {
@@ -229,7 +830,9 @@
   }
 
   /* Floating idle */
-  .float-idle { animation: float-idle 3s ease-in-out infinite; }
+  .float-idle {
+    animation: float-idle 3s ease-in-out infinite;
+  }
 
   /* Mobile portrait safe container — ocupa a tela inteira respeitando notch/home-bar */
   .mobile-shell {
@@ -254,16 +857,25 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
-  .mobile-shell::-webkit-scrollbar { display: none; }
-  .mobile-shell > * { min-width: 0; max-width: 100%; }
+  .mobile-shell::-webkit-scrollbar {
+    display: none;
+  }
+  .mobile-shell > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Tablet / celular deitado: coluna um pouco mais larga. */
+  @media (min-width: 640px) {
+    .mobile-shell {
+      max-width: min(34rem, 100vw);
+    }
+  }
 
   /* Em telas grandes, dá um respiro e cria moldura "device-like" */
   @media (min-width: 1024px) {
     body {
-      background:
-        radial-gradient(60% 50% at 20% 20%, color-mix(in oklab, var(--pink) 12%, transparent), transparent 70%),
-        radial-gradient(50% 40% at 85% 80%, color-mix(in oklab, var(--sky) 12%, transparent), transparent 70%),
-        var(--background);
+      background: var(--page-bg);
     }
     .mobile-shell {
       max-width: 28rem;
@@ -275,19 +887,34 @@
       max-height: min(calc(100dvh - 1rem), 920px);
       margin-top: max(0.5rem, calc((100dvh - 920px) / 2));
       border-radius: 28px;
-      border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+      border: 1px solid var(--c-line);
       box-shadow:
-        0 30px 80px -20px color-mix(in oklab, var(--pink) 25%, transparent),
-        0 10px 40px -10px color-mix(in oklab, var(--sky) 20%, transparent),
-        inset 0 1px 0 rgba(255,255,255,0.04);
-      background: color-mix(in oklab, var(--background) 92%, transparent);
+        0 30px 80px -24px var(--v-neon-glow),
+        0 10px 40px -12px rgb(109 40 217 / 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      background: color-mix(in oklab, var(--c-night) 90%, transparent);
       backdrop-filter: blur(8px);
+    }
+    /* Palco largo (Home, sala, Diário): composição de desktop de verdade,
+       com a mesma moldura arredondada e o brilho da coleção. */
+    .mobile-shell.stage-wide {
+      max-width: min(1240px, calc(100vw - 3rem));
+      height: min(calc(100dvh - 2rem), 880px);
+      min-height: min(calc(100dvh - 2rem), 880px);
+      max-height: min(calc(100dvh - 2rem), 880px);
+      margin-top: max(1rem, calc((100dvh - 880px) / 2));
+      /* O palco também tem a noite com brilho (não uma placa lisa). */
+      background:
+        var(--stage-glow), color-mix(in oklab, var(--c-night) 92%, transparent);
+      padding: 1.25rem 2rem;
+      border-radius: 32px;
     }
   }
 }
 
 /* Trava o body para não rolar atrás do shell, e usa fundo do tema na área do notch */
-html, body {
+html,
+body {
   background: var(--background);
   overscroll-behavior: none;
   overflow-x: hidden;
@@ -297,38 +924,81 @@ html, body {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+/* A noite da coleção (brilho roxo no alto + neon do Verbete) atrás de tudo.
+   O html segue liso na cor do tema para a área do notch. Sem
+   background-attachment: fixed — o body não rola (o scroll é interno). */
+body {
+  background: var(--page-bg);
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
 @supports (height: 100dvh) {
-  html, body { height: 100dvh; }
+  html,
+  body {
+    height: 100dvh;
+  }
 }
 
 /* ---------- Keyframes ---------- */
 @keyframes float-idle {
-  0%, 100% { transform: translateY(0) rotate(-1deg); }
-  50% { transform: translateY(-8px) rotate(1deg); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+  }
 }
 
 @keyframes wiggle {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
 }
-.wiggle { animation: wiggle 0.5s ease-in-out infinite; }
+.wiggle {
+  animation: wiggle 0.5s ease-in-out infinite;
+}
 
 @keyframes pop-in {
-  0% { transform: scale(0.6); opacity: 0; }
-  60% { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
-.pop-in { animation: pop-in 0.4s cubic-bezier(.34,1.56,.64,1); }
+.pop-in {
+  animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
 @keyframes confetti-rise {
-  0% { transform: translateY(0) rotate(0); opacity: 1; }
-  100% { transform: translateY(-120vh) rotate(720deg); opacity: 0; }
+  0% {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120vh) rotate(720deg);
+    opacity: 0;
+  }
 }
 
 /* ---------- Acessibilidade ---------- */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -336,10 +1006,12 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
   }
 }
 
-/* Foco visível consistente para teclado */
+/* Foco visível consistente para teclado — turquesa, como no KING e no
+   TITOKO. (Antes: hsl() em cima de um token oklch = declaração inválida e
+   foco SEM contorno.) */
 :focus-visible {
-  outline: 3px solid hsl(var(--ring, 320 85% 65%));
-  outline-offset: 2px;
+  outline: 3px solid var(--c-turq);
+  outline-offset: 3px;
   border-radius: 8px;
 }
 
@@ -384,35 +1056,86 @@ button:disabled,
 
 /* ---------- Game feel: screen shake + flash ---------- */
 @keyframes screen-shake {
-  0%   { transform: translate3d(0, 0, 0); }
-  10%  { transform: translate3d(-4px, 2px, 0) rotate(-0.4deg); }
-  20%  { transform: translate3d(5px, -3px, 0) rotate(0.5deg); }
-  30%  { transform: translate3d(-6px, -2px, 0) rotate(-0.3deg); }
-  40%  { transform: translate3d(4px, 3px, 0) rotate(0.4deg); }
-  50%  { transform: translate3d(-3px, -1px, 0); }
-  60%  { transform: translate3d(2px, 2px, 0); }
-  70%  { transform: translate3d(-2px, -1px, 0); }
-  80%  { transform: translate3d(1px, 1px, 0); }
-  100% { transform: translate3d(0, 0, 0); }
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  10% {
+    transform: translate3d(-4px, 2px, 0) rotate(-0.4deg);
+  }
+  20% {
+    transform: translate3d(5px, -3px, 0) rotate(0.5deg);
+  }
+  30% {
+    transform: translate3d(-6px, -2px, 0) rotate(-0.3deg);
+  }
+  40% {
+    transform: translate3d(4px, 3px, 0) rotate(0.4deg);
+  }
+  50% {
+    transform: translate3d(-3px, -1px, 0);
+  }
+  60% {
+    transform: translate3d(2px, 2px, 0);
+  }
+  70% {
+    transform: translate3d(-2px, -1px, 0);
+  }
+  80% {
+    transform: translate3d(1px, 1px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
 }
-.shake { animation: screen-shake 520ms cubic-bezier(.36,.07,.19,.97) both; }
-.shake-strong { animation: screen-shake 700ms cubic-bezier(.36,.07,.19,.97) both; transform-origin: center; }
+.shake {
+  animation: screen-shake 520ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+.shake-strong {
+  animation: screen-shake 700ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  transform-origin: center;
+}
 
 @keyframes flash-white {
-  0%, 100% { opacity: 0; }
-  10%      { opacity: 0.85; }
-  40%      { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  40% {
+    opacity: 0.35;
+  }
 }
 .flash-overlay {
-  position: fixed; inset: 0; z-index: 60; pointer-events: none;
-  background: white; opacity: 0; mix-blend-mode: screen;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: white;
+  opacity: 0;
+  mix-blend-mode: screen;
 }
-.flash-overlay.on { animation: flash-white 600ms ease-out forwards; }
+.flash-overlay.on {
+  animation: flash-white 600ms ease-out forwards;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .shake, .shake-strong { animation: none; }
-  .flash-overlay.on { animation: none; }
+  .shake,
+  .shake-strong {
+    animation: none;
+  }
+  .flash-overlay.on {
+    animation: none;
+  }
 }
 
-
-
+/* Sala no celular: altura exata da tela (a barra de reações é fixa). No
+   desktop, o palco largo (.stage-wide) define a altura. */
+@media (max-width: 1023.98px) {
+  .room-shell {
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 100dvh;
+  }
+}

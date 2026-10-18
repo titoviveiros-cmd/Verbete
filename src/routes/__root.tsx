@@ -1,4 +1,5 @@
 import { APP_URL } from "@/lib/app-url";
+import { SOCIAL_IMAGE } from "@/lib/social-image";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -21,6 +22,9 @@ import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { RemoteGate } from "@/components/RemoteGate";
 import { Toaster } from "@/components/ui/sonner";
+// Aplica o tema salvo antes do 1º paint em TODA página (o módulo age ao ser
+// importado); antes só as telas com o ThemeToggle o carregavam.
+import "@/hooks/use-theme";
 
 function NotFoundComponent() {
   return (
@@ -99,7 +103,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           content: "#fbf3e3",
           media: "(prefers-color-scheme: light)",
         },
-        { name: "theme-color", content: "#1a0f2e" },
+        { name: "theme-color", content: "#150a2c" },
         { name: "color-scheme", content: "dark" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         { name: "mobile-web-app-capable", content: "yes" },
@@ -111,37 +115,41 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           name: "verbete-build",
           content: (import.meta.env.VITE_BUILD_ID as string) ?? "dev",
         },
-        { title: "Verbete — Ganhar conhecimento nunca foi tão divertido!" },
+        { title: "Verbete — blefe com palavras raras" },
         {
           name: "description",
           content:
-            "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português.",
+            "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.",
         },
         { name: "author", content: "Verbete" },
         {
           property: "og:title",
-          content: "Verbete — Ganhar conhecimento nunca foi tão divertido!",
+          content: "Verbete — blefe com palavras raras",
         },
         {
           property: "og:description",
           content:
-            "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português.",
+            "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
         },
         { property: "og:type", content: "website" },
 
         {
           name: "twitter:title",
-          content: "Verbete — Ganhar conhecimento nunca foi tão divertido!",
+          content: "Verbete — blefe com palavras raras",
         },
         {
           name: "twitter:description",
           content:
-            "Ganhar conhecimento nunca foi tão divertido! Multiplayer em tempo real para 4 a 12 amigos. Blefe, vote e descubra significados raros do português.",
+            "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
         },
-        { property: "og:image", content: `${APP_URL}/og-verbete.jpg` },
+        // Prévia de link (WhatsApp/Telegram/iMessage): nome com VERSÃO — o
+        // WhatsApp guarda a prévia por endereço; trocar a arte = arquivo novo
+        // (scripts/gen-store-assets.mjs; validação em
+        // docs/collection-alignment-verbete.md).
+        { property: "og:image", content: `${APP_URL}/${SOCIAL_IMAGE}` },
         {
           property: "og:image:secure_url",
-          content: `${APP_URL}/og-verbete.jpg`,
+          content: `${APP_URL}/${SOCIAL_IMAGE}`,
         },
         { property: "og:image:type", content: "image/jpeg" },
         { property: "og:image:width", content: "1200" },
@@ -149,14 +157,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           property: "og:image:alt",
           content:
-            "Verbete — jogo multiplayer de blefe com palavras raras do português",
+            "Verbete: a marca V, o Livro Mascote e cédulas de votação na noite roxa — Invente. Engane. Descubra a verdade.",
         },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:image", content: `${APP_URL}/og-verbete.jpg` },
+        { name: "twitter:image", content: `${APP_URL}/${SOCIAL_IMAGE}` },
         {
           name: "twitter:image:alt",
           content:
-            "Verbete — jogo multiplayer de blefe com palavras raras do português",
+            "Verbete: a marca V, o Livro Mascote e cédulas de votação na noite roxa — Invente. Engane. Descubra a verdade.",
         },
         { property: "og:site_name", content: "Verbete" },
         { property: "og:locale", content: "pt_BR" },
@@ -169,17 +177,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           href: "https://fonts.gstatic.com",
           crossOrigin: "anonymous",
         },
-        // Preload do CSS de fontes para que o browser comece a baixar Fredoka/Baloo
+        // Preload do CSS de fontes para que o browser comece a baixar Fredoka/Nunito
         // antes de o parser chegar no <link rel="stylesheet">. Isso elimina o
         // flash de fallback (system-ui) no primeiro paint em conexões 3G/4G.
         {
           rel: "preload",
           as: "style",
-          href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700&display=swap",
+          href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap",
         },
         {
           rel: "stylesheet",
-          href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700&display=swap",
+          href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap",
         },
         { rel: "icon", type: "image/png", href: "/favicon.png" },
         {

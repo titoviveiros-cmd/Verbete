@@ -57,21 +57,56 @@ export function ChooseWord({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col items-center justify-center gap-3"
+      className="flex-1 flex flex-col items-center justify-center gap-4 lg:gap-6"
     >
-      {phase !== "ready" && <Mascot mood="thinking" size={140} />}
-      <div className="text-center">
-        <p className="text-muted-foreground text-sm font-display">
-          Coordenador da rodada
-        </p>
-        <h2
-          className={
-            "font-display text-sun " +
-            (phase === "ready" ? "text-2xl" : "text-4xl mt-1")
-          }
-        >
-          {coord?.nickname} 👑
-        </h2>
+      {phase !== "ready" && (
+        <div className="relative short:hidden">
+          <div
+            aria-hidden
+            className="absolute -inset-8 rounded-full pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(circle, rgb(155 108 255 / 0.35) 0%, transparent 70%)",
+              filter: "blur(16px)",
+            }}
+          />
+          <Mascot mood="thinking" size={140} className="relative" />
+        </div>
+      )}
+      <div className="text-center flex flex-col items-center">
+        <p className="eyebrow">Coordenador da rodada</p>
+        <div className="flex items-center gap-2.5 mt-1.5">
+          {coord && (
+            <span
+              aria-hidden
+              className={
+                "rounded-full flex items-center justify-center shrink-0 " +
+                (phase === "ready" ? "w-9 h-9 text-lg" : "w-12 h-12 text-2xl")
+              }
+              style={{
+                background: `radial-gradient(circle at 30% 25%, ${coord.color}cc, ${coord.color})`,
+                boxShadow:
+                  "0 0 0 2px rgb(244 197 66 / 0.9), 0 4px 0 rgb(0 0 0 / 0.35)",
+              }}
+            >
+              {coord.avatar}
+            </span>
+          )}
+          <h2
+            className={
+              "font-display text-gold-grad leading-none " +
+              (phase === "ready" ? "text-3xl" : "text-[42px] short:text-3xl")
+            }
+          >
+            {coord?.nickname}
+          </h2>
+          <span
+            aria-hidden
+            className={phase === "ready" ? "text-2xl" : "text-3xl"}
+          >
+            👑
+          </span>
+        </div>
       </div>
 
       {isCoordinator ? (
@@ -82,7 +117,7 @@ export function ChooseWord({
               animate={{ scale: 1, opacity: 1 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleDraw}
-              className="btn-pop bg-gradient-fun text-white text-2xl px-8 py-5"
+              className="btn-pop btn-gold text-2xl px-9 py-5"
             >
               📖 Sortear palavra
             </motion.button>
@@ -94,49 +129,75 @@ export function ChooseWord({
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full space-y-2"
+              className="w-full flex flex-col gap-3"
             >
-              <p className="text-center font-display text-pink animate-pulse text-lg">
+              <p className="text-center font-display text-pink text-xl">
                 {picking ? "Confirmando palavra…" : "Escolha uma palavra rara!"}
               </p>
-              {words.map((w, i) => (
-                <motion.button
-                  key={w.id}
-                  initial={{ scale: 0.6, opacity: 0, rotate: -3 }}
-                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                  transition={{
-                    delay: i * 0.1,
-                    type: "spring",
-                    stiffness: 220,
-                  }}
-                  whileTap={{ scale: 0.96 }}
-                  disabled={!!picking}
-                  onClick={() => handlePick(w.id)}
-                  onCopy={(e) => e.preventDefault()}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className={
-                    "w-full sticker text-left transition px-3 py-2 flex items-baseline gap-2 no-copy " +
-                    (picking && picking !== w.id
-                      ? "opacity-40 pointer-events-none "
-                      : "active:bg-pink/10 ") +
-                    (picking === w.id ? "ring-2 ring-pink " : "")
-                  }
-                >
-                  <p className="font-display text-lg leading-tight flex-1 truncate capitalize">
-                    {w.word}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider shrink-0">
-                    {w.category}
-                  </p>
-                </motion.button>
-              ))}
+              <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3">
+                {words.map((w, i) => (
+                  <motion.button
+                    key={w.id}
+                    initial={{ scale: 0.6, opacity: 0, rotate: -3 }}
+                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                    transition={{
+                      delay: i * 0.1,
+                      type: "spring",
+                      stiffness: 220,
+                    }}
+                    whileTap={{ scale: 0.96 }}
+                    disabled={!!picking}
+                    onClick={() => handlePick(w.id)}
+                    onCopy={(e) => e.preventDefault()}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={
+                      "w-full sticker text-left transition !px-4 !py-3 flex items-center gap-3 no-copy lg:flex-col lg:items-start lg:!py-5 " +
+                      (picking && picking !== w.id
+                        ? "opacity-40 pointer-events-none "
+                        : "") +
+                      (picking === w.id ? "ring-neon " : "")
+                    }
+                  >
+                    <span
+                      aria-hidden
+                      className="text-2xl lg:text-3xl leading-none"
+                    >
+                      📖
+                    </span>
+                    <p className="font-display text-[22px] lg:text-[26px] leading-tight flex-1 min-w-0 truncate capitalize">
+                      {w.word}
+                    </p>
+                    {w.category && (
+                      <span className="chip text-muted-foreground uppercase tracking-wider !text-[10px] shrink-0">
+                        {w.category}
+                      </span>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
             </motion.div>
           )}
         </div>
       ) : (
-        <p className="text-center text-muted-foreground italic">
-          Aguardando o coordenador escolher uma palavra…
-        </p>
+        <div className="panel px-5 py-4 text-center flex flex-col items-center gap-2">
+          <p className="font-display text-lg">
+            {coord?.nickname ?? "O coordenador"} está escolhendo a palavra…
+          </p>
+          <div className="flex items-center gap-1.5" aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <motion.span
+                key={i}
+                className="w-2 h-2 rounded-full bg-sun"
+                animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+                transition={{
+                  duration: 1.1,
+                  repeat: Infinity,
+                  delay: i * 0.18,
+                }}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </motion.div>
   );
@@ -175,7 +236,7 @@ function DictionaryFlip() {
           />
         ))}
       </div>
-      <p className="font-display text-pink animate-pulse">
+      <p className="font-display text-lg text-pink animate-pulse">
         Folheando o dicionário…
       </p>
     </div>

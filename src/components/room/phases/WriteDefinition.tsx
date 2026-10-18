@@ -326,17 +326,21 @@ export function WriteDefinition({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="flex-1 min-h-0 flex flex-col items-center gap-5 pt-4 overflow-y-auto overflow-x-hidden no-scrollbar pb-3"
+        className="flex-1 min-h-0 flex flex-col items-center gap-5 pt-4 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 lg:max-w-[560px] lg:mx-auto lg:w-full"
         style={scrollbarClip()}
       >
-        <WordCard word={word} />
+        <div className="w-full">
+          <WordCard word={word} />
+        </div>
         <Mascot mood="excited" size={100} />
-        <p className="text-center font-display text-mint text-xl">
-          Você é o coordenador!
-        </p>
-        <p className="text-center text-base text-muted-foreground">
-          Os jogadores estão escrevendo suas definições…
-        </p>
+        <div className="text-center">
+          <p className="font-display text-mint text-2xl">
+            Você é o coordenador! 👑
+          </p>
+          <p className="text-base text-muted-foreground mt-1">
+            Os jogadores estão escrevendo suas definições…
+          </p>
+        </div>
         <ProgressBar current={submittedCount} total={writers.length} />
         <PendingList pending={pending} />
         <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
@@ -375,167 +379,187 @@ export function WriteDefinition({
       exit={{ opacity: 0 }}
       // Rolagem própria (playtest mobile: barra de navegação do Safari cobria
       // o rodapé e não dava para ver todo o conteúdo). Barra clipada fora do shell.
-      className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3"
+      className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:gap-6 lg:content-center"
       style={scrollbarClip()}
     >
-      <WordCard word={word} />
-      <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
-      {extensionAlerts.map(({ player: p, attempt }) => {
-        const seconds = attempt >= 2 ? 15 : 20;
-        const isSelf = p.id === me?.id;
-        const finalChance = attempt >= 2;
-        const pointsLost = attempt;
-        return (
-          <div
-            key={p.id}
-            className={
-              "rounded-xl px-3 py-2 text-center font-display text-xs border " +
-              (isSelf
-                ? finalChance
-                  ? "bg-destructive/15 border-destructive text-destructive"
-                  : "bg-pink/15 border-pink text-pink"
-                : "bg-sun/15 border-sun text-sun")
-            }
-          >
-            ⏰{" "}
-            {isSelf ? (
-              "Você"
-            ) : (
-              <>
-                {p.avatar} <b>{p.nickname}</b>
-              </>
-            )}{" "}
-            perdeu{" "}
-            <b>
-              {pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}
-            </b>
-            .{" "}
-            {finalChance
-              ? `Última prorrogação: ${seconds}s para enviar${isSelf ? " ou você será eliminado(a) da partida" : " ou será eliminado(a) da partida"}.`
-              : `Nova oportunidade: +${seconds}s para enviar. Se ${isSelf ? "você perder" : "perder"} novamente na próxima prorrogação, será eliminado(a) da partida.`}
-          </div>
-        );
-      })}
-
-      {submitted || myDef ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
-          <Mascot mood="thinking" size={110} />
-          <p className="font-display text-lg">Definição enviada!</p>
-          <p className="text-sm text-muted-foreground">Aguardando os outros…</p>
-          <ProgressBar current={submittedCount} total={writers.length} />
-          <PendingList pending={pending} />
-        </div>
-      ) : (
-        <>
-          {/* Sem -mx-4: no celular a margem negativa colava "0/140", chips e
-              "faltam:" na borda esquerda da tela (playtest 5G). */}
-          <div className="-mt-2 flex flex-col gap-2">
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value.slice(0, 140))}
-              onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
-                  if (text.trim().length >= 1) handleSubmit();
-                }
-              }}
-              rows={3}
-              placeholder="escreva sua definicao mirabolante..."
-              className="w-full min-h-[118px] bg-input rounded-2xl px-4 py-4 font-body text-base leading-relaxed border border-white/10 outline-none focus:ring-4 focus:ring-pink/40 resize-none"
-            />
-
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span
-                className={
-                  text.length > 120
-                    ? "text-pink"
-                    : text.length > 90
-                      ? "text-sun"
-                      : ""
-                }
-              >
-                {text.length}/140
-              </span>
-              <span>
-                {submittedCount}/{writers.length} enviaram
-              </span>
+      <div className="flex flex-col gap-4 min-w-0">
+        <WordCard word={word} />
+        <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
+        {extensionAlerts.map(({ player: p, attempt }) => {
+          const seconds = attempt >= 2 ? 15 : 20;
+          const isSelf = p.id === me?.id;
+          const finalChance = attempt >= 2;
+          const pointsLost = attempt;
+          return (
+            <div
+              key={p.id}
+              className={
+                "rounded-xl px-3 py-2 text-center font-display text-xs border " +
+                (isSelf
+                  ? finalChance
+                    ? "bg-destructive/15 border-destructive text-destructive"
+                    : "bg-pink/15 border-pink text-pink"
+                  : "bg-sun/15 border-sun text-sun")
+              }
+            >
+              ⏰{" "}
+              {isSelf ? (
+                "Você"
+              ) : (
+                <>
+                  {p.avatar} <b>{p.nickname}</b>
+                </>
+              )}{" "}
+              perdeu{" "}
+              <b>
+                {pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}
+              </b>
+              .{" "}
+              {finalChance
+                ? `Última prorrogação: ${seconds}s para enviar${isSelf ? " ou você será eliminado(a) da partida" : " ou será eliminado(a) da partida"}.`
+                : `Nova oportunidade: +${seconds}s para enviar. Se ${isSelf ? "você perder" : "perder"} novamente na próxima prorrogação, será eliminado(a) da partida.`}
             </div>
-
-            {/* Frases prontas: um toque preenche o campo (pedido de playtest —
-                dá opção a quem não quer digitar; ainda dá pra editar antes de enviar). */}
-            {suggestions.length > 0 && !submitted && (
-              <div className="flex flex-wrap gap-1.5">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      void playUITap();
-                      setText(s.slice(0, 140));
-                    }}
-                    className="text-left text-[12px] leading-snug px-2.5 py-1.5 rounded-xl bg-card/70 border border-white/15 hover:border-pink/50 active:scale-[0.98] transition"
-                  >
-                    💡 {s}
-                  </button>
-                ))}
-              </div>
-            )}
-            {pending.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
-                  faltam:
-                </span>
-                {pending.map((p) => (
-                  <span
-                    key={p.id}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-card/60 border border-white/10"
-                  >
-                    <span className="text-sm leading-none">{p.avatar}</span>
-                    <span className="text-[11px] text-foreground/80 max-w-[80px] truncate">
-                      {p.nickname}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-              }}
-              onClick={() => {
-                void playUITap("primary");
-                handleSubmit();
-              }}
-              disabled={text.trim().length < 1}
-              className="btn-pop bg-gradient-fun text-white text-lg !py-2.5 disabled:opacity-50"
-            >
-              ✍️ Enviar definição
-            </button>
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.preventDefault();
-              }}
-              onClick={() => {
-                void playUITap("secondary");
-                handleAiGenerate();
-              }}
-              disabled={aiLoading}
-              className="btn-pop bg-card border border-pink/40 text-pink text-sm !py-2 disabled:opacity-50"
-            >
-              {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
-            </button>
-            <p className="text-center text-[11px] text-mint font-display bg-mint/10 rounded-xl py-1.5 px-3 border border-mint/30">
-              ✏️ tudo será exibido em <b>letras minúsculas e sem acentos</b>
+          );
+        })}
+        {/* Desktop: o Livro dá a dica no espaço livre da coluna */}
+        <div className="hidden lg:flex items-center gap-3 panel p-4 mt-1">
+          <Mascot mood="thinking" size={84} />
+          <p className="text-sm text-muted-foreground leading-snug">
+            <span className="font-display text-base text-foreground block">
+              Dica de blefe
+            </span>
+            Definição boa parece verbete de dicionário: curta, específica e com
+            cara de verdade.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 min-w-0">
+        {submitted || myDef ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center panel px-4 py-6">
+            <Mascot mood="thinking" size={110} />
+            <p className="font-display text-2xl text-mint">
+              Definição enviada! ✓
             </p>
+            <p className="text-sm text-muted-foreground">
+              Aguardando os outros…
+            </p>
+            <ProgressBar current={submittedCount} total={writers.length} />
+            <PendingList pending={pending} />
           </div>
-        </>
-      )}
+        ) : (
+          <>
+            {/* Sem -mx-4: no celular a margem negativa colava "0/140", chips e
+              "faltam:" na borda esquerda da tela (playtest 5G). */}
+            <div className="-mt-2 lg:mt-0 flex flex-col gap-2.5">
+              <label
+                htmlFor="definition"
+                className="eyebrow px-1 sr-only lg:not-sr-only lg:block"
+              >
+                Sua definição (a mais convincente vence)
+              </label>
+              <textarea
+                id="definition"
+                value={text}
+                onChange={(e) => setText(e.target.value.slice(0, 140))}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey &&
+                    !e.nativeEvent.isComposing
+                  ) {
+                    e.preventDefault();
+                    if (text.trim().length >= 1) handleSubmit();
+                  }
+                }}
+                rows={3}
+                placeholder="escreva sua definicao mirabolante..."
+                className="field w-full min-h-[118px] lg:min-h-[150px] px-4 py-4 font-body text-base lg:text-lg leading-relaxed resize-none"
+              />
+
+              <div className="flex justify-between text-xs font-bold text-muted-foreground tabular-nums px-1">
+                <span
+                  className={
+                    text.length > 120
+                      ? "text-pink"
+                      : text.length > 90
+                        ? "text-sun"
+                        : ""
+                  }
+                >
+                  {text.length}/140
+                </span>
+                <span>
+                  {submittedCount}/{writers.length} enviaram
+                </span>
+              </div>
+
+              {/* Frases prontas: um toque preenche o campo (pedido de playtest —
+                dá opção a quem não quer digitar; ainda dá pra editar antes de enviar). */}
+              {suggestions.length > 0 && !submitted && (
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        void playUITap();
+                        setText(s.slice(0, 140));
+                      }}
+                      className="glass-tile text-left text-[13px] leading-snug px-3 py-2 rounded-xl hover:border-pink/60 active:translate-y-px transition"
+                    >
+                      💡 {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {pending.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="eyebrow mr-1">faltam:</span>
+                  {pending.map((p) => (
+                    <span key={p.id} className="chip !px-2 !py-0.5">
+                      <span className="text-sm leading-none">{p.avatar}</span>
+                      <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
+                        {p.nickname}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                }}
+                onClick={() => {
+                  void playUITap("primary");
+                  handleSubmit();
+                }}
+                disabled={text.trim().length < 1}
+                className="btn-pop btn-gold text-xl !py-3"
+              >
+                ✍️ Enviar definição
+              </button>
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                }}
+                onClick={() => {
+                  void playUITap("secondary");
+                  handleAiGenerate();
+                }}
+                disabled={aiLoading}
+                className="btn-pop btn-turq text-sm !py-2.5"
+              >
+                {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
+              </button>
+              <p className="text-center text-[12px] text-muted-foreground font-semibold">
+                ✏️ tudo será exibido em <b>letras minúsculas e sem acentos</b>
+              </p>
+            </div>
+          </>
+        )}
+      </div>
     </motion.div>
   );
 }

@@ -17,16 +17,16 @@ export function WordCard({
       transition={{ type: "spring", stiffness: 220 }}
       onCopy={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
-      className="sticker bg-gradient-fun text-center py-2 no-copy"
+      className={
+        "word-hero text-center no-copy " +
+        (compact ? "px-4 py-2" : "px-4 py-3 lg:py-5")
+      }
     >
-      <p className="text-[10px] uppercase tracking-widest font-display opacity-80 leading-tight">
-        A palavra é
-      </p>
+      <p className="eyebrow !text-white/85 leading-tight">A palavra é</p>
       <h2
         className={
-          "font-display text-stroke capitalize " +
-          (compact ? "text-2xl" : "text-3xl") +
-          " text-white mt-0.5 leading-tight"
+          "font-display text-stroke capitalize text-white mt-0.5 leading-tight " +
+          (compact ? "text-2xl" : "text-[34px] lg:text-[46px]")
         }
       >
         {word.word}
@@ -45,15 +45,15 @@ export function ProgressBar({
   const pct = total > 0 ? (current / total) * 100 : 0;
   return (
     <div className="w-full">
-      <div className="h-3 bg-card rounded-full overflow-hidden border border-white/10">
+      <div className="meter h-3">
         <motion.div
-          className="h-full bg-gradient-fun"
+          className="h-full rounded-full meter-fill-turq"
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ type: "spring" }}
         />
       </div>
-      <p className="text-xs text-center text-muted-foreground mt-1">
+      <p className="text-xs text-center text-muted-foreground mt-1 font-bold tabular-nums">
         {current}/{total}
       </p>
     </div>
@@ -62,20 +62,18 @@ export function ProgressBar({
 
 export function PendingList({ pending }: { pending: Player[] }) {
   if (!pending || pending.length === 0) {
-    return <p className="text-xs text-mint font-display">✨ todos enviaram!</p>;
+    return <p className="text-sm text-mint font-display">✨ todos enviaram!</p>;
   }
   return (
     <div className="w-full flex flex-col items-center gap-2">
-      <p className="text-xs text-muted-foreground font-display uppercase tracking-wider">
-        faltam {pending.length}:
-      </p>
+      <p className="eyebrow">faltam {pending.length}:</p>
       <div className="flex flex-wrap justify-center gap-2">
         {pending.map((p) => (
           <motion.div
             key={p.id}
             animate={{ scale: [1, 1.05, 1] }}
             transition={{ duration: 1.6, repeat: Infinity }}
-            className="flex items-center gap-1 bg-card border border-white/10 rounded-full pl-1 pr-3 py-1"
+            className="chip !pl-1 !pr-3 !py-1"
           >
             <span className="text-lg">{p.avatar}</span>
             <span className="font-display text-sm">{p.nickname}</span>
@@ -97,7 +95,7 @@ export function TimerBar({
 }) {
   const pct = (remaining / max) * 100;
   const urgent = remaining <= 10;
-  const color = urgent ? "bg-destructive" : "bg-sun";
+  const color = urgent ? "meter-fill-urgent" : "meter-fill-gold";
   // Fase 7: leitor de tela ouve só marcos (10s e 3s), não cada segundo.
   const srAnnouncement =
     remaining === 10
@@ -124,10 +122,10 @@ export function TimerBar({
         animate={{ scale: 1 }}
         transition={{ duration: 0.25 }}
         className={
-          "font-display leading-none tracking-tight tabular-nums " +
+          "font-display leading-none tracking-tight tabular-nums text-5xl " +
           (urgent
-            ? "text-destructive text-5xl drop-shadow-[0_0_12px_rgba(255,80,80,0.45)]"
-            : "text-sun text-5xl")
+            ? "text-destructive drop-shadow-[0_0_14px_rgba(255,80,80,0.5)]"
+            : "text-sun drop-shadow-[0_0_14px_rgba(244,197,66,0.35)]")
         }
         role="timer"
       >
@@ -137,9 +135,9 @@ export function TimerBar({
       <span className="sr-only" aria-live="polite">
         {srAnnouncement}
       </span>
-      <div className="h-2 w-full bg-card rounded-full overflow-hidden border border-white/10">
+      <div className="meter h-2.5 w-full">
         <motion.div
-          className={"h-full " + color}
+          className={"h-full rounded-full " + color}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.5, ease: "linear" }}
         />

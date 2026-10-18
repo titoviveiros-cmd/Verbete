@@ -190,7 +190,7 @@ function ProfilePage() {
       <div className="flex items-center justify-between">
         <Link
           to="/"
-          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+          className="btn-pop btn-plain text-xs px-3 py-2 font-display flex items-center gap-1"
         >
           <span>←</span> Início
         </Link>
@@ -285,10 +285,7 @@ function ProfilePage() {
               maxLength={24}
               className="bg-input rounded-xl px-3 py-2 font-display text-center border border-white/10"
             />
-            <button
-              onClick={saveName}
-              className="btn-pop bg-gradient-fun text-white text-sm"
-            >
+            <button onClick={saveName} className="btn-pop btn-gold text-sm">
               Salvar
             </button>
           </div>
@@ -369,7 +366,7 @@ function ProfilePage() {
         <Link
           to="/daily"
           search={{ from: "profile" }}
-          className="btn-pop bg-gradient-fun text-white text-xs py-2 px-3"
+          className="btn-pop btn-gold text-xs py-2 px-3"
         >
           Desafio diário
         </Link>
@@ -379,7 +376,7 @@ function ProfilePage() {
         <Link
           to="/ranking"
           search={{ from: "profile" }}
-          className="btn-pop bg-card flex-1 text-center text-sm border border-white/10"
+          className="btn-pop btn-plain flex-1 text-center text-sm border border-white/10"
         >
           🏆 Ranking
         </Link>
@@ -514,7 +511,7 @@ function ProfilePage() {
               <button
                 onClick={() => setShowDelete(false)}
                 disabled={deleting}
-                className="btn-pop bg-card border border-white/10 flex-1 text-sm disabled:opacity-50"
+                className="btn-pop btn-plain border border-white/10 flex-1 text-sm"
               >
                 Cancelar
               </button>
@@ -524,7 +521,7 @@ function ProfilePage() {
                   deleting ||
                   deleteConfirm.trim() !== (profile?.display_name.trim() ?? "")
                 }
-                className="btn-pop bg-destructive text-destructive-foreground flex-1 text-sm disabled:opacity-50"
+                className="btn-pop bg-destructive text-destructive-foreground flex-1 text-sm"
               >
                 {deleting ? "Excluindo…" : "Excluir tudo"}
               </button>
@@ -560,7 +557,7 @@ function ProfilePage() {
               <button
                 onClick={() => setShowReset(false)}
                 disabled={resetting}
-                className="btn-pop bg-card border border-white/10 flex-1 text-sm disabled:opacity-50"
+                className="btn-pop btn-plain border border-white/10 flex-1 text-sm"
               >
                 Cancelar
               </button>
@@ -591,7 +588,7 @@ function ProfilePage() {
                   }
                 }}
                 disabled={resetting}
-                className="btn-pop bg-gradient-fun text-white flex-1 text-sm disabled:opacity-50"
+                className="btn-pop btn-gold flex-1 text-sm"
               >
                 {resetting ? "Zerando…" : "Zerar tudo"}
               </button>

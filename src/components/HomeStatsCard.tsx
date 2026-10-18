@@ -65,6 +65,13 @@ export function HomeStatsCard() {
   }, [stats, playedThisHour]);
 
   if (loading || !user) return null;
+  // Quem acabou de chegar (sessão anônima, nada jogado) não vê um painel
+  // de zeros: o cartão aparece a partir da 1ª partida ou streak.
+  if (
+    !stats ||
+    ((stats.games_played ?? 0) === 0 && (stats.current_streak ?? 0) === 0)
+  )
+    return null;
 
   const streak = stats?.current_streak ?? 0;
   const games = stats?.games_played ?? 0;
@@ -161,7 +168,7 @@ export function HomeStatsCard() {
           </div>
           <Link
             to="/daily"
-            className="btn-pop bg-gradient-fun text-white text-xs py-1.5 px-3"
+            className="btn-pop btn-gold text-xs py-1.5 px-3"
             aria-label="Manter streak jogando agora"
           >
             Salvar

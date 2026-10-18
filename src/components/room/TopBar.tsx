@@ -23,6 +23,7 @@ const Onboarding = lazy(() =>
 export function TopBar({
   code,
   round,
+  roundsTotal,
   status,
   isHost,
   onReset,
@@ -31,6 +32,8 @@ export function TopBar({
 }: {
   code: string;
   round: number;
+  /** Total de rodadas quando a partida termina por rodadas ("3/10"). */
+  roundsTotal?: number;
   status: string;
   isHost?: boolean;
   onReset?: () => void;
@@ -50,15 +53,13 @@ export function TopBar({
     setTimeout(() => setSpinning(false), 700);
   };
   const btn =
-    "shrink-0 opacity-70 hover:opacity-100 text-sm w-7 h-7 flex items-center justify-center rounded-full bg-card/50 border border-white/10 transition";
+    "glass-tile shrink-0 text-sm w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition hover:brightness-110 active:translate-y-px";
   return (
-    <div className="flex items-start justify-between mb-3 gap-2">
-      <div className="text-xs shrink-0">
-        <p className="text-muted-foreground uppercase tracking-wider font-display">
-          Código:
-        </p>
-        <div className="flex items-center gap-1.5">
-          <p className="font-display text-xl tracking-[0.25em] text-sun leading-none">
+    <div className="flex items-center justify-between mb-3 gap-2 lg:mb-4">
+      <div className="shrink-0">
+        <p className="eyebrow">Código</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <p className="font-display text-[22px] lg:text-[26px] tracking-[0.22em] text-sun leading-none tabular-nums">
             {code}
           </p>
           <LatencyIndicator code={code} />
@@ -89,7 +90,7 @@ export function TopBar({
           <button
             onClick={handleReload}
             className={
-              "shrink-0 flex items-center gap-1 px-2.5 h-7 rounded-full font-display text-[11px] " +
+              "shrink-0 flex items-center gap-1 px-2.5 h-9 rounded-full font-display text-[11px] " +
               "bg-sun/15 border border-sun text-sun animate-pulse transition" +
               (spinning ? " opacity-60" : "")
             }
@@ -112,11 +113,16 @@ export function TopBar({
         )}
       </div>
       {round > 0 && (
-        <div className="text-right text-xs shrink-0">
-          <p className="text-muted-foreground uppercase tracking-wider font-display">
-            Rodada
+        <div className="text-right shrink-0">
+          <p className="eyebrow">Rodada</p>
+          <p className="font-display text-[22px] lg:text-[26px] text-pink leading-none tabular-nums mt-0.5">
+            {round}
+            {roundsTotal ? (
+              <span className="text-sm text-muted-foreground">
+                /{roundsTotal}
+              </span>
+            ) : null}
           </p>
-          <p className="font-display text-xl text-pink leading-none">{round}</p>
         </div>
       )}
       <AnimatePresence>
@@ -136,7 +142,10 @@ export function TopBar({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Ficar na sala</AlertDialogCancel>
-            <AlertDialogAction onClick={() => navigate({ to: "/" })}>
+            <AlertDialogAction
+              onClick={() => navigate({ to: "/" })}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Sair
             </AlertDialogAction>
           </AlertDialogFooter>

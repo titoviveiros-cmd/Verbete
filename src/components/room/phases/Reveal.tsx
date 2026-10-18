@@ -276,24 +276,26 @@ function RevealImpl({
         <motion.div
           initial={{ y: -40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="shrink-0 rounded-2xl px-4 py-2 bg-gradient-fun shadow-pop border-2 border-black/20 flex items-center justify-center gap-3 w-full max-w-full"
+          className="shrink-0 self-center !rounded-full pl-4 pr-3 py-1.5 panel flex items-center justify-center gap-2.5 max-w-full"
         >
-          <span className="font-display text-sm uppercase tracking-wider text-white/90">
-            📊 Placar em
-          </span>
+          <span className="eyebrow !text-foreground/85">📊 Placar em</span>
           <motion.span
             key={revealCountdown}
             initial={{ scale: 1.4 }}
             animate={{ scale: 1 }}
             transition={{ duration: 0.25 }}
-            className="font-display text-4xl text-white tabular-nums drop-shadow"
+            className="font-display text-3xl text-sun tabular-nums leading-none"
           >
             {revealCountdown}
           </motion.span>
-          <span className="font-display text-sm text-white/90">s</span>
+          <span className="font-display text-sm text-muted-foreground">s</span>
         </motion.div>
       )}
       <div
+        // Região rolável alcançável pelo teclado (os botões saíram dela).
+        tabIndex={0}
+        role="region"
+        aria-label="Revelação da rodada"
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-3 w-full max-w-full"
         style={scrollbarClip()}
       >
@@ -301,8 +303,22 @@ function RevealImpl({
 
         {elimCount === 0 && !truthShown && (
           <div className="flex flex-col items-center gap-3 py-8">
-            <Mascot mood="wow" size={130} />
-            <p className="font-display text-2xl animate-pulse">Tãm tãm tãm…</p>
+            <div className="relative">
+              <motion.div
+                aria-hidden
+                className="absolute -inset-10 rounded-full pointer-events-none"
+                style={{
+                  background:
+                    "radial-gradient(circle, var(--v-neon-glow) 0%, transparent 70%)",
+                  filter: "blur(18px)",
+                }}
+                animate={{ scale: [0.9, 1.15, 0.9], opacity: [0.6, 1, 0.6] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
+              />
+              <Mascot mood="wow" size={130} className="relative" />
+            </div>
+            <p className="font-display text-3xl animate-pulse">Tãm tãm tãm…</p>
+            <p className="eyebrow">quem enganou quem?</p>
           </div>
         )}
 
@@ -311,7 +327,7 @@ function RevealImpl({
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center font-display text-xl text-mint animate-pulse py-2"
+            className="text-center font-display text-2xl text-mint animate-pulse py-2"
           >
             E a verdade é… 🥁
           </motion.p>
@@ -346,17 +362,18 @@ function RevealImpl({
                 times: [0, 0.45, 0.7, 0.88, 1],
                 ease: "easeOut",
               }}
-              className="relative sticker bg-gradient-mint text-accent-foreground text-center py-6"
+              className="relative truth-card text-center px-4 pt-4 pb-5"
             >
-              <p className="text-sm uppercase tracking-wider font-display">
-                ✅ A definição verdadeira é…
+              <span className="truth-seal">✓ Verdade</span>
+              <p className="eyebrow !text-[var(--c-on-turq)]/80">
+                A definição verdadeira é…
               </p>
-              <p className="font-display text-2xl mt-2 leading-snug break-words">
-                "{truth?.text}"
+              <p className="font-display text-[26px] lg:text-[30px] mt-2 leading-snug break-words">
+                “{truth?.text}”
               </p>
               {truthVoters.length > 0 && (
                 <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap px-3">
-                  <span className="text-[10px] uppercase tracking-wider font-display opacity-80 mr-1">
+                  <span className="eyebrow !text-[var(--c-on-turq)]/80 mr-1">
                     🎯 acertaram:
                   </span>
                   {truthVoters.map((v, i) => (
@@ -369,7 +386,7 @@ function RevealImpl({
                         type: "spring",
                         stiffness: 260,
                       }}
-                      className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-white/25 border-white/40"
+                      className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-white/35 border-white/60"
                     >
                       <span className="text-sm">{v.avatar}</span>
                       <span>{v.nickname}</span>
@@ -378,7 +395,7 @@ function RevealImpl({
                           initial={{ scale: 0, y: 8 }}
                           animate={{ scale: 1, y: 0 }}
                           transition={{ type: "spring", stiffness: 300 }}
-                          className="rounded-full bg-white/40 px-1.5 text-[11px] font-display"
+                          className="rounded-full btn-gold !shadow-none px-1.5 text-[11px] font-display border border-white/80"
                         >
                           {/* total da rodada: +3 acerto, +3 🧠, +1 por voto
                               no próprio blefe (pedido 2026-07-21) */}
@@ -406,129 +423,138 @@ function RevealImpl({
         {/* Eliminação dos blefes: a pilha cresce PARA CIMA — o mais recente
             entra no topo da lista, logo abaixo da verdade. */}
         {elimCount > 0 && (
-          <div className="space-y-2">
-            <p className="text-center text-xs uppercase tracking-wider font-display text-muted-foreground">
+          <div className="space-y-2.5">
+            <p className="eyebrow text-center">
               {truthShown
                 ? "🤥 os blefes da rodada"
                 : "❌ eliminando os blefes…"}
             </p>
-            {[...bluffs.slice(0, elimCount)].reverse().map((d) => {
-              const author = playersById.get(d.player_id);
-              const dVoters = votersByDefId.get(d.id) ?? [];
-              return (
-                <motion.div
-                  key={d.id}
-                  initial={{ x: -28, opacity: 0, rotate: -1.5 }}
-                  animate={{ x: 0, opacity: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 240, damping: 20 }}
-                  className="sticker"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="font-display text-2xl text-sun">
-                      {d.letter}
+            <div className="flex flex-col gap-2.5 lg:grid lg:grid-cols-2 lg:gap-3">
+              {[...bluffs.slice(0, elimCount)].reverse().map((d) => {
+                const author = playersById.get(d.player_id);
+                const dVoters = votersByDefId.get(d.id) ?? [];
+                return (
+                  <motion.div
+                    key={d.id}
+                    initial={{ x: -28, opacity: 0, rotate: -1.5 }}
+                    animate={{ x: 0, opacity: 1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 240, damping: 20 }}
+                    className="sticker !pt-4 overflow-hidden"
+                  >
+                    <span className="bluff-stamp" aria-hidden>
+                      blefe
                     </span>
-                    <div className="flex-1">
-                      <p className="text-base leading-snug line-through decoration-pink/60 decoration-2">
-                        {d.text}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
-                        {author && (
-                          <span className="font-display flex items-center gap-1">
-                            🤥{" "}
-                            <span className="text-base">{author.avatar}</span>
-                            {author.nickname}
-                          </span>
-                        )}
-                        {(dVoters.length > 0 || nearTruthIds.has(d.id)) && (
-                          <span className="ml-auto text-pink font-display flex items-center gap-1">
-                            {dVoters.length > 0 && (
-                              <>
-                                +{dVoters.length} voto
-                                {dVoters.length > 1 ? "s" : ""}
-                              </>
-                            )}
-                            {pointsShown && author && dVoters.length > 0 && (
-                              <motion.span
-                                initial={{ scale: 0, y: 8 }}
-                                animate={{ scale: 1, y: 0 }}
-                                transition={{ type: "spring", stiffness: 300 }}
-                                className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
-                              >
-                                +{dVoters.length} pt
-                                {dVoters.length > 1 ? "s" : ""}
-                              </motion.span>
-                            )}
-                            {/* 🧠 quase a verdade: +3 do juiz de IA (pedido
+                    <div className="flex items-start gap-3">
+                      <span className="token !w-8 !h-8 !text-base opacity-80">
+                        {d.letter}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base leading-snug line-through decoration-pink/70 decoration-2 text-foreground/85 pr-14">
+                          {d.text}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2 text-xs flex-wrap">
+                          {author && (
+                            <span className="font-display flex items-center gap-1">
+                              🤥{" "}
+                              <span className="text-base">{author.avatar}</span>
+                              {author.nickname}
+                            </span>
+                          )}
+                          {(dVoters.length > 0 || nearTruthIds.has(d.id)) && (
+                            <span className="ml-auto text-pink font-display flex items-center gap-1">
+                              {dVoters.length > 0 && (
+                                <>
+                                  +{dVoters.length} voto
+                                  {dVoters.length > 1 ? "s" : ""}
+                                </>
+                              )}
+                              {pointsShown && author && dVoters.length > 0 && (
+                                <motion.span
+                                  initial={{ scale: 0, y: 8 }}
+                                  animate={{ scale: 1, y: 0 }}
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 300,
+                                  }}
+                                  className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
+                                >
+                                  +{dVoters.length} pt
+                                  {dVoters.length > 1 ? "s" : ""}
+                                </motion.span>
+                              )}
+                              {/* 🧠 quase a verdade: +3 do juiz de IA (pedido
                                 2026-07-21 — aparecia só no placar) */}
-                            {pointsShown && nearTruthIds.has(d.id) && (
-                              <motion.span
-                                initial={{ scale: 0, y: 8 }}
+                              {pointsShown && nearTruthIds.has(d.id) && (
+                                <motion.span
+                                  initial={{ scale: 0, y: 8 }}
+                                  animate={{ scale: 1, y: 0 }}
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 300,
+                                  }}
+                                  className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
+                                >
+                                  🧠 +3 pts
+                                </motion.span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {dVoters.length > 0 && (
+                          <div className="mt-2 flex items-center gap-1 flex-wrap">
+                            <span className="eyebrow mr-1">😂 caíram:</span>
+                            {dVoters.map((v, i) => (
+                              <motion.div
+                                key={v.id}
+                                initial={{ scale: 0, y: -10 }}
                                 animate={{ scale: 1, y: 0 }}
-                                transition={{ type: "spring", stiffness: 300 }}
-                                className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
+                                transition={{
+                                  delay: 0.1 + i * 0.12,
+                                  type: "spring",
+                                  stiffness: 260,
+                                }}
+                                className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-pink/15 border-pink/40 text-pink"
                               >
-                                🧠 +3 pts
-                              </motion.span>
-                            )}
-                          </span>
+                                <span className="text-sm">{v.avatar}</span>
+                                <span>{v.nickname}</span>
+                              </motion.div>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      {dVoters.length > 0 && (
-                        <div className="mt-2 flex items-center gap-1 flex-wrap">
-                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mr-1">
-                            😂 caíram:
-                          </span>
-                          {dVoters.map((v, i) => (
-                            <motion.div
-                              key={v.id}
-                              initial={{ scale: 0, y: -10 }}
-                              animate={{ scale: 1, y: 0 }}
-                              transition={{
-                                delay: 0.1 + i * 0.12,
-                                type: "spring",
-                                stiffness: 260,
-                              }}
-                              className="flex items-center gap-1 rounded-full pl-1 pr-2 py-0.5 text-xs font-display border bg-pink/15 border-pink/40 text-pink"
-                            >
-                              <span className="text-sm">{v.avatar}</span>
-                              <span>{v.nickname}</span>
-                            </motion.div>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-
-        {truthShown && (
-          <div className="pt-1 flex flex-wrap items-center justify-center gap-2">
-            <ShareReplayButton
-              room={room}
-              word={word}
-              definitions={definitions}
-              votes={votes}
-              players={players}
-            />
-            {isHost && (
-              <button
-                onClick={() => {
-                  void playUITap("primary");
-                  void playTailFreeze();
-                  setTimeout(() => advanceAfterReveal(room, players), 1100);
-                }}
-                className="btn-pop bg-gradient-fun text-white px-5 py-2.5 text-sm font-display"
-                title="Pular contagem e ir direto ao placar"
-              >
-                ⏭ Avançar agora
-              </button>
-            )}
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
+      {/* Ações sempre à vista, fora da rolagem: o replay é a peça social. */}
+      {truthShown && (
+        <div className="shrink-0 flex flex-wrap items-center justify-center gap-2">
+          <ShareReplayButton
+            room={room}
+            word={word}
+            definitions={definitions}
+            votes={votes}
+            players={players}
+          />
+          {isHost && (
+            <button
+              onClick={() => {
+                void playUITap("primary");
+                void playTailFreeze();
+                setTimeout(() => advanceAfterReveal(room, players), 1100);
+              }}
+              className="btn-pop btn-gold px-5 py-2.5 text-base font-display"
+              title="Pular contagem e ir direto ao placar"
+            >
+              ⏭ Avançar agora
+            </button>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -599,7 +625,7 @@ function ShareReplayButton({
       <button
         onClick={onShare}
         disabled={busy}
-        className="btn-pop bg-gradient-sun text-primary-foreground px-5 py-2.5 text-sm font-display disabled:opacity-50"
+        className="btn-pop btn-violet px-5 py-2.5 text-base font-display"
       >
         {busy ? "Gerando card…" : "📲 Compartilhar replay"}
       </button>

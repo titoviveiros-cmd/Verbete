@@ -335,17 +335,23 @@ function ScoreboardImpl({
       className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
     >
       <div className="shrink-0">
-        <h2 className="font-display text-4xl text-center text-sun leading-tight flex items-center justify-center gap-2.5">
-          Placar <TrophyIcon size={36} />
+        <p className="eyebrow text-center">Rodada {room.current_round}</p>
+        <h2 className="font-display text-[40px] lg:text-[48px] text-center leading-tight flex items-center justify-center gap-2.5">
+          <span className="text-gold-grad">Placar</span>{" "}
+          <TrophyIcon size={38} />
         </h2>
-        <p className="text-center text-base text-muted-foreground mt-1">
+        <p className="text-center text-base text-muted-foreground">
           {sortedTeams.length > 0
             ? "Pontuação por equipe e por jogador:"
             : "Como cada um pontuou:"}
         </p>
       </div>
       <div
-        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full"
+        // Região rolável alcançável pelo teclado (axe: scrollable-region-focusable).
+        tabIndex={0}
+        role="region"
+        aria-label="Placar da rodada"
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:content-start lg:[mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
         style={scrollbarClip()}
       >
         {sortedTeams.length > 0 && (
@@ -413,18 +419,17 @@ function ScoreboardImpl({
                 layout: { type: "spring", stiffness: 240, damping: 26 },
                 scale: { duration: 0.8, times: [0, 0.4, 1] },
               }}
-              className="sticker"
+              className={"sticker " + (i === 0 ? "ring-gold" : "")}
               style={
-                tone
+                tone && i > 0
                   ? {
-                      borderColor: riser ? "#FFDE00" : tone,
-                      boxShadow:
-                        i === 0 ? `0 0 18px ${tone}55` : `0 0 8px ${tone}33`,
+                      borderColor: riser ? "#f4c542" : tone,
+                      boxShadow: `0 0 14px -2px ${tone}55, var(--shadow-piece)`,
                     }
                   : riser
                     ? {
-                        borderColor: "#FFDE00",
-                        boxShadow: "0 0 14px #ffde0055",
+                        borderColor: "#f4c542",
+                        boxShadow: "0 0 14px #f4c54255, var(--shadow-piece)",
                       }
                     : undefined
               }
@@ -448,6 +453,23 @@ function ScoreboardImpl({
                   <span className="font-display text-xl truncate block">
                     {p.nickname}
                   </span>
+                  {reordered &&
+                    (prevRank.get(p.id) ?? 0) !== (newRank.get(p.id) ?? 0) && (
+                      <motion.span
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={
+                          "inline-flex items-center gap-1 text-[12px] font-bold " +
+                          (riser ? "text-mint" : "text-pink")
+                        }
+                      >
+                        {riser ? "▲" : "▼"}{" "}
+                        {Math.abs(
+                          (prevRank.get(p.id) ?? 0) - (newRank.get(p.id) ?? 0),
+                        )}{" "}
+                        {riser ? "subiu" : "caiu"}
+                      </motion.span>
+                    )}
                   {sortedTeams.length > 0 && (
                     <span
                       className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-display border max-w-full"
@@ -466,24 +488,43 @@ function ScoreboardImpl({
                     </span>
                   )}
                 </div>
-                <span
-                  className="font-display text-3xl tabular-nums"
-                  style={{ color: tone ?? undefined }}
-                >
-                  {reordered ? (
-                    <AnimatedNumber from={prevScore(p)} value={p.score} />
-                  ) : (
-                    prevScore(p)
+                <div className="flex flex-col items-end shrink-0">
+                  <span
+                    className="font-display text-3xl lg:text-4xl tabular-nums leading-none"
+                    style={{ color: tone ?? undefined }}
+                  >
+                    {reordered ? (
+                      <AnimatedNumber from={prevScore(p)} value={p.score} />
+                    ) : (
+                      prevScore(p)
+                    )}
+                  </span>
+                  {/* Saldo da rodada (mesma conta do placar anterior) */}
+                  {reordered && (roundDeltaByPlayer.get(p.id) ?? 0) !== 0 && (
+                    <motion.span
+                      initial={{ scale: 0, y: 6 }}
+                      animate={{ scale: 1, y: 0 }}
+                      transition={{ type: "spring", stiffness: 320 }}
+                      className={
+                        "chip !py-0.5 !text-[11px] mt-1 tabular-nums " +
+                        ((roundDeltaByPlayer.get(p.id) ?? 0) > 0
+                          ? "!text-mint !border-mint/40"
+                          : "!text-pink !border-pink/40")
+                      }
+                    >
+                      {(roundDeltaByPlayer.get(p.id) ?? 0) > 0 ? "+" : ""}
+                      {roundDeltaByPlayer.get(p.id)} na rodada
+                    </motion.span>
                   )}
-                </span>
+                </div>
               </div>
-              <ul className="mt-2 pl-14 space-y-1">
+              <ul className="mt-2.5 pl-14 flex flex-wrap gap-1.5">
                 {breakdown(p.id).map((r, idx) => (
                   <li
                     key={idx}
-                    className="text-sm text-muted-foreground font-body"
+                    className="chip !font-semibold !text-[12px] text-foreground/85"
                   >
-                    • {r}
+                    {r}
                   </li>
                 ))}
               </ul>
@@ -538,12 +579,12 @@ function ScoreboardImpl({
       {isHost ? (
         <button
           onClick={() => nextRound(room, players)}
-          className="btn-pop bg-gradient-fun text-white text-2xl py-3 shrink-0"
+          className="btn-pop btn-gold text-2xl py-3.5 shrink-0 lg:self-center lg:min-w-[360px] max-lg:mr-12"
         >
           ▶ Próxima rodada
         </button>
       ) : (
-        <p className="text-center text-muted-foreground italic shrink-0">
+        <p className="text-center text-muted-foreground font-display shrink-0">
           {holdLeft > 0
             ? `Lendo o placar… ${holdLeft}s`
             : "Aguardando o host continuar…"}

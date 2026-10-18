@@ -202,17 +202,20 @@ function DailyPage() {
     );
   }
 
+  const sim = Math.max(0, Math.min(100, displayResult?.similarity ?? 0));
+  const myId = user?.id;
+
   return (
-    <div className="mobile-shell pt-4 gap-4 overflow-y-auto pb-8">
-      <div className="flex items-center justify-between">
+    <div className="mobile-shell stage-wide pt-4 gap-4 overflow-y-auto pb-8">
+      <div className="flex items-center justify-between gap-3">
         <Link
           to={fromProfile ? "/profile" : "/"}
-          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+          className="btn-pop btn-plain text-sm px-3.5 py-2 font-display flex items-center gap-1"
         >
           <span>←</span> {fromProfile ? "Voltar" : "Início"}
         </Link>
-        <div className="flex flex-col items-end gap-0.5 rounded-2xl px-3 py-1.5 bg-card shadow-pop border border-pink/30">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-display leading-none">
+        <div className="panel flex flex-col items-end gap-1 !rounded-2xl px-3 py-1.5">
+          <span className="eyebrow !text-[10px] leading-none">
             ⏳ Próximo desafio
           </span>
           <span className="font-display text-lg leading-none tabular-nums text-sun">
@@ -221,222 +224,316 @@ function DailyPage() {
         </div>
       </div>
 
-      <div
-        className="text-center no-copy"
-        onCopy={(e) => e.preventDefault()}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground font-display">
-          Desafio Diário
-        </p>
-        {/* Uniformização: palavra no tratamento canônico (branco + contorno) */}
-        <motion.h1
-          initial={{ scale: 0.7, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="font-display font-black text-5xl mt-1 leading-[1.15] pb-2 capitalize"
-          style={verbeteWordmarkStyle(44)}
-        >
-          {data.word.word}
-        </motion.h1>
-        {data.word.category && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {data.word.category}
-          </p>
-        )}
-      </div>
-
-      <AnimatePresence mode="wait">
-        {!alreadyDone ? (
-          <motion.div
-            key="form"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-col gap-3"
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[1.15fr_0.85fr] lg:gap-8 lg:items-start lg:my-auto">
+        <div className="flex flex-col gap-4 min-w-0">
+          {/* A palavra do desafio como verbete de dicionário + o Livro */}
+          <div
+            className="relative no-copy"
+            onCopy={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
           >
-            <TimerBar
-              remaining={remaining}
-              max={DAILY_TIME_LIMIT}
-              tickStartAt={10}
-            />
-            <label className="text-xs uppercase tracking-wider text-muted-foreground font-display">
-              Qual o significado?
-            </label>
-            <textarea
-              value={guess}
-              onChange={(e) => setGuess(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (!busy && guess.trim()) onSubmit();
-                }
-              }}
-              placeholder="Arrisque sua definição em poucas palavras... (Enter envia, Shift+Enter quebra linha)"
-              maxLength={200}
-              rows={3}
-              className="bg-input rounded-2xl px-4 py-3 text-base border border-white/10 outline-none focus:ring-4 focus:ring-pink/40 resize-none"
-            />
-            <button
-              onClick={onSubmit}
-              disabled={busy || !guess.trim()}
-              className="btn-pop bg-gradient-fun text-white text-xl py-4 disabled:opacity-50"
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 220, damping: 16 }}
+              className="word-hero text-center px-5 pt-4 pb-5 lg:pt-6 lg:pb-7"
             >
-              {busy ? "Enviando..." : "Enviar palpite 🎯"}
-            </button>
-            {submitError && (
-              <p
-                role="alert"
-                className="text-xs text-destructive font-display text-center"
+              <p className="eyebrow !text-white/85">🎯 Desafio Diário</p>
+              {/* Uniformização: palavra no tratamento canônico (branco + contorno) */}
+              <h1
+                className="font-display font-black mt-1 leading-[1.1] capitalize"
+                style={verbeteWordmarkStyle("clamp(40px, 12vw, 64px)")}
               >
-                {submitError}
-              </p>
-            )}
-            <p className="text-[11px] text-muted-foreground text-center">
-              Quanto mais rápido acertar, mais pontos. Um palpite por hora!
-            </p>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="result"
-            initial={{ scale: 0.85, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className={
-              "sticker py-5 px-4 text-center " +
-              (displayResult?.correct ? "bg-mint/20 border-mint" : "")
-            }
-          >
-            <p className="text-4xl mb-1">
-              {displayResult?.correct ? "🎉" : "🤔"}
-            </p>
-            <p className="font-display text-xl">
-              {displayResult?.correct ? "Acertou!" : "Não foi dessa vez"}
-            </p>
-            <p className="font-display text-3xl text-primary mt-1">
-              +{displayResult?.score ?? 0} pts
-            </p>
-
-            {/* Uniformização (playtest 2026-07-21): cards no padrão do
-                tema — os cinza-lavados destoavam da identidade. */}
-            {displayResult && (
-              <div className="mt-3 text-[11px] text-foreground/80 bg-card/80 rounded-2xl px-3 py-2 border border-white/10 text-left">
-                <p className="font-display uppercase tracking-wider text-[10px] mb-1 text-center text-sun">
-                  🧮 Como calculamos
-                </p>
-                {displayResult.correct ? (
-                  <>
-                    <p>
-                      base = máx(100 − <b>{displayResult.timeSeconds}s</b>, 20)
-                      = <b>{Math.max(100 - displayResult.timeSeconds, 20)}</b>
-                    </p>
-                    <p>
-                      pts = arred(base × <b>{displayResult.similarity}%</b>)
-                      mín. 20 = <b>{displayResult.score}</b>
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      Sua semelhança foi <b>{displayResult.similarity}%</b>,
-                      abaixo do mínimo de <b>80%</b> para pontuar.
-                    </p>
-                    <p className="mt-1 opacity-80">
-                      Se tivesse atingido 80%+: base = máx(100 −{" "}
-                      <b>{displayResult.timeSeconds}s</b>, 20) ={" "}
-                      <b>{Math.max(100 - displayResult.timeSeconds, 20)}</b>,
-                      depois multiplicada pela semelhança (mín. 20 pts).
-                    </p>
-                  </>
-                )}
+                {data.word.word}
+              </h1>
+              {data.word.category && (
+                <span className="chip mt-2 !bg-white/15 !border-white/30 text-white/90 uppercase tracking-wider !text-[10px]">
+                  {data.word.category}
+                </span>
+              )}
+            </motion.div>
+            {!displayResult && (
+              <div className="absolute -right-2 -bottom-6 lg:-right-6 lg:-bottom-8 pointer-events-none">
+                <Mascot mood="thinking" size={78} />
               </div>
             )}
+          </div>
 
-            {typeof displayResult?.similarity === "number" && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground font-display mb-1">
-                  <span>Semelhança</span>
-                  <span
+          <AnimatePresence mode="wait">
+            {!alreadyDone ? (
+              <motion.div
+                key="form"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col gap-3 pt-3"
+              >
+                <TimerBar
+                  remaining={remaining}
+                  max={DAILY_TIME_LIMIT}
+                  tickStartAt={10}
+                />
+                <label htmlFor="daily-guess" className="eyebrow px-1">
+                  Qual o significado?
+                </label>
+                <textarea
+                  id="daily-guess"
+                  value={guess}
+                  onChange={(e) => setGuess(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!busy && guess.trim()) onSubmit();
+                    }
+                  }}
+                  placeholder="Arrisque sua definição em poucas palavras... (Enter envia, Shift+Enter quebra linha)"
+                  maxLength={200}
+                  rows={3}
+                  className="field px-4 py-3 text-base lg:text-lg resize-none"
+                />
+                <button
+                  onClick={onSubmit}
+                  disabled={busy || !guess.trim()}
+                  className="btn-pop btn-gold text-xl py-4"
+                >
+                  {busy ? "Enviando..." : "Enviar palpite 🎯"}
+                </button>
+                {submitError && (
+                  <p
+                    role="alert"
+                    className="text-xs text-destructive font-display text-center"
+                  >
+                    {submitError}
+                  </p>
+                )}
+                <p className="text-[12px] text-muted-foreground text-center">
+                  Quanto mais rápido acertar, mais pontos. Um palpite por hora!
+                </p>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="result"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 220, damping: 18 }}
+                className={
+                  "sticker !px-4 !py-5 mt-3 text-center flex flex-col gap-4 " +
+                  (displayResult?.correct ? "ring-gold" : "")
+                }
+              >
+                {/* Impacto: veredito + pontos + streak */}
+                <div className="flex flex-col items-center">
+                  <Mascot
+                    mood={displayResult?.correct ? "excited" : "sad"}
+                    size={84}
+                  />
+                  <p className="font-display text-2xl mt-1">
+                    {displayResult?.correct ? "Acertou!" : "Não foi dessa vez"}
+                  </p>
+                  <p
                     className={
-                      displayResult.correct ? "text-mint" : "text-pink"
+                      "font-display text-[52px] leading-none mt-1 tabular-nums " +
+                      (displayResult?.correct
+                        ? "text-gold-grad"
+                        : "text-muted-foreground")
                     }
                   >
-                    {displayResult.similarity}%{" "}
-                    {displayResult.correct ? "✓" : "(min. 80%)"}
-                  </span>
+                    +{displayResult?.score ?? 0}
+                    <span className="text-2xl"> pts</span>
+                  </p>
+                  {result?.streak ? (
+                    <span className="chip mt-2 !text-sun !border-sun/50 text-sm">
+                      🔥 Streak: {result.streak} dia
+                      {result.streak > 1 ? "s" : ""}
+                    </span>
+                  ) : null}
                 </div>
-                <div className="h-2 rounded-full bg-white/40 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{
-                      width: `${Math.min(100, displayResult.similarity)}%`,
-                    }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className={
-                      "h-full " +
-                      (displayResult.correct ? "bg-mint" : "bg-gradient-fun")
-                    }
-                  />
-                </div>
-              </div>
-            )}
 
-            {displayResult?.guess && (
-              <div className="mt-4 text-left bg-card/80 rounded-2xl p-3 border border-pink/30">
-                <p className="text-[10px] uppercase tracking-wider text-pink font-display mb-1">
-                  ✍️ Seu palpite
-                </p>
-                <p className="text-sm text-foreground">
-                  "{displayResult.guess}"
-                </p>
-              </div>
-            )}
-            {displayResult?.truth && (
-              <div className="mt-2 text-left bg-mint/15 rounded-2xl p-3 border border-mint/40">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mb-1">
-                  Significado correto
-                </p>
-                <p className="text-sm italic">"{displayResult.truth}"</p>
-              </div>
-            )}
-
-            {result?.streak && (
-              <p className="font-display text-sm text-sun mt-3">
-                🔥 Streak: {result.streak} dia{result.streak > 1 ? "s" : ""}
-              </p>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div>
-        <h2 className="font-display text-lg mb-2">🏆 Ranking de hoje</h2>
-        {board.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-3">
-            Seja o primeiro a jogar hoje!
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {board.map((row, i) => (
-              <li
-                key={row.user_id}
-                className="sticker py-2 px-3 flex items-center gap-2 text-sm"
-              >
-                <span className="font-display w-6 text-center text-sun">
-                  {i + 1}
-                </span>
-                <span className="text-xl">{row.profile?.avatar ?? "🦊"}</span>
-                <span className="flex-1 truncate">
-                  {row.profile?.display_name ?? "Jogador"}
-                </span>
-                {row.is_correct ? (
-                  <span className="text-mint text-xs">✓</span>
-                ) : (
-                  <span className="text-muted-foreground text-xs">✗</span>
+                {/* Semelhança com a marca dos 80% (o corte para pontuar) */}
+                {typeof displayResult?.similarity === "number" && (
+                  <div className="text-left">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="eyebrow">Semelhança</span>
+                      <span
+                        className={
+                          "font-display text-lg tabular-nums " +
+                          (displayResult.correct ? "text-mint" : "text-pink")
+                        }
+                      >
+                        {displayResult.similarity}%{" "}
+                        {displayResult.correct ? "✓" : ""}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <div className="meter h-3.5">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${sim}%` }}
+                          transition={{ duration: 0.9, ease: "easeOut" }}
+                          className={
+                            "h-full rounded-full " +
+                            (displayResult.correct
+                              ? "meter-fill-turq"
+                              : "meter-fill-urgent")
+                          }
+                        />
+                      </div>
+                      <div
+                        className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-[var(--c-ink)]/80"
+                        style={{ left: "80%" }}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="relative h-4 mt-1">
+                      <span
+                        className="absolute -translate-x-1/2 text-[10px] font-bold text-muted-foreground whitespace-nowrap"
+                        style={{ left: "80%" }}
+                      >
+                        80% pontua
+                      </span>
+                    </div>
+                  </div>
                 )}
-                <span className="font-display text-primary">{row.score}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+
+                {/* Palpite × verdade */}
+                <div className="grid gap-2.5 text-left lg:grid-cols-2">
+                  {displayResult?.guess && (
+                    <div className="rounded-2xl p-3 border border-pink/35 bg-pink/[0.08]">
+                      <p className="eyebrow !text-pink mb-1">✍️ Seu palpite</p>
+                      <p className="text-[15px] text-foreground leading-snug">
+                        “{displayResult.guess}”
+                      </p>
+                    </div>
+                  )}
+                  {displayResult?.truth && (
+                    <div className="rounded-2xl p-3 border border-mint/40 bg-mint/[0.1]">
+                      <p className="eyebrow !text-mint mb-1">
+                        ✓ Significado correto
+                      </p>
+                      <p className="text-[15px] leading-snug">
+                        “{displayResult.truth}”
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Uniformização (playtest 2026-07-21): conta transparente,
+                    agora recolhível para não competir com o resultado. */}
+                {displayResult && (
+                  <details className="group text-left rounded-2xl border border-[var(--c-line)] bg-black/15 px-3 py-2">
+                    <summary className="cursor-pointer list-none flex items-center justify-between font-display text-sm text-sun">
+                      <span>🧮 Como calculamos</span>
+                      <span
+                        aria-hidden
+                        className="transition-transform group-open:rotate-180 text-muted-foreground"
+                      >
+                        ▾
+                      </span>
+                    </summary>
+                    <div className="mt-2 text-[12px] text-foreground/85 leading-relaxed">
+                      {displayResult.correct ? (
+                        <>
+                          <p>
+                            base = máx(100 − <b>{displayResult.timeSeconds}s</b>
+                            , 20) ={" "}
+                            <b>
+                              {Math.max(100 - displayResult.timeSeconds, 20)}
+                            </b>
+                          </p>
+                          <p>
+                            pts = arred(base ×{" "}
+                            <b>{displayResult.similarity}%</b>) mín. 20 ={" "}
+                            <b>{displayResult.score}</b>
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p>
+                            Sua semelhança foi{" "}
+                            <b>{displayResult.similarity}%</b>, abaixo do mínimo
+                            de <b>80%</b> para pontuar.
+                          </p>
+                          <p className="mt-1 opacity-80">
+                            Se tivesse atingido 80%+: base = máx(100 −{" "}
+                            <b>{displayResult.timeSeconds}s</b>, 20) ={" "}
+                            <b>
+                              {Math.max(100 - displayResult.timeSeconds, 20)}
+                            </b>
+                            , depois multiplicada pela semelhança (mín. 20 pts).
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </details>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="flex flex-col gap-2 min-w-0 lg:panel lg:p-5">
+          <h2 className="font-display text-xl flex items-center gap-2">
+            🏆 <span>Ranking de hoje</span>
+          </h2>
+          {board.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-3">
+              Seja o primeiro a jogar hoje!
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {board.map((row, i) => {
+                const mine = row.user_id === myId;
+                const medal =
+                  i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null;
+                return (
+                  <li
+                    key={row.user_id}
+                    className={
+                      "sticker !rounded-2xl !py-2 !px-3 flex items-center gap-2.5 text-sm " +
+                      (i === 0 ? "ring-gold " : "") +
+                      (mine ? "!border-pink/60" : "")
+                    }
+                  >
+                    <span
+                      className={
+                        "font-display w-7 text-center text-lg tabular-nums " +
+                        (i === 0 ? "text-sun" : "text-muted-foreground")
+                      }
+                    >
+                      {medal ?? i + 1}
+                    </span>
+                    <span className="text-xl">
+                      {row.profile?.avatar ?? "🦊"}
+                    </span>
+                    <span className="flex-1 truncate font-display">
+                      {row.profile?.display_name ?? "Jogador"}
+                      {mine ? (
+                        <span className="text-muted-foreground"> (você)</span>
+                      ) : null}
+                    </span>
+                    {row.is_correct ? (
+                      <span className="text-mint text-xs font-bold">✓</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">✗</span>
+                    )}
+                    <span
+                      className={
+                        "font-display text-lg tabular-nums " +
+                        (i === 0
+                          ? "text-sun"
+                          : row.is_correct
+                            ? "text-foreground"
+                            : "text-muted-foreground")
+                      }
+                    >
+                      {row.score}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
