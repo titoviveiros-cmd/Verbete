@@ -249,11 +249,13 @@ que as peças novas disparam os mesmos eventos:
 | Lint | 0 erros · 60 avisos (o master tem os mesmos 60) |
 | Typecheck | ✅ |
 | Unitários (Vitest) | ✅ 123/123 (inclui o teste novo da prévia: arquivo, 1200×630, < 200 KB, metas apontando para ele) |
-| Fumaça visual — dev, 17 telas × 7 tamanhos | ✅ 119/119 (1 falha real achada e corrigida: "Sortear palavra" atrás da barra de reações em 667×375) |
-| Fumaça visual — **build de produção** (`vite preview`), 17 telas × 2 tamanhos | ✅ 34/34 |
+| Fumaça visual + **axe WCAG 2.1 AA** — dev, 17 telas × 7 tamanhos | ✅ 119/119, 0 violações (achou e corrigiu: "Sortear palavra" atrás da barra de reações em 667×375; região rolável da revelação sem foco) |
+| axe no **master** (mesmas 17 telas, 390×844) | 7 telas com violação: contraste ×4, botão dentro de botão (cédula + 🚩) ×2, placar rolável sem foco ×2 → **0 na branch** |
+| Fumaça visual + axe — **build de produção** (`vite preview`), 17 telas × 2 tamanhos | ✅ 34/34 |
 | `e2e/og-image.spec.ts` (dev e build) | ✅ 3/3 — HTTP 200, `image/jpeg`, 1200×630, metas absolutas, canonical |
+| Voto × denúncia depois de separar a 🚩 da cédula | ✅ a 🚩 abre a denúncia sem votar; tocar na cédula envia `cast_vote` com a definição certa |
 | Variante `short` (telas baixas) | escolha/pódio sem mascote e embaralhamento compacto abaixo de 520 px de altura |
-| CI do PR (integração SQL + Playwright multiplayer contra Supabase local) | ver PR #3 |
+| CI do PR (integração SQL + Playwright multiplayer contra Supabase local) | 1ª rodada pegou 2 testes acoplados ao visual antigo (seletor da cédula e o nome "Compartilhar") → corrigidos em `0158739`; resultado final no PR #3 |
 
 ## 11. Red Team visual (um só, 15 perguntas)
 
