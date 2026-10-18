@@ -46,7 +46,7 @@ export function Shuffling({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="flex-1 flex flex-col items-center justify-center gap-8 overflow-hidden w-full max-w-full px-4"
+      className="flex-1 flex flex-col items-center justify-center gap-8 short:gap-2 overflow-hidden w-full max-w-full px-4"
     >
       <motion.div
         initial={{ y: 10, opacity: 0 }}
@@ -55,14 +55,17 @@ export function Shuffling({
         className="text-center"
       >
         <p className="eyebrow">Embaralhando as cédulas</p>
-        <p className="font-display text-2xl lg:text-3xl mt-1">
+        <p className="font-display text-2xl lg:text-3xl mt-1 short:hidden">
           Qual delas é a verdade?
         </p>
       </motion.div>
 
       {/* Micro-evento: as cédulas abrem em leque e são embaralhadas em
           laço enquanto a votação prepara (a fase dura ~1–2 s). */}
-      <div className="relative h-48 w-full max-w-[320px] mx-auto" aria-hidden>
+      <div
+        className="relative h-48 w-full max-w-[320px] mx-auto short:h-36 short:scale-[0.78]"
+        aria-hidden
+      >
         <motion.div
           aria-hidden
           className="absolute inset-0 -z-10 rounded-full"

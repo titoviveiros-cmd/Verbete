@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* Celular deitado / telas baixas: a barra de reações come ~60 px do fundo. */
+@custom-variant short (@media (max-height: 520px));
 
 /*
  * VERBETE — Design System

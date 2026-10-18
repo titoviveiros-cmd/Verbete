@@ -247,9 +247,10 @@ export function Finished({
         className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-3 pb-2 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-3 lg:content-start"
         style={scrollbarClip()}
       >
-        {/* Coluna heroica: vencedor + pódio. No desktop a pontuação final
-            sobe para o topo da coluna direita (o pódio cabe sem rolar). */}
-        <div className="flex flex-col gap-3 min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:justify-center">
+        {/* Coluna heroica: vencedor + pódio, fixa no desktop enquanto a
+            direita rola. A pontuação final sobe para o topo da coluna
+            direita. */}
+        <div className="flex flex-col gap-3 min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:self-start lg:sticky lg:top-0">
           <motion.div
             initial={{ scale: 0.85, opacity: 0, y: -8 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -265,7 +266,11 @@ export function Finished({
                 filter: "blur(10px)",
               }}
             />
-            <Mascot mood="excited" size={64} className="relative -mb-1" />
+            <Mascot
+              mood="excited"
+              size={64}
+              className="relative -mb-1 short:hidden"
+            />
             <p className="eyebrow relative">
               Fim de jogo · {room.current_round}{" "}
               {room.current_round === 1 ? "rodada" : "rodadas"}
@@ -609,13 +614,13 @@ export function Finished({
       <div className="flex gap-2.5 mt-2 pt-2.5 border-t border-[var(--c-line)] bg-background/80 backdrop-blur-sm sticky bottom-0 lg:justify-center">
         <button
           onClick={onLeave}
-          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[150px] text-sm sm:text-base !px-3 py-3 whitespace-nowrap"
+          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[150px] text-sm sm:text-base !px-3 py-3 short:py-2 whitespace-nowrap"
         >
           Sair
         </button>
         <button
           onClick={() => setViewingScoreboard(true)}
-          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[170px] text-sm sm:text-base !px-3 py-3 whitespace-nowrap"
+          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[170px] text-sm sm:text-base !px-3 py-3 short:py-2 whitespace-nowrap"
           title="Rever placar da última rodada"
         >
           📊 Placar
@@ -623,7 +628,7 @@ export function Finished({
         {isHost && (
           <button
             onClick={() => restartGame(roomId)}
-            className="btn-pop btn-gold flex-[1.7] lg:flex-none lg:min-w-[260px] text-base sm:text-lg !px-3 py-3 whitespace-nowrap"
+            className="btn-pop btn-gold flex-[1.7] lg:flex-none lg:min-w-[260px] text-base sm:text-lg !px-3 py-3 short:py-2 whitespace-nowrap"
           >
             🔄 Nova partida
           </button>

@@ -60,7 +60,7 @@ export function ChooseWord({
       className="flex-1 flex flex-col items-center justify-center gap-4 lg:gap-6"
     >
       {phase !== "ready" && (
-        <div className="relative">
+        <div className="relative short:hidden">
           <div
             aria-hidden
             className="absolute -inset-8 rounded-full pointer-events-none"
@@ -95,7 +95,7 @@ export function ChooseWord({
           <h2
             className={
               "font-display text-gold-grad leading-none " +
-              (phase === "ready" ? "text-3xl" : "text-[42px]")
+              (phase === "ready" ? "text-3xl" : "text-[42px] short:text-3xl")
             }
           >
             {coord?.nickname}
