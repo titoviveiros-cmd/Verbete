@@ -150,7 +150,7 @@ export const ReactionsLayer = memo(function ReactionsLayer({
       <button
         onClick={() => setHidden((h) => !h)}
         aria-label={hidden ? "Mostrar reações" : "Esconder reações"}
-        className="fixed z-[60] bg-card/90 backdrop-blur-md border border-white/10 rounded-full w-9 h-9 flex items-center justify-center shadow-pop text-sm"
+        className="glass-tile fixed z-[60] rounded-full w-9 h-9 flex items-center justify-center text-sm"
         style={{
           right: "max(1rem, env(safe-area-inset-right, 0px))",
           bottom: hidden
@@ -177,7 +177,7 @@ export const ReactionsLayer = memo(function ReactionsLayer({
               paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
             }}
           >
-            <div className="mx-auto max-w-[26rem] bg-card/95 backdrop-blur-md border border-white/10 rounded-full shadow-pop px-2 py-1.5 flex items-center justify-between gap-1">
+            <div className="glass-tile mx-auto max-w-[26rem] !bg-[var(--c-surface)]/90 rounded-full px-2 py-1.5 flex items-center justify-between gap-1">
               {EMOJIS.map((e) => (
                 <motion.button
                   key={e}

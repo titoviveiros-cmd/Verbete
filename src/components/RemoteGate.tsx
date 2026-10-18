@@ -64,7 +64,7 @@ export function RemoteGate({ children }: { children: ReactNode }) {
           href={gate.storeUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-pop bg-gradient-fun text-white text-sm"
+          className="btn-pop btn-gold text-sm"
         >
           Atualizar agora
         </a>

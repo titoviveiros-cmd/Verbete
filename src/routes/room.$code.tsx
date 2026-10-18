@@ -42,6 +42,7 @@ import {
 import { setMusicMood, stopMusic } from "@/lib/music";
 
 import { TopBar } from "@/components/room/TopBar";
+import { MesaSidebar } from "@/components/room/MesaSidebar";
 import { JoinFlow } from "@/components/room/JoinFlow";
 import {
   AlertDialog,
@@ -539,13 +540,13 @@ function RoomPage() {
         <div className="flex flex-col gap-2 w-full max-w-xs">
           <button
             onClick={handleRejoin}
-            className="btn-pop bg-gradient-fun text-white text-lg px-6 py-3"
+            className="btn-pop btn-gold text-lg px-6 py-3"
           >
             ↩ Voltar para a partida
           </button>
           <button
             onClick={() => nav({ to: "/" })}
-            className="btn-pop bg-muted text-foreground text-base px-6 py-2"
+            className="btn-pop btn-plain text-base px-6 py-2"
           >
             ← Voltar para a home
           </button>
@@ -567,10 +568,7 @@ function RoomPage() {
         <Mascot mood="sad" />
         <h2 className="font-display text-2xl">Sala não encontrada</h2>
         <p className="text-muted-foreground text-sm">{error}</p>
-        <button
-          onClick={() => nav({ to: "/" })}
-          className="btn-pop bg-gradient-fun text-white"
-        >
+        <button onClick={() => nav({ to: "/" })} className="btn-pop btn-gold">
           ← Voltar
         </button>
       </div>
@@ -589,13 +587,17 @@ function RoomPage() {
     return <JoinFlow code={code} roomId={room.id} status={room.status} />;
   }
 
+  // Desktop: o "Placar ao vivo" acompanha as fases de jogo; lobby,
+  // placar e pódio já são a própria tabela de jogadores.
+  const showMesa =
+    room.status !== "lobby" &&
+    room.status !== "scoreboard" &&
+    room.status !== "finished";
+
   return (
     <div
-      className="mobile-shell relative no-scrollbar"
+      className="mobile-shell stage-wide room-shell relative no-scrollbar"
       style={{
-        height: "100dvh",
-        maxHeight: "100dvh",
-        minHeight: "100dvh",
         paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)",
         // Reserva espaço apenas para a barra de reações flutuante (~56px + safe-area)
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 60px)",
@@ -606,6 +608,9 @@ function RoomPage() {
       <TopBar
         code={room.code}
         round={room.current_round}
+        roundsTotal={
+          room.win_condition === "rounds" ? room.win_target : undefined
+        }
         status={room.status}
         isHost={isHost}
         onReload={reload}
@@ -624,110 +629,133 @@ function RoomPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => restartGame(room.id)}>
+            <AlertDialogAction
+              onClick={() => restartGame(room.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Sim, resetar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={room.status}
-          initial={{ opacity: 0, y: 16, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.99 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="flex-1 flex flex-col min-h-0"
-          style={{ willChange: "transform, opacity" }}
+      <div className="flex-1 min-h-0 flex lg:gap-6">
+        <div
+          className={
+            "flex-1 min-w-0 min-h-0 flex flex-col w-full mx-auto " +
+            (room.status === "lobby" || room.status === "finished"
+              ? "lg:max-w-[1080px]"
+              : "lg:max-w-[820px]")
+          }
         >
-          <Suspense fallback={<PhaseFallback />}>
-            {room.status === "lobby" && (
-              <Lobby
-                roomId={room.id}
-                hostId={room.host_id}
-                players={players}
-                isHost={isHost}
-                playerId={playerId}
-                winCondition={room.win_condition}
-                winTarget={room.win_target}
-                mode={(room.mode as RoomMode) ?? "individual"}
-                teams={room.teams ?? []}
-                categories={room.categories ?? []}
-                nivel={room.nivel ?? "aleatorio"}
-              />
-            )}
-            {room.status === "choosing" && (
-              <ChooseWord
-                room={room}
-                players={players}
-                isCoordinator={room.current_coordinator === playerId}
-              />
-            )}
-            {room.status === "writing" && word && (
-              <WriteDefinition
-                room={room}
-                players={players}
-                word={word}
-                me={me}
-                isCoordinator={room.current_coordinator === playerId}
-                definitions={definitions}
-                roundExtensions={roundExtensions}
-                isHost={isHost}
-                isDeputy={isDeputy}
-              />
-            )}
-            {room.status === "shuffling" && word && (
-              <Shuffling
-                room={room}
-                word={word}
-                definitions={definitions}
-                isHost={isHost}
-              />
-            )}
-            {room.status === "voting" && word && (
-              <Voting
-                room={room}
-                players={players}
-                word={word}
-                definitions={definitions}
-                votes={votes}
-                me={me}
-                isHost={isHost}
-                isDeputy={isDeputy}
-                roundExtensions={roundExtensions}
-              />
-            )}
-            {room.status === "reveal" && word && (
-              <Reveal
-                room={room}
-                players={players}
-                word={word}
-                definitions={definitions}
-                votes={votes}
-                isHost={isHost}
-              />
-            )}
-            {room.status === "scoreboard" && (
-              <Scoreboard room={room} players={players} isHost={isHost} />
-            )}
-            {room.status === "finished" && (
-              <Finished
-                room={room}
-                players={players}
-                isHost={isHost}
-                roomId={room.id}
-                roomCode={room.code}
-                playerId={playerId}
-                onLeave={() => {
-                  leaveRoom(playerId);
-                  nav({ to: "/" });
-                }}
-              />
-            )}
-          </Suspense>
-        </motion.div>
-      </AnimatePresence>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={room.status}
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.99 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="flex-1 flex flex-col min-h-0"
+              style={{ willChange: "transform, opacity" }}
+            >
+              <Suspense fallback={<PhaseFallback />}>
+                {room.status === "lobby" && (
+                  <Lobby
+                    roomId={room.id}
+                    hostId={room.host_id}
+                    players={players}
+                    isHost={isHost}
+                    playerId={playerId}
+                    winCondition={room.win_condition}
+                    winTarget={room.win_target}
+                    mode={(room.mode as RoomMode) ?? "individual"}
+                    teams={room.teams ?? []}
+                    categories={room.categories ?? []}
+                    nivel={room.nivel ?? "aleatorio"}
+                  />
+                )}
+                {room.status === "choosing" && (
+                  <ChooseWord
+                    room={room}
+                    players={players}
+                    isCoordinator={room.current_coordinator === playerId}
+                  />
+                )}
+                {room.status === "writing" && word && (
+                  <WriteDefinition
+                    room={room}
+                    players={players}
+                    word={word}
+                    me={me}
+                    isCoordinator={room.current_coordinator === playerId}
+                    definitions={definitions}
+                    roundExtensions={roundExtensions}
+                    isHost={isHost}
+                    isDeputy={isDeputy}
+                  />
+                )}
+                {room.status === "shuffling" && word && (
+                  <Shuffling
+                    room={room}
+                    word={word}
+                    definitions={definitions}
+                    isHost={isHost}
+                  />
+                )}
+                {room.status === "voting" && word && (
+                  <Voting
+                    room={room}
+                    players={players}
+                    word={word}
+                    definitions={definitions}
+                    votes={votes}
+                    me={me}
+                    isHost={isHost}
+                    isDeputy={isDeputy}
+                    roundExtensions={roundExtensions}
+                  />
+                )}
+                {room.status === "reveal" && word && (
+                  <Reveal
+                    room={room}
+                    players={players}
+                    word={word}
+                    definitions={definitions}
+                    votes={votes}
+                    isHost={isHost}
+                  />
+                )}
+                {room.status === "scoreboard" && (
+                  <Scoreboard room={room} players={players} isHost={isHost} />
+                )}
+                {room.status === "finished" && (
+                  <Finished
+                    room={room}
+                    players={players}
+                    isHost={isHost}
+                    roomId={room.id}
+                    roomCode={room.code}
+                    playerId={playerId}
+                    onLeave={() => {
+                      leaveRoom(playerId);
+                      nav({ to: "/" });
+                    }}
+                  />
+                )}
+              </Suspense>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        {showMesa && (
+          <MesaSidebar
+            room={room}
+            players={players}
+            definitions={definitions}
+            votes={votes}
+            playerId={playerId}
+          />
+        )}
+      </div>
 
       <PhaseAnnouncer status={room.status} />
       <ReactionsLayer roomId={room.id} playerId={playerId} />

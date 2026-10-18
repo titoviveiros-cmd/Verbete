@@ -111,7 +111,7 @@ function AdminReportsPage() {
         <p className="text-sm text-muted-foreground text-center max-w-xs">
           Esta área é exclusiva para moderadores do Verbete.
         </p>
-        <Link to="/" className="btn-pop bg-gradient-fun text-white text-sm">
+        <Link to="/" className="btn-pop btn-gold text-sm">
           Voltar ao início
         </Link>
       </div>
@@ -123,13 +123,13 @@ function AdminReportsPage() {
       <div className="flex items-center justify-between">
         <Link
           to={fromProfile ? "/profile" : "/"}
-          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+          className="btn-pop btn-plain text-xs px-3 py-2 font-display flex items-center gap-1"
         >
           <span>←</span> {fromProfile ? "Voltar" : "Início"}
         </Link>
         <button
           onClick={refresh}
-          className="btn-pop bg-card text-xs px-3 py-2 font-display flex items-center gap-1"
+          className="btn-pop btn-plain text-xs px-3 py-2 font-display flex items-center gap-1"
         >
           Atualizar <span>🔄</span>
         </button>
@@ -186,28 +186,28 @@ function AdminReportsPage() {
                 <button
                   disabled={busy === r.id}
                   onClick={() => handle(r.id, "dismiss")}
-                  className="btn-pop bg-card border border-white/10 text-xs py-1.5 px-2.5 disabled:opacity-50"
+                  className="btn-pop btn-plain border border-white/10 text-xs py-1.5 px-2.5"
                 >
                   Descartar
                 </button>
                 <button
                   disabled={busy === r.id}
                   onClick={() => handle(r.id, "ban", 7)}
-                  className="btn-pop bg-sun/20 border border-sun/40 text-xs py-1.5 px-2.5 disabled:opacity-50"
+                  className="btn-pop bg-sun/20 border border-sun/40 text-xs py-1.5 px-2.5"
                 >
                   Banir 7d
                 </button>
                 <button
                   disabled={busy === r.id}
                   onClick={() => handle(r.id, "ban", 30)}
-                  className="btn-pop bg-pink/20 border border-pink/40 text-xs py-1.5 px-2.5 disabled:opacity-50"
+                  className="btn-pop bg-pink/20 border border-pink/40 text-xs py-1.5 px-2.5"
                 >
                   Banir 30d
                 </button>
                 <button
                   disabled={busy === r.id}
                   onClick={() => handle(r.id, "ban", 0)}
-                  className="btn-pop bg-destructive text-destructive-foreground text-xs py-1.5 px-2.5 disabled:opacity-50"
+                  className="btn-pop bg-destructive text-destructive-foreground text-xs py-1.5 px-2.5"
                 >
                   Ban perma
                 </button>

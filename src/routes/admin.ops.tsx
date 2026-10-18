@@ -155,7 +155,7 @@ function AdminOpsPage() {
         <p className="text-sm text-muted-foreground text-center max-w-xs">
           Esta área é exclusiva para editores do Verbete.
         </p>
-        <Link to="/" className="btn-pop bg-gradient-fun text-white text-sm">
+        <Link to="/" className="btn-pop btn-gold text-sm">
           Voltar ao início
         </Link>
       </div>

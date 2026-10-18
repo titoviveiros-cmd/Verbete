@@ -12,7 +12,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       title={isDark ? "Mudar para tema claro" : "Mudar para tema escuro"}
       aria-label={isDark ? "Mudar para tema claro" : "Mudar para tema escuro"}
       className={
-        "opacity-60 hover:opacity-100 text-base w-8 h-8 flex items-center justify-center rounded-full bg-card/50 border border-white/10 transition " +
+        "glass-tile text-base w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full active:translate-y-px transition " +
         className
       }
       suppressHydrationWarning

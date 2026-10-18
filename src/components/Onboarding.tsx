@@ -147,7 +147,7 @@ function DemoStepView({
       {picked !== null && (
         <button
           onClick={onContinue}
-          className="btn-pop bg-gradient-fun text-white text-sm mt-3 px-5"
+          className="btn-pop btn-gold text-sm mt-3 px-5"
         >
           Continuar →
         </button>
@@ -235,7 +235,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
             {i > 0 && (
               <button
                 onClick={() => setI(i - 1)}
-                className="btn-pop bg-card flex-1 text-sm border border-white/10"
+                className="btn-pop btn-plain flex-1 text-sm border border-white/10"
               >
                 ← Voltar
               </button>
@@ -243,14 +243,14 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
             {!isLast ? (
               <button
                 onClick={() => setI(i + 1)}
-                className="btn-pop bg-gradient-fun text-white flex-[2] text-base"
+                className="btn-pop btn-gold flex-[2] text-base"
               >
                 Próximo →
               </button>
             ) : (
               <button
                 onClick={onClose}
-                className="btn-pop bg-gradient-fun text-white flex-[2] text-base"
+                className="btn-pop btn-gold flex-[2] text-base"
               >
                 🚀 Bora jogar!
               </button>

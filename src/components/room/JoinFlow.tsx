@@ -184,7 +184,7 @@ export function JoinFlow({
               void playUITap("secondary");
               nav({ to: "/" });
             }}
-            className="btn-pop bg-card flex-1"
+            className="btn-pop btn-plain flex-1"
           >
             ← Voltar
           </button>
@@ -194,7 +194,7 @@ export function JoinFlow({
               handleJoin();
             }}
             disabled={busy}
-            className="btn-pop bg-gradient-fun text-white flex-[2] text-xl disabled:opacity-50"
+            className="btn-pop btn-gold flex-[2] text-xl"
           >
             {busy ? "Entrando…" : "🎉 Entrar na sala"}
           </button>

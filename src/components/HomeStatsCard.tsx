@@ -161,7 +161,7 @@ export function HomeStatsCard() {
           </div>
           <Link
             to="/daily"
-            className="btn-pop bg-gradient-fun text-white text-xs py-1.5 px-3"
+            className="btn-pop btn-gold text-xs py-1.5 px-3"
             aria-label="Manter streak jogando agora"
           >
             Salvar

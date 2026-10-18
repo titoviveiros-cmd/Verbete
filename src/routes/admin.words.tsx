@@ -129,7 +129,7 @@ function AdminWordsPage() {
         <p className="text-sm text-muted-foreground text-center max-w-xs">
           Esta área é exclusiva para editores do Verbete.
         </p>
-        <Link to="/" className="btn-pop bg-gradient-fun text-white text-sm">
+        <Link to="/" className="btn-pop btn-gold text-sm">
           Voltar ao início
         </Link>
       </div>
@@ -196,7 +196,7 @@ function AdminWordsPage() {
                 <button
                   disabled={busy === w.id}
                   onClick={() => review(w.id, "publish")}
-                  className="flex-1 btn-pop bg-gradient-mint text-accent-foreground text-sm !py-2 disabled:opacity-50"
+                  className="flex-1 btn-pop bg-gradient-mint text-accent-foreground text-sm !py-2"
                 >
                   ✅ Publicar
                 </button>
@@ -205,7 +205,7 @@ function AdminWordsPage() {
                 <button
                   disabled={busy === w.id}
                   onClick={() => review(w.id, "reject")}
-                  className="flex-1 btn-pop bg-card border border-destructive/50 text-destructive text-sm !py-2 disabled:opacity-50"
+                  className="flex-1 btn-pop btn-plain border border-destructive/50 text-destructive text-sm !py-2"
                 >
                   🗑 Rejeitar
                 </button>

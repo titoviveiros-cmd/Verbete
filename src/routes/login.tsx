@@ -187,7 +187,7 @@ function LoginPage() {
         <button
           disabled={busy}
           type="submit"
-          className="btn-pop bg-gradient-fun text-white text-lg disabled:opacity-50"
+          className="btn-pop btn-gold text-lg"
         >
           {busy ? "..." : mode === "signin" ? "Entrar" : "Criar conta"}
         </button>

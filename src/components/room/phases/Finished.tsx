@@ -17,6 +17,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { pushAchievement } from "@/components/AchievementToaster";
 import { hapticBigWin, hapticSuccess } from "@/lib/sound";
 import { scrollbarClip } from "@/lib/utils";
+import { shareInvite } from "@/lib/share";
+import { APP_URL } from "@/lib/app-url";
 
 export function Finished({
   room,
@@ -158,6 +160,26 @@ export function Finished({
     },
   ];
 
+  // Compartilhar o resultado (pódio digno de print): texto do campeão +
+  // link público do jogo — o mesmo helper do convite do Lobby.
+  const [shareNote, setShareNote] = useState<string | null>(null);
+  const handleShareResult = async () => {
+    const champion = teamWinner
+      ? teamWinner.name
+      : (winner?.nickname ?? "Alguém");
+    const pts = teamWinner ? teamWinner.score : (winner?.score ?? 0);
+    const outcome = await shareInvite({
+      title: "Verbete",
+      text: `🏆 ${champion} venceu no Verbete com ${pts} pts! Bora jogar? Blefe, vote e descubra palavras raras 👇`,
+      url: `${APP_URL}/`,
+    });
+    if (outcome === "copied") setShareNote("Link copiado! ✅");
+    else if (outcome === "failed")
+      setShareNote(`Não deu para abrir o compartilhamento. Link: ${APP_URL}/`);
+    else setShareNote(null);
+    if (outcome === "copied") setTimeout(() => setShareNote(null), 2500);
+  };
+
   const [viewingScoreboard, setViewingScoreboard] = useState(false);
   if (viewingScoreboard) {
     return (
@@ -174,7 +196,7 @@ export function Finished({
           <button
             type="button"
             onClick={() => setViewingScoreboard(false)}
-            className="self-start flex items-center gap-1.5 text-sm font-display px-3 py-1.5 rounded-full bg-card/60 border border-white/10 hover:bg-card/80 transition"
+            className="glass-tile self-start flex items-center gap-1.5 text-sm font-display px-3 py-1.5 rounded-full transition"
           >
             ← Voltar ao resumo
           </button>
@@ -183,6 +205,35 @@ export function Finished({
       </motion.div>
     );
   }
+
+  // Pódio: degraus "candy" (ouro / prata / bronze) com aresta, como os
+  // botões da coleção — a peça de vitória do Verbete.
+  const PODIUM = [
+    {
+      p: sorted[1],
+      place: 2,
+      h: 70,
+      medal: "🥈",
+      tone: "#C0C0C0",
+      block: "podium-silver",
+    },
+    {
+      p: sorted[0],
+      place: 1,
+      h: 104,
+      medal: "👑",
+      tone: "#f4c542",
+      block: "podium-gold",
+    },
+    {
+      p: sorted[2],
+      place: 3,
+      h: 52,
+      medal: "🥉",
+      tone: "#CD7F32",
+      block: "podium-bronze",
+    },
+  ];
 
   return (
     <motion.div
@@ -193,250 +244,217 @@ export function Finished({
     >
       <Confetti />
       <div
-        className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2 pb-2"
+        className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-3 pb-2 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-3 lg:content-start"
         style={scrollbarClip()}
       >
-        <div className="flex flex-col items-center">
-          <Mascot mood="excited" size={72} />
+        {/* Coluna heroica: vencedor + pódio. No desktop a pontuação final
+            sobe para o topo da coluna direita (o pódio cabe sem rolar). */}
+        <div className="flex flex-col gap-3 min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:justify-center">
           <motion.div
             initial={{ scale: 0.85, opacity: 0, y: -8 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 220, damping: 16 }}
-            className="relative w-full max-w-sm mt-1"
+            className="relative flex flex-col items-center text-center pt-1"
           >
             <div
-              className="absolute -inset-3 rounded-[2rem] blur-2xl opacity-60 pointer-events-none"
-              style={{ background: "var(--gradient-fun)" }}
               aria-hidden
-            />
-            <div
-              className="relative rounded-[1.5rem] border-2 border-white/25 overflow-hidden px-4 py-3"
+              className="absolute top-2 left-1/2 -translate-x-1/2 w-72 h-40 rounded-full pointer-events-none"
               style={{
-                background: "var(--gradient-fun)",
-                boxShadow:
-                  "0 6px 0 0 oklch(0.15 0.05 290 / 0.45), 0 16px 36px -10px oklch(0.72 0.22 0 / 0.55), inset 0 1px 0 0 rgba(255,255,255,0.35)",
+                background:
+                  "radial-gradient(closest-side, rgb(244 197 66 / 0.35), transparent 75%)",
+                filter: "blur(10px)",
               }}
+            />
+            <Mascot mood="excited" size={64} className="relative -mb-1" />
+            <p className="eyebrow relative">
+              Fim de jogo · {room.current_round}{" "}
+              {room.current_round === 1 ? "rodada" : "rodadas"}
+            </p>
+            {teamWinner ? (
+              <h2 className="relative font-display text-[34px] lg:text-[44px] leading-tight mt-1">
+                <span className="mr-1">{teamWinner.emoji}</span>
+                <span className="text-gold-grad">
+                  {teamWinner.name} venceu!
+                </span>
+              </h2>
+            ) : (
+              <h2 className="relative font-display text-[34px] lg:text-[46px] leading-tight mt-1 text-gold-grad">
+                {winner?.nickname} venceu!
+              </h2>
+            )}
+            <p className="relative text-sm text-muted-foreground">
+              {teamWinner
+                ? `${teamWinner.score} pts somando a equipe`
+                : `${winner?.score ?? 0} pts · Campeão da sala ${roomCode}`}
+            </p>
+            <button
+              type="button"
+              onClick={handleShareResult}
+              className="btn-pop btn-violet relative text-sm px-4 py-2 mt-2.5"
             >
-              <motion.span
-                className="absolute top-1.5 left-3 text-base"
-                animate={{ rotate: [0, 20, -10, 0], scale: [1, 1.2, 1] }}
-                transition={{ duration: 2.4, repeat: Infinity }}
-                aria-hidden
+              📲 Compartilhar resultado
+            </button>
+            {shareNote && (
+              <p
+                role="status"
+                className="relative text-[12px] text-mint font-bold mt-1.5"
               >
-                ✨
-              </motion.span>
-              <motion.span
-                className="absolute top-2 right-3 text-sm"
-                animate={{ rotate: [0, -15, 15, 0], scale: [1, 1.3, 1] }}
-                transition={{ duration: 2.8, repeat: Infinity, delay: 0.4 }}
-                aria-hidden
-              >
-                ⭐
-              </motion.span>
-
-              <div className="flex flex-col items-center text-center gap-1.5">
-                <motion.div
-                  animate={{ rotate: [-5, 5, -5], y: [0, -2, 0] }}
-                  transition={{
-                    duration: 2.6,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                  className="text-3xl leading-none drop-shadow-[0_2px_0_rgba(0,0,0,0.4)]"
-                  aria-hidden
-                >
-                  🏆
-                </motion.div>
-                <h2
-                  className="font-display text-2xl text-white tracking-tight leading-none"
-                  style={{
-                    textShadow:
-                      "0 2px 0 oklch(0.15 0.05 290 / 0.6), 0 0 18px oklch(0.88 0.18 95 / 0.55)",
-                  }}
-                >
-                  Fim de jogo!
-                </h2>
-                {teamWinner ? (
-                  <div
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border-2 shadow-sm"
-                    style={{ borderColor: teamWinner.color }}
-                  >
-                    <span className="text-sm leading-none">
-                      {teamWinner.emoji}
-                    </span>
-                    <span
-                      className="font-display text-xs leading-none"
-                      style={{ color: teamWinner.color }}
-                    >
-                      {teamWinner.name} venceu · {teamWinner.score} pts
-                    </span>
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border-2 border-sun shadow-sm">
-                    <span className="text-sm leading-none">
-                      {winner?.avatar}
-                    </span>
-                    <span
-                      className="font-display text-xs leading-none"
-                      style={{ color: "oklch(0.22 0.06 290)" }}
-                    >
-                      {winner?.nickname} venceu!
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+                {shareNote}
+              </p>
+            )}
           </motion.div>
-        </div>
 
-        {/* Fase 4 (aprovado 2026-07-20): PÓDIO com degraus — avatares sobem
-            com quique, campeão maior no centro. Paleta/estilos atuais. */}
-        <div className="flex items-end justify-center gap-2 px-6 mt-1">
-          {[
-            { p: sorted[1], place: 2, h: 58, medal: "🥈", tone: "#C0C0C0" },
-            { p: sorted[0], place: 1, h: 86, medal: "👑", tone: "#FFD166" },
-            { p: sorted[2], place: 3, h: 44, medal: "🥉", tone: "#CD7F32" },
-          ]
-            .filter((x) => !!x.p)
-            .map(({ p, place, h, medal, tone }) => (
-              <div
-                key={place}
-                className="flex flex-col items-center flex-1 max-w-[110px] min-w-0"
-              >
-                <motion.div
-                  initial={{ y: 46, opacity: 0, scale: 0.5 }}
-                  animate={{
-                    y: 0,
-                    opacity: 1,
-                    scale: place === 1 ? 1.12 : 1,
-                  }}
-                  transition={{
-                    delay: place === 1 ? 0.85 : place === 2 ? 0.45 : 0.25,
-                    type: "spring",
-                    stiffness: 230,
-                    damping: 13,
-                  }}
-                  className="flex flex-col items-center min-w-0 w-full"
+          {/* Fase 4 (aprovado 2026-07-20): PÓDIO com degraus — avatares sobem
+              com quique, campeão maior no centro. */}
+          <div className="flex items-end justify-center gap-2.5 px-4 mt-1">
+            {PODIUM.filter((x) => !!x.p).map(
+              ({ p, place, h, medal, tone, block }) => (
+                <div
+                  key={place}
+                  className="flex flex-col items-center flex-1 max-w-[132px] lg:max-w-[160px] min-w-0"
                 >
-                  <motion.span
-                    className="text-xl leading-none mb-0.5"
-                    animate={
-                      place === 1 ? { rotate: [-8, 8, -8], y: [0, -2, 0] } : {}
+                  <motion.div
+                    initial={{ y: 46, opacity: 0, scale: 0.5 }}
+                    animate={{
+                      y: 0,
+                      opacity: 1,
+                      scale: place === 1 ? 1.12 : 1,
+                    }}
+                    transition={{
+                      delay: place === 1 ? 0.85 : place === 2 ? 0.45 : 0.25,
+                      type: "spring",
+                      stiffness: 230,
+                      damping: 13,
+                    }}
+                    className="flex flex-col items-center min-w-0 w-full"
+                  >
+                    <motion.span
+                      className="text-2xl leading-none mb-1"
+                      animate={
+                        place === 1
+                          ? { rotate: [-8, 8, -8], y: [0, -2, 0] }
+                          : {}
+                      }
+                      transition={{ duration: 2, repeat: Infinity }}
+                      aria-hidden
+                    >
+                      {medal}
+                    </motion.span>
+                    <span
+                      className="w-14 h-14 lg:w-16 lg:h-16 rounded-full flex items-center justify-center text-3xl lg:text-4xl"
+                      style={{
+                        background: `radial-gradient(circle at 30% 25%, ${p!.color}cc, ${p!.color})`,
+                        boxShadow: `0 0 0 3px ${tone}, 0 0 22px -2px ${tone}aa, 0 4px 0 rgb(0 0 0 / 0.35)`,
+                      }}
+                    >
+                      {p!.avatar}
+                    </span>
+                    <span
+                      className="font-display text-sm lg:text-base mt-1.5 w-full text-center truncate"
+                      style={{ color: tone }}
+                    >
+                      {p!.nickname}
+                    </span>
+                    <span className="font-display text-xl tabular-nums leading-none">
+                      {p!.score}
+                      <span className="text-xs text-muted-foreground">
+                        {" "}
+                        pts
+                      </span>
+                    </span>
+                  </motion.div>
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: h, opacity: 1 }}
+                    transition={{
+                      delay: place === 1 ? 0.55 : place === 2 ? 0.2 : 0.05,
+                      type: "spring",
+                      stiffness: 210,
+                      damping: 19,
+                    }}
+                    className={
+                      "podium-block w-full mt-2 flex items-start justify-center pt-1.5 " +
+                      block
                     }
-                    transition={{ duration: 2, repeat: Infinity }}
-                    aria-hidden
                   >
-                    {medal}
-                  </motion.span>
-                  <span className="text-4xl leading-none drop-shadow">
-                    {p!.avatar}
-                  </span>
-                  <span
-                    className="font-display text-sm mt-1 w-full text-center truncate"
-                    style={{ color: tone }}
-                  >
-                    {p!.nickname}
-                  </span>
-                  <span
-                    className="font-display text-lg"
-                    style={{ color: tone }}
-                  >
-                    {p!.score}
-                  </span>
-                </motion.div>
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: h, opacity: 1 }}
-                  transition={{
-                    delay: place === 1 ? 0.55 : place === 2 ? 0.2 : 0.05,
-                    type: "spring",
-                    stiffness: 210,
-                    damping: 19,
-                  }}
-                  className="w-full rounded-t-xl border-2 border-b-0 border-white/20 flex items-start justify-center pt-1"
-                  style={{
-                    background: `linear-gradient(180deg, ${tone}59, ${tone}1f)`,
-                    boxShadow: `0 0 18px ${tone}40`,
-                  }}
-                >
-                  <span className="font-display text-lg text-white/85">
-                    {place}º
-                  </span>
-                </motion.div>
-              </div>
-            ))}
+                    <span className="font-display text-xl">{place}º</span>
+                  </motion.div>
+                </div>
+              ),
+            )}
+          </div>
         </div>
 
-        {sortedTeams.length > 0 && (
-          <div className="sticker py-1.5">
-            <p className="font-display text-[10px] uppercase tracking-widest text-center opacity-80 mb-1">
-              Ranking por equipe
-            </p>
-            <ul className="space-y-0.5">
-              {sortedTeams.map((t, i) => (
-                <li key={t.id} className="flex items-center gap-2 px-2">
-                  <span className="font-display text-sm w-5 text-center text-sun">
-                    {i + 1}
-                  </span>
-                  <span className="text-base">{t.emoji}</span>
-                  <span
-                    className="font-display text-xs flex-1 truncate"
-                    style={{ color: t.color }}
-                  >
-                    {t.name}
-                  </span>
-                  <span
-                    className="font-display text-base"
-                    style={{ color: t.color }}
-                  >
-                    {t.score}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <div className="flex flex-col gap-3 min-w-0 lg:col-start-2 lg:row-start-1">
+          {sortedTeams.length > 0 && (
+            <div className="sticker !py-2.5">
+              <p className="eyebrow text-center mb-1.5">Ranking por equipe</p>
+              <ul className="space-y-1">
+                {sortedTeams.map((t, i) => (
+                  <li key={t.id} className="flex items-center gap-2 px-2">
+                    <span className="font-display text-sm w-5 text-center text-sun">
+                      {i + 1}
+                    </span>
+                    <span className="text-base">{t.emoji}</span>
+                    <span
+                      className="font-display text-sm flex-1 truncate"
+                      style={{ color: t.color }}
+                    >
+                      {t.name}
+                    </span>
+                    <span
+                      className="font-display text-base tabular-nums"
+                      style={{ color: t.color }}
+                    >
+                      {t.score}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-        {sortedTeams.length === 0 && (
-          <div className="sticker py-1.5">
-            <p className="font-display text-[10px] uppercase tracking-widest text-center opacity-80 mb-1">
-              Pontuação final
-            </p>
-            <ul className="space-y-0.5">
-              {sorted.map((p, i) => (
-                <li key={p.id} className="flex items-center gap-2 px-2">
-                  <span className="font-display text-xs w-5 text-center opacity-70">
-                    {i + 1}º
-                  </span>
-                  <span className="text-base">{p.avatar}</span>
-                  <span className="font-display text-xs flex-1 truncate">
-                    {p.nickname}
-                  </span>
-                  <span className="font-display text-xs text-primary">
-                    {p.score} pts
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+          {sortedTeams.length === 0 && (
+            <div className="sticker !py-2.5">
+              <p className="eyebrow text-center mb-1.5">Pontuação final</p>
+              <ul className="space-y-1">
+                {sorted.map((p, i) => (
+                  <li
+                    key={p.id}
+                    className={
+                      "flex items-center gap-2 px-2 py-0.5 rounded-lg " +
+                      (p.id === playerId ? "bg-pink/10" : "")
+                    }
+                  >
+                    <span className="font-display text-xs w-6 text-center text-muted-foreground tabular-nums">
+                      {i + 1}º
+                    </span>
+                    <span className="text-base">{p.avatar}</span>
+                    <span className="font-display text-sm flex-1 truncate">
+                      {p.nickname}
+                      {p.id === playerId ? " (você)" : ""}
+                    </span>
+                    <span className="font-display text-sm text-sun tabular-nums">
+                      {p.score} pts
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
-        <div className="space-y-1.5">
-          <p className="font-display text-[10px] uppercase tracking-widest text-center opacity-80">
-            🏆 Pódio
+        {/* Coluna dos títulos, XP e destaques */}
+        <div className="flex flex-col gap-2.5 min-w-0 lg:col-start-2 lg:row-start-2">
+          <p className="eyebrow text-center lg:text-left">
+            🏆 Títulos da partida
           </p>
           {isGuest && (
             <motion.div
               initial={{ y: 10, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="rounded-2xl border-2 border-pink/40 p-3 flex items-center gap-3"
-              style={{
-                background:
-                  "linear-gradient(135deg, color-mix(in oklab, var(--pink) 12%, transparent), color-mix(in oklab, var(--sun) 10%, transparent))",
-                boxShadow:
-                  "0 6px 18px -8px color-mix(in oklab, var(--pink) 50%, transparent)",
-              }}
+              className="panel !rounded-2xl border-pink/40 p-3 flex items-center gap-3"
             >
               <div className="text-2xl shrink-0" aria-hidden>
                 🏅
@@ -456,7 +474,7 @@ export function Finished({
               </div>
               <Link
                 to="/login"
-                className="btn-pop bg-gradient-fun text-white text-xs px-3 py-2 font-display shrink-0"
+                className="btn-pop btn-gold text-xs px-3 py-2 font-display shrink-0"
               >
                 Criar conta
               </Link>
@@ -480,18 +498,19 @@ export function Finished({
                   stiffness: 200,
                 }}
                 className={
-                  "rounded-2xl flex flex-col gap-0.5 border-2 " +
-                  (isGold ? "py-2.5 px-3" : "py-1.5 px-2.5")
+                  "sticker !rounded-2xl flex flex-col gap-0.5 " +
+                  (isGold ? "!py-3 !px-3.5 ring-gold" : "!py-2 !px-3")
                 }
-                style={{
-                  borderColor: tone,
-                  backgroundColor: isGold ? `${tone}22` : `${tone}14`,
-                  boxShadow: isGold
-                    ? `0 0 24px ${tone}77, inset 0 0 12px ${tone}33`
-                    : `0 0 8px ${tone}33`,
-                }}
+                style={
+                  isGold
+                    ? undefined
+                    : {
+                        borderColor: `${tone}88`,
+                        boxShadow: `0 0 12px -4px ${tone}66, var(--shadow-piece)`,
+                      }
+                }
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <motion.span
                     animate={
                       isGold
@@ -515,13 +534,13 @@ export function Finished({
                     <span
                       className={
                         "font-display block leading-tight " +
-                        (isGold ? "text-sm" : "text-xs")
+                        (isGold ? "text-base" : "text-sm")
                       }
                       style={{ color: tone }}
                     >
                       {title}
                     </span>
-                    <p className="text-[10px] text-muted-foreground italic leading-tight">
+                    <p className="text-[11px] text-muted-foreground leading-tight">
                       {desc}
                     </p>
                   </div>
@@ -566,42 +585,45 @@ export function Finished({
               </motion.div>
             );
           })}
+
+          {xpResult && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 240 }}
+              className="btn-gold rounded-2xl text-center py-2.5 border-2 shadow-[0_4px_0_0_var(--c-gold-edge)]"
+            >
+              <span className="font-display text-xl">
+                ⚡ +{xpResult.xpGained} XP
+              </span>
+              <span className="font-display text-sm ml-2 opacity-80">
+                Nível {xpResult.level}
+              </span>
+            </motion.div>
+          )}
+
+          <FunStats players={players} history={history} />
         </div>
-
-        {xpResult && (
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 240 }}
-            className="sticker bg-gradient-sun text-secondary-foreground text-center py-2"
-          >
-            <span className="font-display text-lg">
-              ⚡ +{xpResult.xpGained} XP
-            </span>
-            <span className="font-display text-xs ml-2 opacity-80">
-              Nível {xpResult.level}
-            </span>
-          </motion.div>
-        )}
-
-        <FunStats players={players} history={history} />
       </div>
 
-      <div className="flex gap-2 mt-2 pt-2 border-t border-white/10 bg-background/80 backdrop-blur-sm sticky bottom-0">
-        <button onClick={onLeave} className="btn-pop bg-card flex-1">
+      <div className="flex gap-2.5 mt-2 pt-2.5 border-t border-[var(--c-line)] bg-background/80 backdrop-blur-sm sticky bottom-0 lg:justify-center">
+        <button
+          onClick={onLeave}
+          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[150px] text-sm sm:text-base !px-3 py-3 whitespace-nowrap"
+        >
           Sair
         </button>
         <button
           onClick={() => setViewingScoreboard(true)}
-          className="btn-pop bg-card flex-1 text-sm"
+          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[170px] text-sm sm:text-base !px-3 py-3 whitespace-nowrap"
           title="Rever placar da última rodada"
         >
-          📊 Ver placar
+          📊 Placar
         </button>
         {isHost && (
           <button
             onClick={() => restartGame(roomId)}
-            className="btn-pop bg-gradient-fun text-white flex-[2] text-lg"
+            className="btn-pop btn-gold flex-[1.7] lg:flex-none lg:min-w-[260px] text-base sm:text-lg !px-3 py-3 whitespace-nowrap"
           >
             🔄 Nova partida
           </button>
@@ -737,10 +759,8 @@ function FunStats({
 
   if (stats.length === 0) return null;
   return (
-    <div className="sticker py-2 space-y-1.5">
-      <p className="font-display text-[10px] uppercase tracking-widest text-center opacity-80">
-        😜 Destaques da partida
-      </p>
+    <div className="sticker !py-2.5 space-y-2">
+      <p className="eyebrow text-center">😜 Destaques da partida</p>
       {stats.map((s, i) => (
         <motion.div
           key={s.label}
@@ -751,10 +771,10 @@ function FunStats({
         >
           <span className="text-base shrink-0">{s.emoji}</span>
           <div className="min-w-0">
-            <p className="font-display text-[10px] uppercase tracking-wider text-muted-foreground leading-none">
-              {s.label}
+            <p className="eyebrow !text-[10px] leading-none">{s.label}</p>
+            <p className="text-[13px] leading-snug break-words mt-0.5">
+              {s.value}
             </p>
-            <p className="text-xs leading-snug break-words">{s.value}</p>
           </div>
         </motion.div>
       ))}
