@@ -57,11 +57,17 @@ export function ChooseWord({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      // Celular deitado (short:): as 3 cartas + título não cabiam na altura
-      // útil e a última descia para baixo da barra de reações. Ali o bloco
-      // começa no topo, fica mais compacto e, se ainda faltar altura, rola
-      // dentro da área útil (que termina acima da barra).
-      className="flex-1 flex flex-col items-center justify-center gap-4 lg:gap-6 short:justify-start short:gap-2 short:min-h-0 short:overflow-y-auto short:overflow-x-hidden no-scrollbar"
+      // Celular deitado (short:), escolhendo entre as 3 cartas: cartas +
+      // título não cabiam na altura útil e a última descia para baixo da
+      // barra de reações. Só nesse estado o bloco começa no topo, fica mais
+      // compacto e, se ainda faltar altura, rola dentro da área útil (que
+      // termina acima da barra). "Sortear palavra" segue centralizado.
+      className={
+        "flex-1 flex flex-col items-center justify-center gap-4 lg:gap-6" +
+        (phase === "ready"
+          ? " short:justify-start short:gap-2 short:min-h-0 short:overflow-y-auto short:overflow-x-hidden no-scrollbar"
+          : "")
+      }
     >
       {phase !== "ready" && (
         <div className="relative short:hidden">
