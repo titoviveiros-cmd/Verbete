@@ -14,6 +14,7 @@ import {
   parseJudgeScores,
   scoreGuess,
 } from "../../../supabase/functions/_shared/semantic.ts";
+import { BATCH, CASES } from "../../../scripts/semantic-calibration-cases.mjs";
 
 const ok = (content: string) =>
   new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
@@ -100,16 +101,8 @@ describe("calibre semântico único (Diário = multiplayer)", () => {
 });
 
 describe("bateria de calibração (scripts/test-semantic-calibration.mjs)", () => {
-  it("30–50 pares, todas as categorias pedidas e os 6 exemplos obrigatórios", async () => {
-    // @ts-expect-error módulo .mjs sem tipos
-    const { CASES, BATCH } =
-      await import("../../../scripts/semantic-calibration-cases.mjs");
-    const cases = CASES as Array<{
-      cat: string;
-      truth: string;
-      guess: string;
-      expect: string;
-    }>;
+  it("30–50 pares, todas as categorias pedidas e os 6 exemplos obrigatórios", () => {
+    const cases = CASES;
     expect(cases.length).toBeGreaterThanOrEqual(30);
     expect(cases.length).toBeLessThanOrEqual(50);
     const cats = new Set(cases.map((c) => c.cat));
