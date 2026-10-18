@@ -19,6 +19,7 @@ export type Database = {
           name: string;
           rarity: string;
         };
+        ComputedFields: never;
         Insert: {
           code: string;
           created_at?: string;
@@ -46,6 +47,7 @@ export type Database = {
           room_id: string;
           round: number;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           norm_text: string;
@@ -74,6 +76,7 @@ export type Database = {
           updated_at: string;
           value: string;
         };
+        ComputedFields: never;
         Insert: {
           key: string;
           updated_at?: string;
@@ -96,6 +99,7 @@ export type Database = {
           reason: string;
           user_id: string | null;
         };
+        ComputedFields: never;
         Insert: {
           banned_at?: string;
           banned_by: string;
@@ -129,6 +133,7 @@ export type Database = {
           time_seconds: number;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           challenge_date?: string | null;
           challenge_hour?: string;
@@ -163,6 +168,7 @@ export type Database = {
           id: string;
           word_id: string;
         };
+        ComputedFields: never;
         Insert: {
           challenge_date?: string | null;
           challenge_hour?: string;
@@ -191,6 +197,7 @@ export type Database = {
           round: number;
           text: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -233,6 +240,7 @@ export type Database = {
           room_code: string;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           final_score: number;
           id?: string;
@@ -253,22 +261,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      ops_alerts: {
+        Row: {
+          at: string;
+          id: number;
+          kind: string;
+          message: string;
+          notified_at: string | null;
+          payload: NonNullable<Json>;
+          severity: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          at?: string;
+          id?: never;
+          kind: string;
+          message: string;
+          notified_at?: string | null;
+          payload?: NonNullable<Json>;
+          severity?: string;
+        };
+        Update: {
+          at?: string;
+          id?: never;
+          kind?: string;
+          message?: string;
+          notified_at?: string | null;
+          payload?: NonNullable<Json>;
+          severity?: string;
+        };
+        Relationships: [];
+      };
       ops_events: {
         Row: {
           at: string;
           build: string | null;
           id: number;
           kind: string;
-          payload: Json;
+          payload: NonNullable<Json>;
           room_hash: string | null;
           session_key: string | null;
         };
+        ComputedFields: never;
         Insert: {
           at?: string;
           build?: string | null;
           id?: never;
           kind: string;
-          payload?: Json;
+          payload?: NonNullable<Json>;
           room_hash?: string | null;
           session_key?: string | null;
         };
@@ -277,9 +317,31 @@ export type Database = {
           build?: string | null;
           id?: never;
           kind?: string;
-          payload?: Json;
+          payload?: NonNullable<Json>;
           room_hash?: string | null;
           session_key?: string | null;
+        };
+        Relationships: [];
+      };
+      ops_heartbeat: {
+        Row: {
+          at: string;
+          duration_ms: number | null;
+          job: string;
+          payload: NonNullable<Json>;
+        };
+        ComputedFields: never;
+        Insert: {
+          at?: string;
+          duration_ms?: number | null;
+          job: string;
+          payload?: NonNullable<Json>;
+        };
+        Update: {
+          at?: string;
+          duration_ms?: number | null;
+          job?: string;
+          payload?: NonNullable<Json>;
         };
         Relationships: [];
       };
@@ -301,6 +363,7 @@ export type Database = {
           voting_extensions: number;
           writing_extensions: number;
         };
+        ComputedFields: never;
         Insert: {
           avatar?: string;
           color?: string;
@@ -354,6 +417,7 @@ export type Database = {
           updated_at: string;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           avatar?: string;
           color?: string;
@@ -380,6 +444,7 @@ export type Database = {
           player_id: string;
           room_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           emoji: string;
@@ -423,6 +488,7 @@ export type Database = {
           round: number | null;
           status: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           definition_id?: string | null;
@@ -469,6 +535,7 @@ export type Database = {
           room_id: string;
           text: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -503,6 +570,7 @@ export type Database = {
           room_id: string;
           word: string;
         };
+        ComputedFields: never;
         Insert: {
           category?: string;
           created_at?: string;
@@ -538,12 +606,13 @@ export type Database = {
           phase_started_at: string | null;
           round_phase_ends_at: string | null;
           status: string;
-          teams: Json;
+          teams: NonNullable<Json>;
           used_word_ids: string[];
           visibility: string;
           win_condition: string;
           win_target: number;
         };
+        ComputedFields: never;
         Insert: {
           categories?: string[];
           code: string;
@@ -558,7 +627,7 @@ export type Database = {
           phase_started_at?: string | null;
           round_phase_ends_at?: string | null;
           status?: string;
-          teams?: Json;
+          teams?: NonNullable<Json>;
           used_word_ids?: string[];
           visibility?: string;
           win_condition?: string;
@@ -578,7 +647,7 @@ export type Database = {
           phase_started_at?: string | null;
           round_phase_ends_at?: string | null;
           status?: string;
-          teams?: Json;
+          teams?: NonNullable<Json>;
           used_word_ids?: string[];
           visibility?: string;
           win_condition?: string;
@@ -604,6 +673,7 @@ export type Database = {
           room_id: string;
           round: number;
         };
+        ComputedFields: never;
         Insert: {
           applied_at?: string;
           attempt: number;
@@ -633,6 +703,7 @@ export type Database = {
           scored_at: string;
           word_id: string | null;
         };
+        ComputedFields: never;
         Insert: {
           coordinator_id: string;
           id?: string;
@@ -666,6 +737,7 @@ export type Database = {
           unlocked_at: string;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           achievement_code: string;
           id?: string;
@@ -687,6 +759,7 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"];
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -721,6 +794,7 @@ export type Database = {
           win_streak: number;
           xp: number;
         };
+        ComputedFields: never;
         Insert: {
           best_match_score?: number;
           best_streak?: number;
@@ -770,6 +844,7 @@ export type Database = {
           round: number;
           voter_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           definition_id: string;
@@ -821,6 +896,7 @@ export type Database = {
           status: string;
           word: string;
         };
+        ComputedFields: never;
         Insert: {
           category?: string | null;
           classe?: string | null;
@@ -884,7 +960,7 @@ export type Database = {
           build: string | null;
           id: number;
           kind: string;
-          payload: Json;
+          payload: NonNullable<Json>;
           room_hash: string | null;
           session_key: string | null;
         }[];
@@ -965,7 +1041,7 @@ export type Database = {
         Returns: Json;
       };
       claim_player_identity: { Args: { p_player_id: string }; Returns: Json };
-      cleanup_zombie_rooms: { Args: never; Returns: Json };
+      cleanup_zombie_rooms: { Args: Record<PropertyKey, never>; Returns: Json };
       create_room_with_host: {
         Args: {
           p_avatar: string;
@@ -987,7 +1063,7 @@ export type Database = {
           phase_started_at: string | null;
           round_phase_ends_at: string | null;
           status: string;
-          teams: Json;
+          teams: NonNullable<Json>;
           used_word_ids: string[];
           visibility: string;
           win_condition: string;
@@ -1005,7 +1081,7 @@ export type Database = {
       finish_reveal: { Args: { p_room_id: string }; Returns: Json };
       get_app_config: { Args: { p_key: string }; Returns: string };
       get_ballot: { Args: { p_room_id: string }; Returns: Json };
-      get_client_config: { Args: never; Returns: Json };
+      get_client_config: { Args: Record<PropertyKey, never>; Returns: Json };
       get_daily_leaderboard: {
         Args: { p_limit?: number };
         Returns: {
@@ -1015,7 +1091,7 @@ export type Database = {
           user_id: string;
         }[];
       };
-      get_my_daily_review: { Args: never; Returns: Json };
+      get_my_daily_review: { Args: Record<PropertyKey, never>; Returns: Json };
       get_or_create_daily_challenge: {
         Args: { p_date?: string };
         Returns: Json;
@@ -1111,6 +1187,10 @@ export type Database = {
         Args: { _player_id: string; _user_id: string };
         Returns: boolean;
       };
+      is_sessionless_api_call: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
       join_public_room: {
         Args: {
           p_avatar: string;
@@ -1132,7 +1212,7 @@ export type Database = {
           phase_started_at: string | null;
           round_phase_ends_at: string | null;
           status: string;
-          teams: Json;
+          teams: NonNullable<Json>;
           used_word_ids: string[];
           visibility: string;
           win_condition: string;
@@ -1165,6 +1245,7 @@ export type Database = {
         Returns: undefined;
       };
       migrate_host: { Args: { p_room_id: string }; Returns: Json };
+      ops_health_check: { Args: Record<PropertyKey, never>; Returns: Json };
       phase_secs: {
         Args: { p_base: number; p_room_id: string };
         Returns: number;
@@ -1213,7 +1294,7 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string; p_text: string };
         Returns: Json;
       };
-      tick_stalled_rooms: { Args: never; Returns: Json };
+      tick_stalled_rooms: { Args: Record<PropertyKey, never>; Returns: Json };
       xp_to_level: { Args: { p_xp: number }; Returns: number };
     };
     Enums: {
