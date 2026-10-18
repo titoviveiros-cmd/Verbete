@@ -58,6 +58,17 @@ describe("callChat (Gemini via endpoint OpenAI-compatível)", () => {
     ]);
   });
 
+  it("temperatura só vai no corpo quando informada (bots seguem no padrão do modelo)", async () => {
+    const fetchFn = vi.fn(async (_u: string, _i: RequestInit) => ok("{}"));
+    await callChat({ fetchFn, apiKey: "k", messages });
+    await callChat({ fetchFn, apiKey: "k", messages, temperature: 0 });
+    const bodies = fetchFn.mock.calls.map((c) =>
+      JSON.parse(String((c as [string, RequestInit])[1].body)),
+    );
+    expect("temperature" in bodies[0]).toBe(false);
+    expect(bodies[1].temperature).toBe(0);
+  });
+
   it("4xx não transitório (401) não repete", async () => {
     const fetchFn = vi.fn(async () => new Response("nope", { status: 401 }));
     const r = await callChat({ fetchFn, apiKey: "k", messages, backoffMs: 1 });

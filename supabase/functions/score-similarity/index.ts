@@ -1,11 +1,13 @@
 // Edge function: avalia se cada definição "falsa" do jogador é semanticamente
-// equivalente (>= 80%) à definição verdadeira. Usa Gemini Flash (Google AI).
+// equivalente à definição verdadeira — nota pela rubrica compartilhada com o
+// Desafio Diário (_shared/semantic.ts), aprovada com nota >= 80. Gemini.
 // Recebe { room_id, round, candidates: [{id, text}] } e devolve { matches: [id, ...] }.
 // IMPORTANTE: palavra e verdade são buscadas AQUI (service role); o cliente nunca
 // envia a resposta, evitando que ela seja interceptada / usada para cheating.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callChat, exceptionEvent, parseJsonObject, type OpsEvent } from "../_shared/ai.ts";
+import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
+import { judgeCandidates } from "../_shared/semantic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -114,69 +116,41 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) throw new Error("GEMINI_API_KEY missing");
 
-    const list = candidates
-      .map((c: { id: string; text: string }, i: number) => `${i + 1}. [id=${c.id}] "${c.text}"`)
-      .join("\n");
-
-    const system = `Você avalia proximidade semântica entre definições do jogo "Verbete". Seja MUITO GENEROSO: aceite a candidata quando ela aponta para a MESMA ideia geral da verdadeira, ainda que com palavras diferentes, sinônimos, hiperônimos próximos, paráfrase mais ampla ou mais estreita, ou versão resumida. Uma única palavra sinônima CONTA como equivalente. Ignore estilo, ordem, formalidade e completude. Só rejeite quando o sentido for claramente diferente ou se referir a outro conceito.
-
-Exemplos calibrados:
-- verdadeira "falta completa de dinheiro" vs candidata "pobreza" -> APROVA (sinônimo direto)
-- verdadeira "dito espirituoso, gracejo" vs candidata "comentario engracado" -> APROVA (mesma ideia)
-- verdadeira "desse modo, assim sendo" vs candidata "por conseguinte" -> APROVA (conectivos sinônimos — apontam para a mesma função)
-- verdadeira "conversa fiada, papo furado" vs candidata "conversa informal, inutil" -> APROVA (mesma ideia com adjetivos diferentes)
-- verdadeira "grande confusao" vs candidata "tipo de dança do interior" -> REJEITA (conceito diferente)
-
-Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdown.`;
-    const user = `Palavra: ${word}\nDefinição verdadeira: ${truth}\n\nCandidatas:\n${list}\n\nRetorne os ids semanticamente próximos (seja generoso com sinônimos e paráfrases).`;
-
     // flash-lite: pool de quota gratuita separado e maior — o flash comum
     // estourou o free tier no playtest e TODAS as rodadas perderam o bônus
-    // silenciosamente (429 -> matches vazio). Agora: timeout de 8s por
-    // tentativa, 1 nova tentativa em falha transitória e evento de erro
-    // (alerta no /admin/ops e no webhook) quando o julgamento não acontece.
-    const chat = await callChat({
+    // silenciosamente (429 -> matches vazio). Timeout de 8s por tentativa,
+    // 1 nova tentativa em falha transitória e evento de erro (alerta no
+    // /admin/ops e no webhook) quando o julgamento não acontece.
+    const judged = await judgeCandidates({
       fetchFn: fetch,
       apiKey,
       url: Deno.env.get("GEMINI_CHAT_URL"),
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      word,
+      truth,
+      candidates,
     });
-    if (!chat.ok) {
-      console.error("AI gateway error", chat.reason, chat.status ?? "");
+    if (!judged.ok) {
+      console.error("AI gateway error", judged.reason, judged.status ?? "");
       await logEvent(admin, {
         kind: "judge_ai_error",
         payload: {
           fn: "score-similarity",
-          reason: chat.reason,
-          ...(chat.status ? { status: chat.status } : {}),
+          reason: judged.reason,
+          ...(judged.status ? { status: judged.status } : {}),
           candidates: candidates.length,
-          attempts: chat.attempts,
+          attempts: judged.attempts,
           latency_ms: Date.now() - t0,
         },
       });
-      return json({ matches: [], error: chat.status ? `ai_${chat.status}` : `ai_${chat.reason}` });
+      const error =
+        judged.reason === "invalid_response"
+          ? "ai_invalid_response"
+          : judged.status
+            ? `ai_${judged.status}`
+            : `ai_${judged.reason}`;
+      return json({ matches: [], error });
     }
-
-    const parsed = parseJsonObject(chat.content);
-    const rawMatches = parsed?.matches;
-    if (!Array.isArray(rawMatches)) {
-      await logEvent(admin, {
-        kind: "judge_ai_error",
-        payload: {
-          fn: "score-similarity",
-          reason: "invalid_response",
-          candidates: candidates.length,
-          attempts: chat.attempts,
-          latency_ms: Date.now() - t0,
-        },
-      });
-      return json({ matches: [], error: "ai_invalid_response" });
-    }
-    const validIds = new Set(candidates.map((c: { id: string }) => c.id));
-    const matches = rawMatches.map(String).filter((id) => validIds.has(id));
+    const matches = judged.matches;
 
     // Aplica o bônus (near_truth=true + score+3) direto no banco via RPC
     // SECURITY DEFINER, service-role only. Idempotente e presa à sala/rodada
@@ -196,7 +170,8 @@ Devolva APENAS JSON {"matches": ["<id>", ...]} com os ids aprovados, sem markdow
         fn: "score-similarity",
         candidates: candidates.length,
         matched: matches.length,
-        attempts: chat.attempts,
+        max_score: Math.max(-1, ...judged.scores.values()),
+        attempts: judged.attempts,
         latency_ms: Date.now() - t0,
       },
     });

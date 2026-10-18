@@ -68,11 +68,14 @@ const stub = http.createServer((req, res) => {
     if (/lexic[oó]grafo/i.test(sys)) {
       content = JSON.stringify({ definitions: botDefs });
     } else {
-      // juiz: aprova as candidatas cujo texto REAL contém "QUASE"
-      const ids = [...user.matchAll(/\[id=([^\]]+)\] "([^"]*)"/g)]
-        .filter((m) => /quase/i.test(m[2]))
-        .map((m) => m[1]);
-      content = JSON.stringify({ matches: ids });
+      // juiz (rubrica compartilhada): nota 95 para o texto REAL com "QUASE",
+      // 10 para o resto — a edge aprova só nota >= 80
+      const json = user.match(/Candidatas \(JSON\): (\[.*\])\s*$/s)?.[1] ?? "[]";
+      const scores = JSON.parse(json).map((c) => ({
+        id: c.id,
+        score: /quase/i.test(c.texto) ? 95 : 10,
+      }));
+      content = JSON.stringify({ scores });
     }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ choices: [{ message: { content } }] }));
@@ -336,7 +339,7 @@ try {
     );
     check(
       "a definição verdadeira nunca entra como candidata",
-      !judged.includes(`[id=${a.truth}]`),
+      !judged.includes(a.truth),
     );
 
     r = await callEdge({
