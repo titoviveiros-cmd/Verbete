@@ -1263,6 +1263,10 @@ export type Database = {
       };
       reset_room: { Args: { p_room_id: string }; Returns: undefined };
       reset_user_stats: { Args: { p_user_id: string }; Returns: undefined };
+      room_last_human_activity: {
+        Args: { p_room_id: string };
+        Returns: string;
+      };
       send_reaction: {
         Args: { p_emoji: string; p_player_id: string; p_room_id: string };
         Returns: Json;
