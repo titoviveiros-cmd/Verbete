@@ -599,6 +599,7 @@ export type Database = {
           current_coordinator: string | null;
           current_round: number;
           current_word_id: string | null;
+          finish_reason: string | null;
           host_id: string;
           id: string;
           mode: string;
@@ -620,6 +621,7 @@ export type Database = {
           current_coordinator?: string | null;
           current_round?: number;
           current_word_id?: string | null;
+          finish_reason?: string | null;
           host_id: string;
           id?: string;
           mode?: string;
@@ -640,6 +642,7 @@ export type Database = {
           current_coordinator?: string | null;
           current_round?: number;
           current_word_id?: string | null;
+          finish_reason?: string | null;
           host_id?: string;
           id?: string;
           mode?: string;
@@ -1056,6 +1059,7 @@ export type Database = {
           current_coordinator: string | null;
           current_round: number;
           current_word_id: string | null;
+          finish_reason: string | null;
           host_id: string;
           id: string;
           mode: string;
@@ -1205,6 +1209,7 @@ export type Database = {
           current_coordinator: string | null;
           current_round: number;
           current_word_id: string | null;
+          finish_reason: string | null;
           host_id: string;
           id: string;
           mode: string;

@@ -288,7 +288,23 @@ try {
   // -------------------------------------------------------------------------
   console.log("\n— Revanche: reset do host depois da limpeza");
   await expectNotRewardable("R · fase parada", uReset, R, "cleanup_stale");
-  await db.query(`SELECT public.reset_room($1)`, [R.id]);
+  // reset pelo caminho real do cliente: papel authenticated, sessão do host
+  {
+    await db.query("BEGIN");
+    let err = null;
+    try {
+      await db.query(`SET LOCAL ROLE authenticated`);
+      await db.query(`SELECT set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: uReset, role: "authenticated" }),
+      ]);
+      await db.query(`SELECT public.reset_room($1)`, [R.id]);
+      await db.query("COMMIT");
+    } catch (e) {
+      err = e;
+      await db.query("ROLLBACK");
+    }
+    check("host reseta a sala encerrada pela limpeza (RPC como jogador)", !err, err ? `${err.code} ${err.message}` : "");
+  }
   const afterReset = await roomState(R.id);
   check("reset limpa o motivo (lobby sem marca)", afterReset.status === "lobby" && afterReset.reason === null, short(afterReset));
   const lobbyCall = await callAs(db, uReset, "record_match_result", R.code);
@@ -469,6 +485,45 @@ try {
       fns.filter((f) => NATURAL.includes(f.fn)).every((f) => f.marks === 0),
       short(fns.filter((f) => NATURAL.includes(f.fn))),
     );
+  }
+
+  // -------------------------------------------------------------------------
+  console.log("\n— K. Reversão (ensaio dentro de transação: aplica, confere e desfaz)");
+  {
+    const sql = readFileSync("supabase/rollback/p2_finish_reason.sql", "utf8");
+    await db.query("BEGIN");
+    try {
+      await db.query(sql);
+      const st = await row(
+        `SELECT (SELECT count(*)::int FROM information_schema.columns
+                  WHERE table_schema = 'public' AND table_name = 'rooms' AND column_name = 'finish_reason') AS col,
+                (SELECT count(*)::int FROM pg_trigger WHERE tgname = 'rooms_clear_finish_reason') AS trg,
+                (SELECT prosrc ~ 'finish_reason' FROM pg_proc WHERE oid = 'public.cleanup_zombie_rooms()'::regprocedure) AS cz_marca,
+                (SELECT prosrc ~ 'room_last_human_activity' FROM pg_proc WHERE oid = 'public.cleanup_zombie_rooms()'::regprocedure) AS cz_r4,
+                (SELECT prosrc FROM pg_proc WHERE oid = 'public.record_match_result(text)'::regprocedure)
+                  = (SELECT prosrc FROM pg_proc WHERE oid = 'public.__p2_ref_record_match_result(text)'::regprocedure) AS rmr_anterior`,
+      );
+      check(
+        "reversão: sai coluna e gatilho; cleanup volta à v3 (com R4, sem motivo); pódio idêntico à versão anterior",
+        st.col === 0 && st.trg === 0 && st.cz_marca === false && st.cz_r4 === true && st.rmr_anterior === true,
+        short(st),
+      );
+      // comportamento antigo de volta: o lobby abandonado volta a pagar
+      await db.query(`SELECT set_config('request.jwt.claims', $1, true)`, [
+        JSON.stringify({ sub: uC, role: "authenticated" }),
+      ]);
+      const old = (await row(`SELECT public.record_match_result($1) AS r`, [C.code])).r;
+      check("reversão: comportamento anterior volta (P2 reaparece)", old?.ok === true && old?.xp_gained > 0, short(old));
+    } finally {
+      await db.query("ROLLBACK");
+    }
+    const back = await row(
+      `SELECT (SELECT count(*)::int FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'rooms' AND column_name = 'finish_reason') AS col,
+              (SELECT count(*)::int FROM public.match_history WHERE user_id = $1) AS hist_c`,
+      [uC],
+    );
+    check("ensaio desfeito: correção do P2 segue no lugar e nada foi gravado", back.col === 1 && back.hist_c === 0, short(back));
   }
 } finally {
   await db.query(`DELETE FROM public.rooms WHERE id = ANY($1)`, [rooms]);
