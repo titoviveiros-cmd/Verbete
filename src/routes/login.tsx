@@ -1,4 +1,10 @@
 import { APP_URL } from "@/lib/app-url";
+import { getAuthRedirectUrl, IS_NATIVE_BUILD } from "@/lib/auth-redirect";
+import {
+  AUTH_CALLBACK_EVENT,
+  takePendingAuthError,
+  type AuthCallbackResult,
+} from "@/lib/native-auth";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +51,38 @@ function LoginPage() {
       nav({ to: "/profile" });
   }, [user]);
 
+  // App nativo: o login do Google acontece no navegador externo e volta pelo
+  // esquema próprio (native-auth.ts). Erro do retorno aparece aqui; voltar ao
+  // app sem concluir (cancelou/fechou o navegador) destrava o botão.
+  useEffect(() => {
+    if (!IS_NATIVE_BUILD) return;
+    const pending = takePendingAuthError();
+    if (pending) setError(pending);
+    const onCallback = (e: Event) => {
+      const r = (e as CustomEvent<AuthCallbackResult>).detail;
+      if (!r.ok) {
+        takePendingAuthError();
+        setError(r.error);
+      }
+      setBusy(false);
+    };
+    window.addEventListener(AUTH_CALLBACK_EVENT, onCallback);
+    let removeResume: (() => void) | undefined;
+    let disposed = false;
+    void import("@capacitor/app")
+      .then(({ App }) => App.addListener("resume", () => setBusy(false)))
+      .then((h) => {
+        if (disposed) void h.remove();
+        else removeResume = () => void h.remove();
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      window.removeEventListener(AUTH_CALLBACK_EVENT, onCallback);
+      removeResume?.();
+    };
+  }, []);
+
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -56,7 +94,7 @@ function LoginPage() {
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: getAuthRedirectUrl(),
             data: { display_name: displayName || email.split("@")[0] },
           },
         });
@@ -85,10 +123,12 @@ function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: getAuthRedirectUrl() },
       });
       if (error) throw error;
-      // O navegador navega para o Google — sem reset de busy aqui.
+      // O navegador navega para o Google — sem reset de busy aqui. No app
+      // nativo o Capacitor abre o navegador externo (Google não aceita login
+      // dentro de WebView) e o botão destrava no retorno ao app.
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

@@ -2,6 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import { reportOpsEvent } from "@/lib/ops";
+import { IS_NATIVE_BUILD } from "@/lib/auth-redirect";
 
 // Fase 8: fetch instrumentado — qualquer RPC que falhe no transporte (rede)
 // ou com 5xx vira evento rpc_failure, sem tocar nos call sites. 4xx são
@@ -54,6 +55,10 @@ function createSupabaseClient() {
       storage: typeof window !== "undefined" ? localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
+      // App nativo: PKCE — o retorno pelo esquema próprio (que outro app
+      // poderia registrar) traz só um código, inútil sem o verificador que
+      // fica guardado neste app. Web segue implícito, sem mudança.
+      flowType: IS_NATIVE_BUILD ? "pkce" : "implicit",
     },
     global: { fetch: opsFetch },
   });
