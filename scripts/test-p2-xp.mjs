@@ -440,14 +440,19 @@ try {
     await cA.connect();
     await cB.connect();
     try {
+      // o usuário já nasce com user_stats zerado: compara com o antes
+      const before = await snap(db, uRace);
       const [ra, rb] = await Promise.all([
         callAs(cA, uRace, "record_match_result", X.code),
         callAs(cB, uRace, "record_match_result", X.code),
       ]);
       const after = await snap(db, uRace);
       check(
-        "J · sala da limpeza: duas chamadas simultâneas, nenhuma paga",
-        ra.res?.reason === "match_not_rewardable" && rb.res?.reason === "match_not_rewardable" && after.history === 0 && after.stats === null,
+        "J · sala da limpeza: duas chamadas simultâneas, nenhuma paga e nada muda",
+        ra.res?.reason === "match_not_rewardable" &&
+          rb.res?.reason === "match_not_rewardable" &&
+          after.history === 0 &&
+          same(before, after),
         `a=${short(ra.res ?? ra.error)} b=${short(rb.res ?? rb.error)} hist=${after.history}`,
       );
     } finally {
