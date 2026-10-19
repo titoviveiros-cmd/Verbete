@@ -36,7 +36,11 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
   if (!ok) fails++;
 };
-const short = (x) => String(x ?? "").slice(0, 140);
+// Log do CI é público: valores de token/código saem como "…" (só o formato importa).
+const short = (x) =>
+  String(x ?? "")
+    .replace(/((?:access_token|refresh_token|provider_token|token|code)=)[^&#\s]+/g, "$1…")
+    .slice(0, 140);
 const mem = () => {
   const m = new Map();
   return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k) };
