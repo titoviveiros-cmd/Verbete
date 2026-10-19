@@ -16,6 +16,7 @@
 // inatividade é reconferida depois de travar.
 // Envs: DB_URL.
 import pg from "pg";
+import { readFileSync } from "node:fs";
 
 const { DB_URL } = process.env;
 const ssl = /supabase\.co/.test(DB_URL ?? "") ? { rejectUnauthorized: false } : false;
@@ -297,6 +298,24 @@ console.log("\n— G. REGRESSÃO: regras da v2 seguem valendo");
   check("v2: fase parada há 40 min (prazo rearmado) segue sendo encerrada", (await statusOf(stale.id)) === "finished", short(res));
   check("v2: lobby com entrada há 5 min segue aberto", (await statusOf(lobbyAtivo.id)) === "lobby");
   check("retorno informa as salas encerradas pela R4", res && "finished_idle" in res, short(res));
+}
+
+console.log("\n— H. ROLLBACK: volta para a v2 e restaura a R4");
+{
+  const migration = readFileSync("supabase/migrations/20261019002735_cleanup_zombie_rooms_r4.sql", "utf8");
+  await db.query(readFileSync("supabase/rollback/cleanup_zombie_rooms_v2.sql", "utf8"));
+  const afterRollback = await cleanup();
+  const helper = await row(`SELECT to_regprocedure('public.room_last_human_activity(uuid)') AS f`);
+  const loop = await mkLoopRoom();
+  await cleanup();
+  check(
+    "rollback: cleanup volta à v2 (sem R4) e a função auxiliar sai",
+    !("finished_idle" in (afterRollback ?? {})) && helper.f === null && (await statusOf(loop.id)) === "voting",
+    short(afterRollback),
+  );
+  await db.query(migration); // restaura a R4 para as próximas suítes
+  await cleanup();
+  check("R4 reaplicada encerra a sala em laço de novo", (await statusOf(loop.id)) === "finished");
 }
 
 // ---------------------------------------------------------------------------
