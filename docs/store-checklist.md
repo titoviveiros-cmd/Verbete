@@ -132,6 +132,29 @@ intacto). Fluxo 100% funcional.
 Login Apple: só quando houver conta Apple Developer (US$ 99/ano) — fica para
 a versão iOS.
 
+### 4a. Login no app Android (Google e confirmação de e-mail)
+
+O WebView do app roda em `https://localhost` — essa origem não serve de
+retorno (fora do WebView ela não existe, e o Supabase a descarta e manda o
+navegador para a URL do site, deixando a sessão no navegador e não no app).
+O app volta por `app.verbete.game://auth/callback` (esquema próprio =
+`custom_url_scheme` do `strings.xml`, intent-filter no Manifest), em PKCE: o
+retorno traz só um código, que vira sessão com o verificador guardado no
+próprio app. Código: `src/lib/auth-redirect.ts` e `src/lib/native-auth.ts`.
+
+**Configuração externa necessária (uma vez):**
+
+- **Supabase** → Authentication → URL Configuration → *Redirect URLs*:
+  adicionar `app.verbete.game://auth/callback` (manter as duas URLs do
+  site que já estão lá). Sem isso o login do app volta para o site.
+- **Google Cloud:** nada muda — o Google só fala com o Supabase
+  (`https://<projeto>.supabase.co/auth/v1/callback`, já cadastrado).
+- **Android:** nada a configurar — esquema `app.verbete.game` já no Manifest.
+
+Teste no aparelho (depois da URL acima): instalar o APK, tocar "Entrar com
+Google", escolher a conta, voltar ao Verbete já no Perfil; fechar e reabrir o
+app (continua logado); "Sair" volta ao modo convidado.
+
 ## 5. iOS (futuro)
 
 Exige Mac ou CI com macOS + conta Apple Developer. O projeto Capacitor iOS já
