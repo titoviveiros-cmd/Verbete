@@ -303,6 +303,8 @@ console.log("\n— G. REGRESSÃO: regras da v2 seguem valendo");
 console.log("\n— H. ROLLBACK: volta para a v2 e restaura a R4");
 {
   const migration = readFileSync("supabase/migrations/20261019002735_cleanup_zombie_rooms_r4.sql", "utf8");
+  // versão que as migrations deixaram (pode ser posterior à R4, ex.: P2)
+  const current = (await row(`SELECT pg_get_functiondef('public.cleanup_zombie_rooms()'::regprocedure) AS d`)).d;
   await db.query(readFileSync("supabase/rollback/cleanup_zombie_rooms_v2.sql", "utf8"));
   const afterRollback = await cleanup();
   const helper = await row(`SELECT to_regprocedure('public.room_last_human_activity(uuid)') AS f`);
@@ -313,9 +315,10 @@ console.log("\n— H. ROLLBACK: volta para a v2 e restaura a R4");
     !("finished_idle" in (afterRollback ?? {})) && helper.f === null && (await statusOf(loop.id)) === "voting",
     short(afterRollback),
   );
-  await db.query(migration); // restaura a R4 para as próximas suítes
+  await db.query(migration); // reaplica a R4 (volta a função auxiliar)
   await cleanup();
   check("R4 reaplicada encerra a sala em laço de novo", (await statusOf(loop.id)) === "finished");
+  await db.query(current); // e devolve às próximas suítes a versão das migrations
 }
 
 // ---------------------------------------------------------------------------
