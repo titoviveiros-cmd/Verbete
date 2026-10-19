@@ -68,7 +68,13 @@ await db.query(
   [zombie],
 );
 const t1 = (await row(`SELECT public.tick_stalled_rooms() AS t`)).t;
-check("sala-zumbi sem palavra elegível continua em choosing", (await statusOf(zombie)) === "choosing");
+// Desde a migration 20261018234149 (cleanup_zombie_rooms v2), o cleanup que
+// roda dentro do tick mede a idade pelo início da fase: 40 min parada → encerra
+// (antes, com a regra v1, ela ficava em choosing para sempre).
+check(
+  "sala-zumbi sem palavra elegível (fase parada há 40 min) é encerrada pelo cleanup v2",
+  (await statusOf(zombie)) === "finished",
+);
 check(
   "e NÃO é contada como avanço",
   !(t1.advanced > 0 && (await row(

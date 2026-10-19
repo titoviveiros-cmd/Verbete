@@ -75,7 +75,9 @@ if (PROBE_DB === "linked" || PROBE_DB === "local") {
 
 console.log("— Catálogo (somente leitura)");
 const mig = await q(
-  `SELECT version FROM supabase_migrations.schema_migrations WHERE version >= '20261003000000' ORDER BY version`,
+  // Só a janela do M1 (03/10): migrations posteriores (ex.: cleanup v2, 18/10)
+  // não fazem parte desta sonda.
+  `SELECT version FROM supabase_migrations.schema_migrations WHERE version BETWEEN '20261003000000' AND '20261003999999' ORDER BY version`,
 );
 check("5 migrations do M1 aplicadas", mig.length === 5, mig.map((m) => m.version).join(", "));
 const svc = await q(`
