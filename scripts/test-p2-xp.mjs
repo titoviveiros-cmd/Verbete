@@ -371,9 +371,10 @@ try {
       return e.code;
     }
   };
+  const L = await mkRoom(uA, { status: "lobby", round: 0, game: false }); // sala viva, não 'finished'
   check(
     "CHECK: motivo só em sala finished",
-    (await bad(`UPDATE public.rooms SET finish_reason = 'cleanup_idle' WHERE id = $1`, [R.id])) === "23514",
+    (await bad(`UPDATE public.rooms SET finish_reason = 'cleanup_idle' WHERE id = $1`, [L.id])) === "23514",
   );
   check(
     "CHECK: só motivos da limpeza (valor inventado recusado)",
