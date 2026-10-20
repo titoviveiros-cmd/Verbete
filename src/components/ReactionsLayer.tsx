@@ -177,13 +177,15 @@ export const ReactionsLayer = memo(function ReactionsLayer({
               paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
             }}
           >
-            <div className="glass-tile mx-auto max-w-[26rem] !bg-[var(--c-surface)]/90 rounded-full px-2 py-1.5 flex items-center justify-between gap-1">
+            {/* ≤380px (Android 360×800): 8 botões de 40px não cabiam — o 👀
+                saía cortado em todas as fases. Abaixo disso, 36px e gap menor. */}
+            <div className="glass-tile mx-auto max-w-[26rem] !bg-[var(--c-surface)]/90 rounded-full px-2 max-[380px]:px-1.5 py-1.5 flex items-center justify-between gap-1 max-[380px]:gap-0.5">
               {EMOJIS.map((e) => (
                 <motion.button
                   key={e}
                   whileTap={{ scale: 0.8 }}
                   onClick={() => send(e)}
-                  className="flex-1 aspect-square min-w-10 min-h-10 max-h-12 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 flex items-center justify-center transition-colors"
+                  className="flex-1 aspect-square min-w-10 min-h-10 max-[380px]:min-w-9 max-[380px]:min-h-9 max-h-12 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 flex items-center justify-center transition-colors"
                   aria-label={`Enviar ${e}`}
                 >
                   <motion.span

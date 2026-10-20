@@ -21,6 +21,7 @@ import {
 } from "./fixtures";
 
 const ALL_VIEWPORTS = [
+  [360, 800],
   [375, 812],
   [390, 844],
   [430, 932],
@@ -154,12 +155,15 @@ const SCREENS: Screen[] = [
     await page.waitForTimeout(1200);
   }),
   room("reveal", async (page) => {
+    // Verdade primeiro (~0,5 s); a captura espera o estado FINAL — todos os
+    // blefes revelados e a contagem para o placar — para checar o layout cheio.
     await expect(
       page.getByText("A definição verdadeira", { exact: false }).first(),
-    ).toBeVisible({
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("📊 Placar em").first()).toBeVisible({
       timeout: 25_000,
     });
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(1200);
   }),
   room("scoreboard", async (page) => {
     await expect(
