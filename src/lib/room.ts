@@ -690,6 +690,7 @@ export async function botSubmitDefinitions(
   round: number,
   bots: Player[],
   word?: Word | null,
+  opts: { hurry?: PromiseLike<unknown> } = {},
 ) {
   if (bots.length === 0) return;
   // Sem pausa artificial depois da IA: os bots enviam assim que ela responde.
@@ -705,7 +706,7 @@ export async function botSubmitDefinitions(
   const personas = bots.map((b, i) => personaFor(b, i));
   if (word) {
     try {
-      const { data } = await supabase.functions.invoke("bot-definitions", {
+      const call = supabase.functions.invoke("bot-definitions", {
         // memória por rodada: cédulas de bot nunca repetem sugestões já
         // mostradas a jogadores (vazava que a alternativa era falsa)
         body: {
@@ -716,7 +717,19 @@ export async function botSubmitDefinitions(
           round,
         },
       });
-      const arr = (data as any)?.definitions;
+      // A mesa já escreveu e a IA estourou o prazo de graça: segue com o
+      // reserva local — não espera o timeout + nova tentativa (~19 s).
+      const res = opts.hurry
+        ? await Promise.race([
+            call,
+            Promise.resolve(opts.hurry).then(() => null),
+          ])
+        : await call;
+      if (res === null)
+        console.warn(
+          "bot-definitions: mesa pronta antes da IA — reserva local",
+        );
+      const arr = (res?.data as { definitions?: unknown } | null)?.definitions;
       if (Array.isArray(arr))
         aiDefs = arr.filter((s) => typeof s === "string" && s.length > 5);
     } catch (e) {
@@ -938,6 +951,12 @@ export async function castVote(
 
 /** Piso do envio dos bots na escrita, contado do início da chamada. */
 export const BOT_WRITE_MIN_MS = 1500;
+/**
+ * Quanto a mesa espera a IA dos bots DEPOIS que todos os humanos já
+ * escreveram. A IA responde em ~3–5 s na maioria das vezes; o prazo cobre
+ * isso e corta só a cauda (timeouts de ~19 s medidos em 2026-10-20).
+ */
+export const BOT_AI_GRACE_MS = 6000;
 
 export type BotVoteHandle = {
   /** Vota já (todos os humanos já votaram: ninguém deve esperar o bot). */

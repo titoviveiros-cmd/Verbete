@@ -240,6 +240,49 @@ describe("botSubmitDefinitions — sem pausa artificial depois da IA", () => {
     ).toEqual(["b1", "b2"]);
   });
 
+  it("mesa pronta e IA presa: no fim do prazo os bots seguem com o reserva local", async () => {
+    vi.useFakeTimers();
+    let hurry!: () => void;
+    const prazo = new Promise<void>((r) => (hurry = r));
+    void botSubmitDefinitions("room-1", 2, [bot("b1"), bot("b2")], word, {
+      hurry: prazo,
+    });
+    await tick();
+    expect(named("edge:bot-definitions")).toHaveLength(1); // nunca responde
+    vi.advanceTimersByTime(6000);
+    hurry();
+    await tick();
+    vi.advanceTimersByTime(0);
+    await settle();
+    const sent = named("rpc:submit_bot_definitions_bulk");
+    expect(sent).toHaveLength(1);
+    const rows = (sent[0]!.args as { p_rows: Array<{ text: string }> }).p_rows;
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.text)).size).toBe(2); // sem repetição
+  });
+
+  it("IA responde antes do prazo: os bots usam o texto da IA", async () => {
+    vi.useFakeTimers();
+    const prazo = new Promise<void>(() => {});
+    void botSubmitDefinitions("room-1", 2, [bot("b1")], word, {
+      hurry: prazo,
+    });
+    await tick();
+    vi.advanceTimersByTime(2000);
+    named("edge:bot-definitions")[0]!.resolve({
+      data: { definitions: ["pequeno instrumento de sopro usado em festas"] },
+    });
+    await tick();
+    vi.advanceTimersByTime(0);
+    await settle();
+    const rows = (
+      named("rpc:submit_bot_definitions_bulk")[0]!.args as {
+        p_rows: Array<{ text: string }>;
+      }
+    ).p_rows;
+    expect(rows[0]!.text).toContain("instrumento de sopro");
+  });
+
   it("IA rápida (0,2 s): espera só até o piso desde o início da escrita", async () => {
     vi.useFakeTimers();
     void botSubmitDefinitions("room-1", 2, [bot("b1")], word);

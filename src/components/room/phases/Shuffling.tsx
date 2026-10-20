@@ -8,11 +8,13 @@ import { VerbeteTile } from "@/components/VerbeteLogo";
 // por ~2 s antes de a votação abrir. Antes o host abria a votação em 0,4 s e
 // a tela passava rápido demais: 0,7–1,7 s medidos numa partida real, o
 // convidado às vezes só via 0,7 s (playtest 2026-10-20). Calibrado pela
-// medição: a tela fica o hold + ~0,6–1,4 s (RPC, tempo real e a saída
-// animada) — com 1,8 s ficava 2,4–3,2 s; com 1,2 s, ~1,8–2,6 s. O prazo da
+// medição: a tela fica o hold + ~0,4–1,0 s (RPC, tempo real e a saída
+// animada; o convidado recebe a fase um pouco depois do host) — com 1,8 s
+// ficava 2,4–3,2 s; com 1,2 s, host 2,0–2,2 s e convidado 1,6–1,7 s; com
+// 1,4 s, os dois na faixa pedida (1,8–2,5 s). O prazo da
 // votação é do servidor e só começa quando ela abre (advance_writing_to_
 // voting), igual para todos; os convidados só cobrem a falta do host.
-export const SHUFFLE_HOLD_MS = 1200;
+export const SHUFFLE_HOLD_MS = 1400;
 export const SHUFFLE_GUEST_FALLBACK_MS = SHUFFLE_HOLD_MS + 1800;
 // Um ciclo completo da coreografia (leque → troca → monte) cabe no tempo
 // em que a tela fica visível (o hold + a ida e volta da votação ao banco).

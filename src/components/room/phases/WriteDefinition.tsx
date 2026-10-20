@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   botSubmitDefinitions,
+  BOT_AI_GRACE_MS,
   generateAiDefinitionForPlayer,
   startShuffling,
   submitDefinition,
@@ -142,6 +143,23 @@ export function WriteDefinition({
   );
   const allSubmitted = submittedCount >= writers.length;
 
+  // Prazo da IA dos bots: com todos os humanos já escritos, a IA tem no
+  // máximo BOT_AI_GRACE_MS a mais; depois os bots seguem com o reserva
+  // local. Medido em 2026-10-20: a IA levou até ~19 s (timeout + nova
+  // tentativa) e a mesa ficava parada esperando os bots.
+  const hurry = useRef<{ promise: Promise<void>; resolve: () => void }>(null);
+  if (!hurry.current) {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    hurry.current = { promise, resolve };
+  }
+  const humansWriting = pending.some((p) => !p.is_bot);
+  useEffect(() => {
+    if (humansWriting) return;
+    const t = setTimeout(() => hurry.current?.resolve(), BOT_AI_GRACE_MS);
+    return () => clearTimeout(t);
+  }, [humansWriting]);
+
   const botsTriggeredRef = useRef(false);
   useEffect(() => {
     if (!isHost) return;
@@ -149,7 +167,9 @@ export function WriteDefinition({
     const bots = writers.filter((p) => p.is_bot);
     if (bots.length) {
       botsTriggeredRef.current = true;
-      botSubmitDefinitions(room.id, room.current_round, bots, word);
+      botSubmitDefinitions(room.id, room.current_round, bots, word, {
+        hurry: hurry.current?.promise,
+      });
     }
   }, [isHost, room.id, room.current_round, writers]);
 
