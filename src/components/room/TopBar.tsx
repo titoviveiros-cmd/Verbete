@@ -53,19 +53,21 @@ export function TopBar({
     setTimeout(() => setSpinning(false), 700);
   };
   const btn =
-    "glass-tile shrink-0 text-sm w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition hover:brightness-110 active:translate-y-px";
+    "glass-tile shrink-0 text-sm w-8 h-8 max-[380px]:w-[30px] max-[380px]:h-[30px] sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition hover:brightness-110 active:translate-y-px";
   return (
-    <div className="flex items-center justify-between mb-3 gap-2 lg:mb-4">
+    // Uma linha só até 360px (playtest 2026-10-20, 2ª rodada): em 360 os
+    // ícones quebravam para uma 2ª linha e o topo congelava ~90px.
+    <div className="flex items-center justify-between mb-3 max-[380px]:mb-2 gap-2 max-[380px]:gap-1.5 lg:mb-4">
       <div className="shrink-0">
         <p className="eyebrow">Código</p>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <p className="font-display text-[22px] lg:text-[26px] tracking-[0.22em] text-sun leading-none tabular-nums">
+          <p className="font-display text-[22px] lg:text-[26px] tracking-[0.22em] max-[380px]:tracking-[0.12em] text-sun leading-none tabular-nums">
             {code}
           </p>
           <LatencyIndicator code={code} />
         </div>
       </div>
-      <div className="flex-1 min-w-0 flex flex-wrap items-center justify-end gap-1.5">
+      <div className="flex-1 min-w-0 flex flex-wrap items-center justify-end gap-1.5 max-[380px]:gap-1">
         <button
           onClick={() => setShowLeave(true)}
           className={btn}

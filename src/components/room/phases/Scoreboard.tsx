@@ -335,20 +335,8 @@ function ScoreboardImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden ring-room"
+      className="flex-1 min-h-0 flex flex-col gap-1.5 overflow-x-hidden ring-room"
     >
-      <div className="shrink-0">
-        <p className="eyebrow text-center">Rodada {room.current_round}</p>
-        <h2 className="font-display text-[40px] lg:text-[48px] text-center leading-tight flex items-center justify-center gap-2.5">
-          <span className="text-gold-grad">Placar</span>{" "}
-          <TrophyIcon size={38} />
-        </h2>
-        <p className="text-center text-base text-muted-foreground">
-          {sortedTeams.length > 0
-            ? "Pontuação por equipe e por jogador:"
-            : "Como cada um pontuou:"}
-        </p>
-      </div>
       <div
         // Região rolável alcançável pelo teclado (axe: scrollable-region-focusable).
         tabIndex={0}
@@ -358,6 +346,20 @@ function ScoreboardImpl({
         // respiro do anel dourado do 1º lugar (saía aparado nas laterais)
         style={scrollbarClip(undefined, RING_GUTTER)}
       >
+        {/* Cabeçalho DENTRO da rolagem (playtest 2026-10-20): congelado no
+            topo ele tomava ~120px da leitura do placar no celular. */}
+        <div className="lg:col-span-2 pb-1">
+          <p className="eyebrow text-center">Rodada {room.current_round}</p>
+          <h2 className="font-display text-[40px] lg:text-[48px] text-center leading-tight flex items-center justify-center gap-2.5">
+            <span className="text-gold-grad">Placar</span>{" "}
+            <TrophyIcon size={38} />
+          </h2>
+          <p className="text-center text-base text-muted-foreground">
+            {sortedTeams.length > 0
+              ? "Pontuação por equipe e por jogador:"
+              : "Como cada um pontuou:"}
+          </p>
+        </div>
         {sortedTeams.length > 0 && (
           <div className="sticker py-3">
             <p className="font-display text-sm uppercase tracking-widest text-center opacity-80 mb-2">
@@ -580,21 +582,20 @@ function ScoreboardImpl({
           );
         })}
       </div>
-      {/* Rodapé na faixa do 💬/▾ (.float-lane): a lista termina antes dela
-          e o botão fica centrado fora da coluna. "Próxima rodada" com tamanho
-          de botão — era text-2xl esticado na largura toda e saía cortado
-          (playtest 2026-10-20). */}
+      {/* Rodapé fino: "Próxima rodada" importante, mas do tamanho de um
+          botão — a área de leitura do placar vem primeiro (playtest
+          2026-10-20, 2ª rodada de ajustes). */}
       {!embedded && (
-        <div className="float-lane shrink-0 flex items-center justify-center">
+        <div className="shrink-0 flex items-center justify-center pt-1">
           {isHost ? (
             <button
               onClick={() => nextRound(room, players)}
-              className="btn-pop btn-gold w-full max-w-[18rem] lg:w-auto lg:max-w-none lg:min-w-[360px] text-lg max-[359px]:text-base lg:text-2xl px-4 py-3 lg:py-3.5 whitespace-nowrap"
+              className="btn-pop btn-gold w-full max-w-[15rem] lg:w-auto lg:max-w-none lg:min-w-[320px] text-base lg:text-xl !px-5 !py-2.5 lg:!py-3 whitespace-nowrap"
             >
               ▶ Próxima rodada
             </button>
           ) : (
-            <p className="text-center text-muted-foreground font-display">
+            <p className="text-center text-sm text-muted-foreground font-display">
               {holdLeft > 0
                 ? `Lendo o placar… ${holdLeft}s`
                 : "Aguardando o host continuar…"}

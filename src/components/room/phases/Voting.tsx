@@ -504,8 +504,7 @@ function VotingImpl({
                 disabled={hasVoted || isMine}
                 onClick={() => handleVote(d.id)}
                 className={
-                  "sticker relative w-full flex-1 !rounded-2xl !pl-3 !py-3 text-left flex gap-3 items-center transition " +
-                  (isMine ? "!pr-3 " : "!pr-12 ") +
+                  "sticker relative w-full flex-1 !rounded-2xl !pl-3 !py-3 !pr-3 text-left flex gap-3 items-center transition " +
                   (isPicked ? "ring-neon" : "")
                 }
               >
@@ -532,9 +531,11 @@ function VotingImpl({
                 )}
               </motion.button>
               {!isMine && (
+                // Canto superior direito, fora da área de escolha (a cédula
+                // inteira fica livre para o texto e a letra).
                 <div
                   className={
-                    "absolute right-2 top-1/2 -translate-y-1/2 z-10 " +
+                    "absolute -top-2 -right-1.5 z-10 " +
                     (hasVoted && !isPicked ? "opacity-45" : "")
                   }
                 >
@@ -551,28 +552,28 @@ function VotingImpl({
         })}
       </div>
 
-      {/* .float-lane: no celular em pé, este bloco ocupa a faixa do chat e do
-          ▾ — a lista termina acima deles e o 🚩 da última cédula fica livre. */}
-      <div className="float-lane shrink-0 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground font-display px-2">
+      {/* Status da votação numa linha fina (playtest 2026-10-20): a altura
+          fica com as cédulas. */}
+      <div className="shrink-0 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground font-display px-2 pt-0.5">
         <span className="eyebrow tabular-nums">
           {roundVotes.length}/{voters.length} votaram
         </span>
         {pending.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-full">
-            {pending.slice(0, 6).map((p) => (
-              <span key={p.id} className="chip !px-2 !py-0.5">
-                <span className="text-sm leading-none">{p.avatar}</span>
-                <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
-                  {p.nickname}
-                </span>
+          <>
+            <span aria-hidden>·</span>
+            <span>faltam:</span>
+            {pending.slice(0, 6).map((p, i) => (
+              <span key={p.id} className="whitespace-nowrap text-foreground/85">
+                {p.avatar} {p.nickname}
+                {i < Math.min(pending.length, 6) - 1 ? "," : ""}
               </span>
             ))}
             {pending.length > 6 && (
               <span className="opacity-70">+{pending.length - 6}</span>
             )}
-          </div>
+          </>
         ) : (
-          <span className="text-mint">✨ todos votaram!</span>
+          <span className="text-mint">· ✨ todos votaram!</span>
         )}
       </div>
     </motion.div>

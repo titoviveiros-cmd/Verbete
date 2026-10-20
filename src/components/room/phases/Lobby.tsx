@@ -131,9 +131,8 @@ export function Lobby({
   };
 
   // Ação da sala (host: Começar; convidado: aguardando). No desktop fica na
-  // grade, sob os jogadores; no celular e no tablet, no rodapé fixo — na
-  // faixa do 💬/▾ (.float-lane-row): a lista de opções rola acima dele e
-  // nada passa por baixo dos botões flutuantes (playtest 2026-10-20).
+  // grade, sob os jogadores; no celular e no tablet, num rodapé fino e fixo
+  // — a lista de opções rola acima dele (playtest 2026-10-20).
   const action = isHost ? (
     <StartButton
       canStart={canStart}
@@ -144,7 +143,7 @@ export function Lobby({
       teams={teams}
     />
   ) : (
-    <div className="panel text-center text-muted-foreground font-display py-4 text-base">
+    <div className="panel text-center text-muted-foreground font-display py-2.5 text-sm">
       {mode === "teams" &&
         (() => {
           const myTeam = teams.find(
@@ -465,7 +464,7 @@ export function Lobby({
           </Link>
         </div>
       </div>
-      <div className="float-lane-row shrink-0 flex flex-col justify-center pt-2 lg:hidden short:hidden">
+      <div className="shrink-0 flex flex-col justify-center pt-1.5 lg:hidden short:hidden">
         {action}
       </div>
     </motion.div>
@@ -722,7 +721,7 @@ function StartButton({
     <button
       disabled={!allOK || starting}
       onClick={onClick}
-      className="btn-pop btn-gold w-full text-xl max-[389px]:text-lg leading-tight text-balance py-4"
+      className="btn-pop btn-gold w-full text-lg leading-tight text-balance !py-3"
     >
       {label}
     </button>

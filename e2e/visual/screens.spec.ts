@@ -321,8 +321,19 @@ async function checkScreen(page: Page, screen: Screen, w: number, h: number) {
     ).toHaveCount(screen.name.startsWith("finished") ? 1 : 0);
   }
 
-  // Playtest 2026-10-20: corte por contêiner, reticências e a zona de
-  // exclusão do 💬/▾. Antes do blockedButtons, que rola as listas.
+  // Nenhum compartilhamento DURANTE a partida (playtest 2026-10-20, 2ª
+  // rodada): só o convite no lobby e o resultado no fim de jogo.
+  if (
+    /^(choosing|writing|shuffling|voting|reveal|scoreboard)/.test(screen.name)
+  ) {
+    await expect(
+      page.getByRole("button", { name: /Compartilhar/ }),
+      "compartilhar durante a partida",
+    ).toHaveCount(0);
+  }
+
+  // Playtest 2026-10-20: corte por contêiner, reticências e peças fixas
+  // (barra de reações) sobre o conteúdo. Antes do blockedButtons, que rola.
   expect
     .soft(await clippedByAncestors(page), "cortado por contêiner")
     .toEqual([]);
@@ -330,7 +341,7 @@ async function checkScreen(page: Page, screen: Screen, w: number, h: number) {
   expect
     .soft(
       await floatingZoneIntrusions(page),
-      "conteúdo sob o 💬/▾ (zona de exclusão)",
+      "conteúdo sob peça fixa (barra de reações)",
     )
     .toEqual([]);
 

@@ -322,27 +322,31 @@ describe("casos de rodada", () => {
   });
 });
 
-describe("rodapé e compartilhar (playtest 2026-10-20)", () => {
-  it('o compartilhar da revelação é o card DA RODADA — "resultado" só existe no fim de jogo', async () => {
+describe("topo compacto, sem compartilhar (playtest 2026-10-20)", () => {
+  it("nenhum compartilhamento durante a partida — nem da rodada, nem do resultado", async () => {
     mount();
     await tick(12_000); // fim da coreografia
-    expect(
-      screen.getByRole("button", { name: "Compartilhar o card desta rodada" }),
-    ).toBeTruthy();
-    expect(screen.getByText("📸 Compartilhar rodada")).toBeTruthy();
-    expect(screen.queryByText(/Compartilhar resultado/)).toBeNull();
-    expect(screen.queryByText(/Compartilhar replay/)).toBeNull();
+    expect(screen.queryByText(/Compartilhar/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Compartilhar/ })).toBeNull();
   });
 
-  it("o rodapé da faixa do 💬/▾ existe desde o início (a lista não pula quando os botões chegam)", () => {
-    const { container } = mount({ isHost: false });
-    const lane = container.querySelector(".float-lane");
-    expect(lane).toBeTruthy();
-    // a lista que rola termina ANTES do rodapé (irmãos, não aninhados)
-    expect(lane!.contains(region())).toBe(false);
-    expect(region().compareDocumentPosition(lane!)).toBe(
+  it("o Avançar agora do host fica no topo, fora da rolagem, junto da contagem", async () => {
+    mount();
+    await tick(12_000);
+    const btn = screen.getByText("⏭ Avançar agora");
+    expect(region().contains(btn)).toBe(false);
+    expect(btn.compareDocumentPosition(region())).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+    // a contagem mora na mesma linha
+    expect(btn.parentElement!.textContent).toContain("Placar em");
+  });
+
+  it("convidado: sem Avançar; a linha do topo só aparece com a contagem", async () => {
+    mount({ isHost: false });
+    await tick(3_000);
+    expect(screen.queryByText("📊 Placar em")).toBeNull();
+    expect(screen.queryByText("⏭ Avançar agora")).toBeNull();
   });
 });
 

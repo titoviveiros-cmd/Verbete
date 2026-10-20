@@ -439,25 +439,47 @@ function RevealImpl({
         {announcement}
       </p>
 
-      {holdReached && countdown !== null && (
-        <motion.div
-          initial={{ y: -40, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="shrink-0 self-center !rounded-full pl-4 pr-3 py-1.5 panel flex items-center justify-center gap-2.5 max-w-full"
-        >
-          <span className="eyebrow !text-foreground/85">📊 Placar em</span>
-          <motion.span
-            key={countdown}
-            aria-hidden
-            initial={{ scale: 1.4 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.25 }}
-            className="font-display text-3xl text-sun tabular-nums leading-none"
-          >
-            {countdown}
-          </motion.span>
-          <span className="font-display text-sm text-muted-foreground">s</span>
-        </motion.div>
+      {/* Topo compacto, uma linha só: a contagem para o placar e, para o
+          host, o "Avançar agora" — ação secundária, pequena. Sem rodapé:
+          todo o resto rola (playtest 2026-10-20, 2ª rodada de ajustes). */}
+      {((holdReached && countdown !== null) ||
+        (isHost && (truthVisible || holdReached))) && (
+        <div className="shrink-0 flex items-center justify-center gap-2 flex-wrap">
+          {holdReached && countdown !== null && (
+            <motion.div
+              initial={{ y: -12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="!rounded-full pl-3 pr-2.5 py-1 panel flex items-center gap-2"
+            >
+              <span className="eyebrow !text-foreground/85 !text-[10px]">
+                📊 Placar em
+              </span>
+              <motion.span
+                key={countdown}
+                aria-hidden
+                initial={{ scale: 1.4 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.25 }}
+                className="font-display text-xl text-sun tabular-nums leading-none"
+              >
+                {countdown}
+              </motion.span>
+              <span className="font-display text-xs text-muted-foreground">
+                s
+              </span>
+            </motion.div>
+          )}
+          {isHost && (truthVisible || holdReached) && (
+            <button
+              onClick={() => finish(true)}
+              disabled={advancing}
+              className="btn-pop btn-gold !rounded-full !px-3.5 !py-1.5 text-sm font-display whitespace-nowrap disabled:opacity-60"
+              title="Pular a revelação e ir direto ao placar"
+            >
+              {advancing ? "Indo pro placar…" : "⏭ Avançar agora"}
+            </button>
+          )}
+        </div>
       )}
       <div
         // Região rolável alcançável pelo teclado (os botões ficam fora dela).
@@ -702,133 +724,7 @@ function RevealImpl({
           </ol>
         )}
       </div>
-      {/* Ações sempre à vista, fora da rolagem. O rodapé existe desde o
-          início (mesmo vazio): no celular em pé ele ocupa a faixa do 💬 e do
-          ▾ (.float-lane) — a lista termina antes deles e nenhuma carta passa
-          por baixo; os botões ficam centrados fora da coluna. Antes o
-          "Avançar agora" disputava a largura com o replay e saía cortado
-          (playtest 2026-10-20). */}
-      <div className="float-lane shrink-0 flex flex-col min-[640px]:flex-row items-center justify-center gap-2">
-        {holdReached && (
-          <ShareReplayButton
-            room={room}
-            word={word}
-            definitions={definitions}
-            votes={votes}
-            players={players}
-          />
-        )}
-        {isHost && (truthVisible || holdReached) && (
-          <button
-            onClick={() => finish(true)}
-            disabled={advancing}
-            className="btn-pop btn-gold w-full max-w-[17rem] min-[640px]:w-auto px-4 py-2.5 text-base max-[359px]:text-sm font-display whitespace-nowrap disabled:opacity-60"
-            title="Pular a revelação e ir direto ao placar"
-          >
-            {advancing ? "Indo pro placar…" : "⏭ Avançar agora"}
-          </button>
-        )}
-      </div>
     </motion.div>
-  );
-}
-
-function ShareReplayButton({
-  room,
-  word,
-  definitions,
-  votes,
-  players,
-}: {
-  room: Room;
-  word: Word;
-  definitions: Definition[];
-  votes: Vote[];
-  players: Player[];
-}) {
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<null | "shared" | "downloaded" | "error">(
-    null,
-  );
-  const alive = useRef(true);
-  useEffect(
-    () => () => {
-      alive.current = false;
-    },
-    [],
-  );
-  const onShare = async () => {
-    if (busy) return;
-    setBusy(true);
-    const { shareReplayCard } = await import("@/lib/share-replay");
-    const truth = definitions.find((d) => d.player_id === "__truth__");
-    const truthHits = votes
-      .filter((v) => v.definition_id === truth?.id)
-      .map((v) => players.find((p) => p.id === v.voter_id))
-      .filter((p): p is Player => !!p)
-      .map((p) => ({ name: p.nickname, emoji: p.avatar }));
-    const fooled = definitions
-      .filter((d) => d.player_id !== "__truth__")
-      .map((d) => {
-        const author = players.find((p) => p.id === d.player_id);
-        const voters = votes
-          .filter((v) => v.definition_id === d.id)
-          .map((v) => players.find((p) => p.id === v.voter_id))
-          .filter((p): p is Player => !!p)
-          .map((p) => ({ name: p.nickname, emoji: p.avatar }));
-        return author && voters.length > 0
-          ? {
-              author: author.nickname,
-              emoji: author.avatar,
-              voters,
-              text: d.text,
-            }
-          : null;
-      })
-      .filter((x): x is NonNullable<typeof x> => !!x)
-      .sort((a, b) => b.voters.length - a.voters.length);
-
-    const result = await shareReplayCard({
-      word: word.word,
-      truth: truth?.text ?? humanizeMeaning(word.meaning ?? ""),
-      fooled,
-      truthHits,
-      roomCode: room.code,
-    });
-    if (!alive.current) return;
-    setDone(result);
-    setBusy(false);
-    setTimeout(() => {
-      if (alive.current) setDone(null);
-    }, 3500);
-  };
-  // "Compartilhar rodada" (o card DESTA rodada) — não confundir com o
-  // "Compartilhar resultado" da partida, que só existe no fim de jogo. O
-  // retorno aparece no próprio botão: uma linha extra embaixo empurrava o
-  // rodapé e a lista pulava.
-  const label = busy
-    ? "Gerando card…"
-    : done === "shared"
-      ? "✅ Card enviado!"
-      : done === "downloaded"
-        ? "📥 Card baixado!"
-        : done === "error"
-          ? "Não rolou — tenta de novo"
-          : "📸 Compartilhar rodada";
-  return (
-    <>
-      <button
-        onClick={onShare}
-        disabled={busy}
-        aria-label={busy || done ? label : "Compartilhar o card desta rodada"}
-        className="btn-pop btn-violet w-full max-w-[17rem] min-[640px]:w-auto px-4 py-2.5 text-base max-[359px]:text-sm font-display whitespace-nowrap"
-      >
-        {label}
-      </button>
-      <span className="sr-only" role="status" aria-live="polite">
-        {done === "downloaded" ? "Card baixado — manda no zap!" : ""}
-      </span>
-    </>
   );
 }
 

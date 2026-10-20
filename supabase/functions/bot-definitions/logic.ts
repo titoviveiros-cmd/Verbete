@@ -114,3 +114,74 @@ export function outcomeEvent(input: {
     payload: { ...base, dropped_leak: input.droppedLeak, dropped_served: input.droppedServed },
   };
 }
+
+// ---------------------------------------------------------------------------
+// v2 (bot-definitions-v2, playtest 2026-10-20): bots não repetem definição na
+// PARTIDA e não chegam perto da verdade. Funções puras, usadas só pela v2 —
+// a v1 (em produção) segue exatamente como está.
+
+/** Parecida demais com algo que um bot já disse NESTA partida. */
+export const MATCH_REPEAT_THRESHOLD = 0.5;
+/** Duas candidatas parecidas entre si: fica só a primeira. */
+export const SELF_SIMILAR_THRESHOLD = 0.6;
+/**
+ * Corte do gate semântico dos BOTS, com o MESMO juiz e a MESMA rubrica do
+ * bônus 🧠 (semantic.ts, limiar humano 80 intocado). A partir de 50 a rubrica
+ * já chama de "relacionado ao significado": o bot recusa com 30 pontos de
+ * folga, porque na revelação o juiz avalia a rodada inteira junta e a nota
+ * pode oscilar.
+ */
+export const BOT_GATE_MAX_SCORE = 50;
+
+/** Tira candidatas iguais/parecidas com definições de bot já usadas na partida. */
+export function dropMatchRepeats(defs: string[], previous: string[]) {
+  const prev = previous.map(normTxt).filter((p) => p.length > 0);
+  const kept = defs.filter((d) => {
+    const n = normTxt(d);
+    return !prev.some((p) => p === n || dice(p, n) > MATCH_REPEAT_THRESHOLD);
+  });
+  return { kept, dropped: defs.length - kept.length };
+}
+
+/** Dedup entre as próprias candidatas (mantém a ordem; fica a primeira). */
+export function dropSelfSimilar(defs: string[]) {
+  const kept: string[] = [];
+  for (const d of defs) {
+    const n = normTxt(d);
+    if (!n) continue;
+    if (kept.some((k) => normTxt(k) === n || dice(k, n) > SELF_SIMILAR_THRESHOLD)) continue;
+    kept.push(d);
+  }
+  return { kept, dropped: defs.length - kept.length };
+}
+
+/**
+ * Gate semântico: fica só quem o juiz NOTOU e com nota abaixo do corte.
+ * Candidata sem nota (o juiz pulou) não entra — na dúvida, reserva.
+ */
+export function gateByScores(
+  items: ReadonlyArray<{ id: string; text: string }>,
+  scores: ReadonlyMap<string, number>,
+  maxScore = BOT_GATE_MAX_SCORE,
+) {
+  const kept = items.filter((it) => {
+    const s = scores.get(it.id);
+    return s !== undefined && s < maxScore;
+  });
+  return { kept, dropped: items.length - kept.length };
+}
+
+/** Lista curta do que a partida já usou, para o prompt evitar de saída. */
+export function avoidList(previous: string[], max = 15): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of [...previous].reverse()) {
+    const n = normTxt(p);
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    out.push(p.trim().slice(0, 140));
+    if (out.length >= max) break;
+  }
+  return out;
+}
+

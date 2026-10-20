@@ -20,7 +20,6 @@ import {
 import { randomAvatar, randomColor } from "@/lib/avatars";
 import { Mascot } from "@/components/Mascot";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
-import { RoomChat } from "@/components/room/RoomChat";
 import {
   PhaseAnnouncer,
   PHASE_ANNOUNCER_TOTAL_MS,
@@ -537,8 +536,8 @@ function RoomPage() {
       className="mobile-shell stage-wide room-shell relative no-scrollbar"
       style={{
         paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)",
-        // Reserva espaço apenas para a barra de reações flutuante (~56px + safe-area)
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 60px)",
+        // Reserva só a faixa da barra de reações compacta (--dock-h, styles.css)
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--dock-h))",
         overflow: "hidden",
         touchAction: "manipulation",
       }}
@@ -699,12 +698,6 @@ function RoomPage() {
 
       <PhaseAnnouncer status={room.status} round={room.current_round} />
       <ReactionsLayer roomId={room.id} playerId={playerId} />
-      <RoomChat
-        roomId={room.id}
-        status={room.status}
-        playerId={playerId}
-        players={players}
-      />
     </div>
   );
 }

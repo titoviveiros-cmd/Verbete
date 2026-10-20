@@ -8,6 +8,7 @@ import {
   sanitizeDefinition,
   sanitizeNickname,
   humanizeMeaning,
+  textSimilarity,
 } from "./text-filter";
 import {
   BOT_NAMES,
@@ -688,6 +689,64 @@ function personaFor(bot: Player, idx: number): string {
   );
 }
 
+/** Parecido demais com o que um bot já disse na partida (mesma régua da edge v2). */
+export const BOT_MATCH_REPEAT_SIMILARITY = 0.5;
+
+/**
+ * Uma linha por bot, sem repetição (playtest 2026-10-20): primeiro as
+ * definições da IA já aprovadas pela edge v2 (filtros + juiz semântico), depois
+ * as reservas que a edge vetou, por fim o reserva local. Nenhuma linha fica
+ * igual/parecida com outra da rodada nem com o que um bot já disse em rodada
+ * anterior DESTA partida (`previous`). Pura — testável sem rede.
+ */
+export function assembleBotRows(input: {
+  bots: Player[];
+  ai: string[];
+  vetted: string[];
+  local: string[];
+  previous: string[];
+  word?: string;
+  truth?: string;
+}): Array<{ player_id: string; text: string }> {
+  const used: string[] = input.previous.map(normalizeDefText).filter(Boolean);
+  if (input.truth) used.push(normalizeDefText(humanizeMeaning(input.truth)));
+  const tooClose = (n: string) =>
+    used.some(
+      (u) => u === n || textSimilarity(u, n) > BOT_MATCH_REPEAT_SIMILARITY,
+    );
+  const queue = [...input.ai, ...input.vetted, ...input.local];
+  let q = 0;
+  const next = (): string => {
+    while (q < queue.length) {
+      const text = sanitizeDefinition(queue[q++]!, 140, input.word);
+      const n = normalizeDefText(text);
+      if (n && !tooClose(n)) return text;
+    }
+    // reserva esgotada (dezenas de modelos): variação para nunca travar
+    const base = input.local[used.length % Math.max(1, input.local.length)];
+    return `${sanitizeDefinition(base ?? "objeto antigo de uso domestico", 120, input.word)} (${used.length + 1})`;
+  };
+  return input.bots.map((bot) => {
+    const text = next();
+    used.push(normalizeDefText(text));
+    return { player_id: bot.id, text };
+  });
+}
+
+/** Textos dos bots nas rodadas ANTERIORES desta partida (vazio se falhar). */
+async function matchBotTexts(roomId: string, botIds: Set<string>) {
+  try {
+    const { data } = await supabase.rpc("get_room_definitions", {
+      p_room_id: roomId,
+    });
+    return ((data as Array<{ player_id: string; text: string }> | null) ?? [])
+      .filter((d) => botIds.has(d.player_id))
+      .map((d) => d.text);
+  } catch {
+    return [];
+  }
+}
+
 export async function botSubmitDefinitions(
   roomId: string,
   round: number,
@@ -697,21 +756,23 @@ export async function botSubmitDefinitions(
 ) {
   if (bots.length === 0) return;
   // Sem pausa artificial depois da IA: os bots enviam assim que ela responde.
-  // A chamada já leva de ~1,5 a 9 s (ops_events, playtest 2026-10-20) e o
-  // atraso aleatório extra (0,4–1,2 s) só fazia a mesa esperar quando todos
-  // os humanos já tinham escrito. Fica só um piso desde o início da escrita,
-  // para o bot não "responder" no instante em que a palavra aparece.
+  // Fica só um piso desde o início da escrita, para o bot não "responder" no
+  // instante em que a palavra aparece (playtest 2026-10-20).
   const startedAt = Date.now();
-
-  // Tenta usar IA (Gemini Flash) para definições falsas plausíveis;
-  // se falhar (sem chave, timeout, etc.) cai no fallback local.
-  let aiDefs: string[] = [];
+  const botIds = new Set(bots.map((b) => b.id));
   const personas = bots.map((b, i) => personaFor(b, i));
+  // Reserva local embaralhada, de último caso (edge fora do ar ou lenta): a
+  // edge v2 sorteia e veta as próprias reservas no servidor — o client nunca
+  // manda texto para o juiz (não pode virar oráculo da verdade).
+  const local = shuffle([...BOT_FAKE_DEFINITIONS_TEMPLATES]);
+  const memory = matchBotTexts(roomId, botIds);
+
+  let aiDefs: string[] = [];
+  let vetted: string[] = [];
   if (word) {
     try {
-      const call = supabase.functions.invoke("bot-definitions", {
-        // memória por rodada: cédulas de bot nunca repetem sugestões já
-        // mostradas a jogadores (vazava que a alternativa era falsa)
+      // v2: memória da PARTIDA + gate semântico com o juiz oficial do 🧠.
+      const call = supabase.functions.invoke("bot-definitions-v2", {
         body: {
           word_id: word.id,
           count: bots.length,
@@ -721,7 +782,7 @@ export async function botSubmitDefinitions(
         },
       });
       // A mesa já escreveu e a IA estourou o prazo de graça: segue com o
-      // reserva local — não espera o timeout + nova tentativa (~19 s).
+      // reserva local — não espera a IA (BOT_AI_GRACE_MS).
       const res = opts.hurry
         ? await Promise.race([
             call,
@@ -732,86 +793,93 @@ export async function botSubmitDefinitions(
         console.warn(
           "bot-definitions: mesa pronta antes da IA — reserva local",
         );
-      const arr = (res?.data as { definitions?: unknown } | null)?.definitions;
-      if (Array.isArray(arr))
-        aiDefs = arr.filter((s) => typeof s === "string" && s.length > 5);
+      const data = (res?.data ?? null) as {
+        definitions?: unknown;
+        fallbacks?: unknown;
+      } | null;
+      const strings = (v: unknown) =>
+        Array.isArray(v)
+          ? v.filter((s): s is string => typeof s === "string" && s.length > 5)
+          : [];
+      aiDefs = strings(data?.definitions);
+      vetted = strings(data?.fallbacks);
     } catch (e) {
       console.warn("bot-definitions AI failed, using fallback", e);
     }
   }
+  // A memória da partida vem em paralelo; não segura a mesa (teto curto).
+  const previous = await Promise.race([
+    memory,
+    new Promise<string[]>((r) => setTimeout(() => r([]), 1500)),
+  ]);
   const delay = Math.max(0, BOT_WRITE_MIN_MS - (Date.now() - startedAt));
 
   setTimeout(async () => {
-    // Dedup: bots NUNCA devem dar a mesma resposta (entre si, igual à verdade,
-    // ou igual a uma definição já enviada por qualquer outro jogador humano).
-    const norm = (s: string) =>
-      s
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim();
-    // Similaridade, não só igualdade: playtest mostrou a IA gerando textos
-    // quase idênticos para bots diferentes ("...elegancia mundana" vs
-    // "...elegancia formal"). Qualquer candidato parecido demais com um já
-    // usado cai para o fallback local.
-    const { textSimilarity } = await import("./text-filter");
-    const usedTexts: string[] = [];
-    const used = {
-      has: (key: string) =>
-        usedTexts.some((t) => t === key || textSimilarity(t, key) > 0.6),
-      add: (key: string) => {
-        usedTexts.push(key);
-      },
-    };
-    if (word?.meaning) used.add(norm(humanizeMeaning(word.meaning)));
-    // As definições alheias da rodada não são legíveis pelo client (S1):
-    // a deduplicação contra humanos/verdade é do servidor
-    // (submit_bot_definitions_bulk + memória ai_served_defs da edge).
-
-    // Pool de fallback embaralhado para evitar colisões aleatórias.
-    const fallbackPool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
-      () => Math.random() - 0.5,
-    );
-    let fbIdx = 0;
-    const nextFallback = (): string => {
-      for (let k = 0; k < fallbackPool.length; k++) {
-        const cand = fallbackPool[(fbIdx + k) % fallbackPool.length]!;
-        if (!used.has(norm(cand))) {
-          fbIdx = (fbIdx + k + 1) % fallbackPool.length;
-          return cand;
-        }
-      }
-      // todos usados — gera variação numérica para garantir unicidade
-      return `${fallbackPool[fbIdx++ % fallbackPool.length]} (${Math.floor(Math.random() * 999)})`;
-    };
-
-    const rows = bots.map((bot, i) => {
-      let raw = aiDefs[i];
-      if (!raw || used.has(norm(raw))) raw = nextFallback();
-      let text = sanitizeDefinition(raw, 140, word?.word);
-      let key = norm(text);
-      // Se ainda colidir após sanitizar, tenta fallbacks até achar único.
-      let attempts = 0;
-      while (used.has(key) && attempts < fallbackPool.length + 2) {
-        text = sanitizeDefinition(nextFallback(), 140, word?.word);
-        key = norm(text);
-        attempts++;
-      }
-      used.add(key);
-      return { player_id: bot.id, text };
+    const rows = assembleBotRows({
+      bots,
+      ai: aiDefs,
+      vetted,
+      local,
+      previous,
+      word: word?.word,
+      truth: word?.meaning,
     });
-    supabase
-      .rpc("submit_bot_definitions_bulk", {
-        p_room_id: roomId,
-        p_round: round,
-        p_rows: rows,
-      })
-      .then(
-        () => {},
-        () => {},
-      );
+    await submitBotRows(roomId, round, rows);
+    // Nenhum bot sem definição (3 bots não travam a rodada): o servidor
+    // pula texto idêntico a outro da rodada; quem ficou de fora vai de novo
+    // com outra reserva. ON CONFLICT no servidor ignora quem já entrou.
+    const missing = await missingBots(roomId, round, botIds);
+    if (missing.length > 0) {
+      const retry = assembleBotRows({
+        bots: bots.filter((b) => missing.includes(b.id)),
+        ai: [],
+        vetted: [],
+        local: shuffle([...BOT_FAKE_DEFINITIONS_TEMPLATES]),
+        previous: [...previous, ...rows.map((r) => r.text)],
+        word: word?.word,
+        truth: word?.meaning,
+      });
+      await submitBotRows(roomId, round, retry);
+    }
   }, delay);
+}
+
+async function submitBotRows(
+  roomId: string,
+  round: number,
+  rows: Array<{ player_id: string; text: string }>,
+) {
+  try {
+    await supabase.rpc("submit_bot_definitions_bulk", {
+      p_room_id: roomId,
+      p_round: round,
+      p_rows: rows,
+    });
+  } catch {
+    /* o timer da escrita e o servidor cobrem */
+  }
+}
+
+/** Bots sem definição na rodada (pelo get_round_sync, que mostra autores). */
+async function missingBots(
+  roomId: string,
+  round: number,
+  botIds: Set<string>,
+): Promise<string[]> {
+  try {
+    const { data } = await supabase.rpc("get_round_sync", {
+      p_room_id: roomId,
+    });
+    const defs =
+      (data as { definitions?: Array<{ player_id: string; round: number }> })
+        ?.definitions ?? [];
+    const done = new Set(
+      defs.filter((d) => d.round === round).map((d) => d.player_id),
+    );
+    return [...botIds].filter((id) => !done.has(id));
+  } catch {
+    return [];
+  }
 }
 
 // Gera UMA definição falsa no mesmo estilo dos bots, para o jogador humano
@@ -1077,55 +1145,10 @@ export async function restartGame(roomId: string) {
   if (error) console.error("reset_room failed", error);
 }
 
-// ============================================================
-// Chat de sala (spec: lobby livre, rodada desativado, pós-resultado ativado —
-// a regra de fase é validada server-side pela RPC send_room_message)
-// ============================================================
-export interface RoomMessage {
-  id: string;
-  room_id: string;
-  player_id: string;
-  text: string;
-  created_at: string;
-}
-
-export const CHAT_ENABLED_STATUSES: RoomStatus[] = [
-  "lobby",
-  "reveal",
-  "scoreboard",
-  "finished",
-];
-
-export async function sendRoomMessage(
-  roomId: string,
-  playerId: string,
-  text: string,
-): Promise<{ ok: boolean; reason?: string }> {
-  const clean = sanitizeDefinition(text, 200);
-  if (!clean) return { ok: false, reason: "empty" };
-  const { data, error } = await supabase.rpc("send_room_message", {
-    p_room_id: roomId,
-    p_player_id: playerId,
-    p_text: clean,
-  });
-  if (error) return { ok: false, reason: error.message };
-  return (data as { ok: boolean; reason?: string }) ?? { ok: false };
-}
-
-export async function fetchRoomMessages(
-  roomId: string,
-  limit = 50,
-): Promise<RoomMessage[]> {
-  // Cast: room_messages ainda não existe nos tipos gerados do Supabase
-  // (src/integrations/supabase/types.ts é do schema antigo). Regenerar os
-  // tipos após aplicar as migrations remove a necessidade do cast.
-  const { data } = await (supabase.from as any)("room_messages")
-    .select("*")
-    .eq("room_id", roomId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return ((data as RoomMessage[]) ?? []).reverse();
-}
+// Chat da sala REMOVIDO do jogo (playtest 2026-10-20: pouco útil, tomava
+// tela e um canal realtime por jogador). A tabela room_messages e a RPC
+// send_room_message ficam DORMENTES no banco — limpeza estrutural é débito
+// registrado (sem migration destrutiva nesta rodada).
 
 // ============================================================
 // Partida rápida (salas públicas): entra num lobby público com vaga

@@ -22,6 +22,7 @@ import {
   WordCard,
   ProgressBar,
   PendingList,
+  pendingSentence,
   TimerBar,
 } from "@/components/room/shared";
 import type { RoundExtension } from "@/hooks/use-room";
@@ -392,25 +393,28 @@ export function WriteDefinition({
     );
   }
 
-  // Enviar / gerar / aviso. No celular em pé moram no rodapé fixo, na faixa
-  // do 💬/▾ (.float-lane-row): sempre à vista acima do teclado, e o chat
-  // não cobre mais o "gerar definição automática" (playtest 2026-10-20).
-  const ctas = (
+  // "Enviar" é o único botão fixo no rodapé do celular em pé (sempre à vista
+  // acima do teclado). "Gerar automática" e o aviso de minúsculas rolam com
+  // o formulário — o rodapé de 3 peças (~130px) comia a tela (playtest
+  // 2026-10-20, 2ª rodada de ajustes).
+  const sendButton = (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+      }}
+      onClick={() => {
+        void playUITap("primary");
+        handleSubmit();
+      }}
+      disabled={text.trim().length < 1}
+      className="btn-pop btn-gold w-full text-lg !py-2.5"
+    >
+      ✍️ Enviar definição
+    </button>
+  );
+  const extras = (
     <>
-      <button
-        type="button"
-        onPointerDown={(e) => {
-          e.preventDefault();
-        }}
-        onClick={() => {
-          void playUITap("primary");
-          handleSubmit();
-        }}
-        disabled={text.trim().length < 1}
-        className="btn-pop btn-gold text-xl !py-3"
-      >
-        ✍️ Enviar definição
-      </button>
       <button
         type="button"
         onPointerDown={(e) => {
@@ -421,11 +425,11 @@ export function WriteDefinition({
           handleAiGenerate();
         }}
         disabled={aiLoading}
-        className="btn-pop btn-turq text-sm !py-2.5"
+        className="btn-pop btn-turq self-center text-xs !px-3.5 !py-1.5"
       >
         {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
       </button>
-      <p className="text-center text-[12px] text-muted-foreground font-semibold">
+      <p className="text-center text-[11px] text-muted-foreground font-semibold">
         ✏️ tudo será exibido em <b>letras minúsculas e sem acentos</b>
       </p>
     </>
@@ -576,38 +580,25 @@ export function WriteDefinition({
                   </div>
                 )}
                 {pending.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="eyebrow mr-1">faltam:</span>
-                    {pending.map((p) => (
-                      <span key={p.id} className="chip !px-2 !py-0.5">
-                        <span className="text-sm leading-none">{p.avatar}</span>
-                        <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
-                          {p.nickname}
-                        </span>
-                      </span>
-                    ))}
-                  </div>
+                  <p className="text-xs text-muted-foreground font-display leading-snug px-1">
+                    {pendingSentence(pending)}
+                  </p>
                 )}
-                {/* desktop e celular deitado: os botões seguem no formulário */}
-                <div className="hidden lg:flex short:flex flex-col gap-2.5">
-                  {ctas}
+                {/* desktop e celular deitado: o Enviar segue no formulário */}
+                <div className="hidden lg:flex short:flex flex-col">
+                  {sendButton}
                 </div>
+                {extras}
               </div>
             </>
           )}
         </div>
       </div>
-      <div
-        // Mesmo depois de enviar, o rodapé (vazio) segue reservando a faixa
-        // do 💬/▾ no celular em pé: o painel "Definição enviada!" e a lista
-        // acima nunca rolam por baixo deles.
-        className={
-          "float-lane-row shrink-0 flex flex-col justify-center gap-2 lg:hidden short:hidden" +
-          (editing ? " pt-2" : "")
-        }
-      >
-        {editing && ctas}
-      </div>
+      {editing && (
+        <div className="shrink-0 pt-1.5 lg:hidden short:hidden">
+          {sendButton}
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -284,9 +284,10 @@ export async function clippedByAncestors(page: Page): Promise<string[]> {
 }
 
 /**
- * Zona de exclusão dos controles flutuantes (💬 chat e ▾ das reações): nenhum
- * texto, botão, carta ou ficha visível sob eles (com `gap` px de folga), e
- * nenhuma lista rolável cujo conteúdo passe por baixo deles ao rolar.
+ * Peças fixas sobre o jogo: a barra de reações (e, se voltarem a existir,
+ * o 💬 do chat e o ▾ das reações — removidos em 2026-10-20). Nenhum texto,
+ * botão, carta ou ficha visível sob elas (com `gap` px de folga), e nenhuma
+ * lista rolável cujo conteúdo passe por baixo delas ao rolar.
  */
 export async function floatingZoneIntrusions(
   page: Page,
@@ -308,6 +309,11 @@ export async function floatingZoneIntrusions(
             '[aria-label="Esconder reações"], [aria-label="Mostrar reações"]',
           ),
         ],
+        [
+          "barra de reações",
+          document.querySelector('[aria-label="Enviar 😂"]')?.parentElement ??
+            null,
+        ],
       ] as Array<[string, Element | null]>
     ).filter((f): f is [string, Element] => !!f[1]);
     if (floats.length === 0) return out;
@@ -327,13 +333,9 @@ export async function floatingZoneIntrusions(
       a.right > b.left &&
       a.top < b.bottom &&
       a.bottom > b.top;
-    const bar =
-      document.querySelector('[aria-label="Enviar 😂"]')?.parentElement ?? null;
     const skip = (n: Element) =>
       !!n.closest('[aria-hidden="true"], [inert], .sr-only') ||
-      floats.some(([, f]) => f.contains(n)) ||
-      // a barra de reações tem a própria reserva (.room-shell)
-      !!bar?.contains(n);
+      floats.some(([, f]) => f.contains(n));
     const shown = (n: Element) => {
       for (let a: Element | null = n; a; a = a.parentElement) {
         const cs = getComputedStyle(a);

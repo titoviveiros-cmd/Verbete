@@ -218,9 +218,10 @@ describe("botSubmitDefinitions — sem pausa artificial depois da IA", () => {
     vi.useFakeTimers();
     void botSubmitDefinitions("room-1", 2, [bot("b1"), bot("b2")], word);
     await tick();
-    expect(named("edge:bot-definitions")).toHaveLength(1);
+    expect(named("edge:bot-definitions-v2")).toHaveLength(1);
+    named("rpc:get_room_definitions")[0]!.resolve({ data: [] });
     vi.advanceTimersByTime(3000);
-    named("edge:bot-definitions")[0]!.resolve({
+    named("edge:bot-definitions-v2")[0]!.resolve({
       data: {
         definitions: [
           "pequeno instrumento de sopro usado em festas",
@@ -248,7 +249,8 @@ describe("botSubmitDefinitions — sem pausa artificial depois da IA", () => {
       hurry: prazo,
     });
     await tick();
-    expect(named("edge:bot-definitions")).toHaveLength(1); // nunca responde
+    expect(named("edge:bot-definitions-v2")).toHaveLength(1);
+    named("rpc:get_room_definitions")[0]!.resolve({ data: [] }); // nunca responde
     vi.advanceTimersByTime(6000);
     hurry();
     await tick();
@@ -268,8 +270,9 @@ describe("botSubmitDefinitions — sem pausa artificial depois da IA", () => {
       hurry: prazo,
     });
     await tick();
+    named("rpc:get_room_definitions")[0]!.resolve({ data: [] });
     vi.advanceTimersByTime(2000);
-    named("edge:bot-definitions")[0]!.resolve({
+    named("edge:bot-definitions-v2")[0]!.resolve({
       data: { definitions: ["pequeno instrumento de sopro usado em festas"] },
     });
     await tick();
@@ -287,8 +290,9 @@ describe("botSubmitDefinitions — sem pausa artificial depois da IA", () => {
     vi.useFakeTimers();
     void botSubmitDefinitions("room-1", 2, [bot("b1")], word);
     await tick();
+    named("rpc:get_room_definitions")[0]!.resolve({ data: [] });
     vi.advanceTimersByTime(200);
-    named("edge:bot-definitions")[0]!.resolve({
+    named("edge:bot-definitions-v2")[0]!.resolve({
       data: { definitions: ["pequeno instrumento de sopro usado em festas"] },
     });
     await tick();
