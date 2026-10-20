@@ -322,6 +322,30 @@ describe("casos de rodada", () => {
   });
 });
 
+describe("rodapé e compartilhar (playtest 2026-10-20)", () => {
+  it('o compartilhar da revelação é o card DA RODADA — "resultado" só existe no fim de jogo', async () => {
+    mount();
+    await tick(12_000); // fim da coreografia
+    expect(
+      screen.getByRole("button", { name: "Compartilhar o card desta rodada" }),
+    ).toBeTruthy();
+    expect(screen.getByText("📸 Compartilhar rodada")).toBeTruthy();
+    expect(screen.queryByText(/Compartilhar resultado/)).toBeNull();
+    expect(screen.queryByText(/Compartilhar replay/)).toBeNull();
+  });
+
+  it("o rodapé da faixa do 💬/▾ existe desde o início (a lista não pula quando os botões chegam)", () => {
+    const { container } = mount({ isHost: false });
+    const lane = container.querySelector(".float-lane");
+    expect(lane).toBeTruthy();
+    // a lista que rola termina ANTES do rodapé (irmãos, não aninhados)
+    expect(lane!.contains(region())).toBe(false);
+    expect(region().compareDocumentPosition(lane!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+});
+
 describe("contagem e avanço", () => {
   it("a contagem só começa depois dos blefes; o host avança sozinho uma vez", async () => {
     mount();

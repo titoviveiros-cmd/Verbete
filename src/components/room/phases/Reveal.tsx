@@ -30,7 +30,7 @@ import {
 import { getPlayerId } from "@/lib/player-id";
 import { scalePhaseSecs } from "@/lib/game-times";
 import { RevealFx } from "@/components/RevealFx";
-import { scrollbarClip } from "@/lib/utils";
+import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 import {
   HOLD_BASE_SECS,
   bestBluffId,
@@ -432,7 +432,7 @@ function RevealImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
+      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden ring-room"
     >
       <RevealFx trigger={truthVisible} strong />
       <p className="sr-only" aria-live="polite" role="status">
@@ -464,8 +464,9 @@ function RevealImpl({
         tabIndex={0}
         role="region"
         aria-label="Revelação da rodada"
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pb-3 space-y-3 w-full max-w-full"
-        style={scrollbarClip()}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar pt-1 pb-3 space-y-3"
+        // respiro do anel do "seu blefe" e do brilho do blefe da rodada
+        style={scrollbarClip(undefined, RING_GUTTER)}
       >
         <WordCard word={word} compact />
 
@@ -701,31 +702,33 @@ function RevealImpl({
           </ol>
         )}
       </div>
-      {/* Ações sempre à vista, fora da rolagem. */}
-      {(truthVisible || holdReached) && (
-        // max-lg:px-12: longe dos botões flutuantes (▾ reações, 💬 chat)
-        <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 max-lg:px-12">
-          {holdReached && (
-            <ShareReplayButton
-              room={room}
-              word={word}
-              definitions={definitions}
-              votes={votes}
-              players={players}
-            />
-          )}
-          {isHost && (
-            <button
-              onClick={() => finish(true)}
-              disabled={advancing}
-              className="btn-pop btn-gold px-5 py-2.5 text-base font-display disabled:opacity-60"
-              title="Pular a revelação e ir direto ao placar"
-            >
-              {advancing ? "Indo pro placar…" : "⏭ Avançar agora"}
-            </button>
-          )}
-        </div>
-      )}
+      {/* Ações sempre à vista, fora da rolagem. O rodapé existe desde o
+          início (mesmo vazio): no celular em pé ele ocupa a faixa do 💬 e do
+          ▾ (.float-lane) — a lista termina antes deles e nenhuma carta passa
+          por baixo; os botões ficam centrados fora da coluna. Antes o
+          "Avançar agora" disputava a largura com o replay e saía cortado
+          (playtest 2026-10-20). */}
+      <div className="float-lane shrink-0 flex flex-col min-[640px]:flex-row items-center justify-center gap-2">
+        {holdReached && (
+          <ShareReplayButton
+            room={room}
+            word={word}
+            definitions={definitions}
+            votes={votes}
+            players={players}
+          />
+        )}
+        {isHost && (truthVisible || holdReached) && (
+          <button
+            onClick={() => finish(true)}
+            disabled={advancing}
+            className="btn-pop btn-gold w-full max-w-[17rem] min-[640px]:w-auto px-4 py-2.5 text-base max-[359px]:text-sm font-display whitespace-nowrap disabled:opacity-60"
+            title="Pular a revelação e ir direto ao placar"
+          >
+            {advancing ? "Indo pro placar…" : "⏭ Avançar agora"}
+          </button>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -799,29 +802,33 @@ function ShareReplayButton({
       if (alive.current) setDone(null);
     }, 3500);
   };
+  // "Compartilhar rodada" (o card DESTA rodada) — não confundir com o
+  // "Compartilhar resultado" da partida, que só existe no fim de jogo. O
+  // retorno aparece no próprio botão: uma linha extra embaixo empurrava o
+  // rodapé e a lista pulava.
+  const label = busy
+    ? "Gerando card…"
+    : done === "shared"
+      ? "✅ Card enviado!"
+      : done === "downloaded"
+        ? "📥 Card baixado!"
+        : done === "error"
+          ? "Não rolou — tenta de novo"
+          : "📸 Compartilhar rodada";
   return (
-    <div className="pt-2 flex flex-col items-center gap-1">
+    <>
       <button
         onClick={onShare}
         disabled={busy}
-        className="btn-pop btn-violet px-5 py-2.5 text-base font-display"
+        aria-label={busy || done ? label : "Compartilhar o card desta rodada"}
+        className="btn-pop btn-violet w-full max-w-[17rem] min-[640px]:w-auto px-4 py-2.5 text-base max-[359px]:text-sm font-display whitespace-nowrap"
       >
-        {busy ? "Gerando card…" : "📲 Compartilhar replay"}
+        {label}
       </button>
-      {done === "shared" && (
-        <p className="text-xs text-mint font-display">Card enviado! 🎉</p>
-      )}
-      {done === "downloaded" && (
-        <p className="text-xs text-mint font-display">
-          Card baixado — manda no zap! 📥
-        </p>
-      )}
-      {done === "error" && (
-        <p className="text-xs text-destructive font-display">
-          Não rolou — tenta de novo
-        </p>
-      )}
-    </div>
+      <span className="sr-only" role="status" aria-live="polite">
+        {done === "downloaded" ? "Card baixado — manda no zap!" : ""}
+      </span>
+    </>
   );
 }
 

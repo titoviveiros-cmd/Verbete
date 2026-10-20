@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
 import { scalePhaseSecs } from "./game-times";
+import { hedged } from "./hedge";
 import { queueRoomConfig } from "./room-config-writer";
 import {
   sanitizeDefinition,
@@ -376,40 +377,54 @@ export async function fetchThreeWords(
   roomId?: string,
   nivel: NivelFilter = "aleatorio",
 ): Promise<Word[]> {
-  // 1) Coleta palavras customizadas da sala (se houver) ainda não usadas.
+  // 1) Palavras customizadas da sala (se houver) e 2) sorteio global, EM
+  // PARALELO (playtest 2026-10-20: em série eram ≈0,52 s; juntas ≈0,27 s).
+  // O sorteio pede as 3 de uma vez e usa só as que faltarem depois das
+  // customizadas — as primeiras N de 3 aleatórias são N aleatórias: mesmas
+  // regras (sem as usadas, raridade ≥ 2, categorias e nível da sala).
   // Só colunas não-reveladoras: o significado chega via get_word_reveal().
+  // Cada leitura tem "segunda via" (hedged): uma consulta presa na rede não
+  // segura o sorteio (na medição, room_words travou 25,9 s).
+  const [customRes, globalRes] = await Promise.all([
+    roomId
+      ? hedged(() =>
+          supabase
+            .from("room_words")
+            .select("id,word,category,created_at")
+            .eq("room_id", roomId),
+        )
+      : Promise.resolve({ data: null }),
+    // RPC segura: devolve apenas colunas não-reveladoras (sem meaning).
+    hedged(() =>
+      supabase.rpc("get_random_word_prompts", {
+        exclude_ids: excludeIds,
+        min_rarity: 2,
+        lim: 3,
+        p_categories: categories,
+        p_nivel: nivel,
+      }),
+    ),
+  ]);
   let customPool: Word[] = [];
-  if (roomId) {
-    const { data: cw } = await supabase
-      .from("room_words")
-      .select("id,word,category,created_at")
-      .eq("room_id", roomId);
-    if (cw && cw.length > 0) {
-      customPool = cw
-        .filter((w) => !excludeIds.includes(w.id))
-        .map((w) => ({
-          id: w.id,
-          word: w.word,
-          category: w.category ?? "custom",
-          rarity: 2,
-        }));
-    }
+  const cw = customRes.data;
+  if (cw && cw.length > 0) {
+    customPool = cw
+      .filter((w) => !excludeIds.includes(w.id))
+      .map((w) => ({
+        id: w.id,
+        word: w.word,
+        category: w.category ?? "custom",
+        rarity: 2,
+      }));
   }
 
-  // 2) Quantas faltam para completar 3
+  // Quantas faltam para completar 3
   const needed = Math.max(0, 3 - Math.min(customPool.length, 3));
   let globalPool: Word[] = [];
   if (needed > 0) {
-    // RPC segura: devolve apenas colunas não-reveladoras (sem meaning).
-    const { data, error } = await supabase.rpc("get_random_word_prompts", {
-      exclude_ids: excludeIds,
-      min_rarity: 2,
-      lim: needed,
-      p_categories: categories,
-      p_nivel: nivel,
-    });
+    const { data, error } = globalRes;
     if (!error && data && data.length >= needed) {
-      globalPool = data as Word[];
+      globalPool = (data as Word[]).slice(0, needed);
     } else if (categories.length > 0 || nivel !== "aleatorio") {
       const { data: any3 } = await supabase.rpc("get_random_word_prompts", {
         exclude_ids: excludeIds,
@@ -677,9 +692,12 @@ export async function botSubmitDefinitions(
   word?: Word | null,
 ) {
   if (bots.length === 0) return;
-  // Delay curto: a chamada de IA acima já leva 1-3s; somado a um atraso
-  // longo os bots pareciam travados na fase de escrita (feedback de playtest).
-  const delay = 400 + Math.random() * 800;
+  // Sem pausa artificial depois da IA: os bots enviam assim que ela responde.
+  // A chamada já leva de ~1,5 a 9 s (ops_events, playtest 2026-10-20) e o
+  // atraso aleatório extra (0,4–1,2 s) só fazia a mesa esperar quando todos
+  // os humanos já tinham escrito. Fica só um piso desde o início da escrita,
+  // para o bot não "responder" no instante em que a palavra aparece.
+  const startedAt = Date.now();
 
   // Tenta usar IA (Gemini Flash) para definições falsas plausíveis;
   // se falhar (sem chave, timeout, etc.) cai no fallback local.
@@ -705,6 +723,7 @@ export async function botSubmitDefinitions(
       console.warn("bot-definitions AI failed, using fallback", e);
     }
   }
+  const delay = Math.max(0, BOT_WRITE_MIN_MS - (Date.now() - startedAt));
 
   setTimeout(async () => {
     // Dedup: bots NUNCA devem dar a mesma resposta (entre si, igual à verdade,
@@ -917,15 +936,31 @@ export async function castVote(
   }
 }
 
-export async function botsVote(
+/** Piso do envio dos bots na escrita, contado do início da chamada. */
+export const BOT_WRITE_MIN_MS = 1500;
+
+export type BotVoteHandle = {
+  /** Vota já (todos os humanos já votaram: ninguém deve esperar o bot). */
+  flush: () => void;
+  /** Desiste (a fase acabou antes do atraso). */
+  cancel: () => void;
+};
+
+export function botsVote(
   roomId: string,
   round: number,
   bots: Player[],
   defs: Definition[],
-) {
-  if (bots.length === 0) return;
-  const delay = 900 + Math.random() * 1400;
-  setTimeout(() => {
+): BotVoteHandle {
+  if (bots.length === 0) return { flush: () => {}, cancel: () => {} };
+  // Atraso "humano" (0,9–2,3 s) para os votos dos bots não chegarem junto
+  // com as cédulas — mas sem segurar a mesa: se todos os humanos já
+  // votaram, flush() envia na hora (playtest 2026-10-20).
+  let done = false;
+  const send = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
     const rows = bots
       .map((bot) => {
         const choices = defs.filter((d) => d.player_id !== bot.id);
@@ -945,7 +980,15 @@ export async function botsVote(
         () => {},
         () => {},
       );
-  }, delay);
+  };
+  const timer = setTimeout(send, 900 + Math.random() * 1400);
+  return {
+    flush: send,
+    cancel: () => {
+      done = true;
+      clearTimeout(timer);
+    },
+  };
 }
 
 export async function revealAndScore(

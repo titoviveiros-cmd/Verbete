@@ -103,8 +103,11 @@ export function RoomChat({
         className="btn-neon fixed z-[60] w-10 h-10 rounded-full text-base border-2 flex items-center justify-center shadow-[0_3px_0_0_#6a0f45,0_8px_18px_-6px_var(--v-neon-glow)]"
         style={{
           // Playtest 5G: em 168px o balão cobria "Enviar definição". Menor
-          // (40px) e no vão entre o toggle de reações (76px) e os CTAs.
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 120px)",
+          // (40px) e no vão entre o toggle de reações e os CTAs. A altura
+          // vem da zona de exclusão (styles.css): o rodapé .float-lane de
+          // cada fase reserva exatamente essa faixa.
+          bottom:
+            "calc(env(safe-area-inset-bottom, 0px) + var(--float-chat-bottom, 120px))",
           right: "calc(env(safe-area-inset-right, 0px) + 10px)",
         }}
       >
@@ -125,8 +128,9 @@ export function RoomChat({
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
             className="fixed z-[59] flex flex-col rounded-2xl bg-[var(--c-surface)]/95 backdrop-blur-md border border-[var(--c-line)] shadow-[0_18px_40px_-20px_rgb(0_0_0/0.8)] overflow-hidden"
             style={{
-              // Logo acima do balão (que agora fica em 120–160px).
-              bottom: "calc(env(safe-area-inset-bottom, 0px) + 168px)",
+              // Logo acima do balão (que fica em 120–160px).
+              bottom:
+                "calc(env(safe-area-inset-bottom, 0px) + var(--float-chat-bottom, 120px) + 48px)",
               right: "calc(env(safe-area-inset-right, 0px) + 12px)",
               width: "min(320px, calc(100vw - 24px))",
               height: "min(380px, 55vh)",

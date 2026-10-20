@@ -288,10 +288,14 @@ export type Phase =
   | "scoreboard"
   | "finished";
 
-/** Backend com a sala congelada na fase pedida, vista pela Bia (host). */
+/**
+ * Backend com a sala congelada na fase pedida, vista pela Bia (host).
+ * `guest`: a Bia vê como convidada (o Zé é o host). `voted`: na votação, o
+ * voto dela já está registrado (cédula escolhida com o anel rosa).
+ */
 export function roomBackend(
   phase: Phase,
-  opts: { loggedIn?: boolean } = {},
+  opts: { loggedIn?: boolean; guest?: boolean; voted?: boolean } = {},
 ): MockBackend {
   const now = Date.now();
   const inSecs = (s: number) => new Date(now + s * 1000).toISOString();
@@ -338,7 +342,11 @@ export function roomBackend(
         .sort((a, b) => a.letter!.localeCompare(b.letter!));
       votes = voteRows(
         ([r, voter]) =>
-          r === 3 && (voter === LARA || voter === DUDU || voter === TIO),
+          r === 3 &&
+          (voter === LARA ||
+            voter === DUDU ||
+            voter === TIO ||
+            (!!opts.voted && voter === BIA)),
       );
       break;
     case "reveal":
@@ -357,7 +365,7 @@ export function roomBackend(
   const room = {
     id: ROOM_ID,
     code: ROOM_CODE,
-    host_id: BIA,
+    host_id: opts.guest ? ZE : BIA,
     status: phase,
     win_condition: "rounds",
     win_target: 10,
@@ -437,14 +445,17 @@ export function roomBackend(
 }
 
 /** localStorage que o app espera ver para a Bia: id local, apelido e a própria cédula. */
-export function roomStorage(phase: Phase): Record<string, string> {
+export function roomStorage(
+  phase: Phase,
+  opts: { guest?: boolean } = {},
+): Record<string, string> {
   const s: Record<string, string> = {
     "verbete:player-id": ME,
     "verbete:nick": JSON.stringify("Bia"),
     "verbete:avatar": JSON.stringify("🦊"),
     "verbete:color": JSON.stringify("#FF5C8A"),
-    [`verbete:hosted:${ROOM_CODE}`]: JSON.stringify(ME),
   };
+  if (!opts.guest) s[`verbete:hosted:${ROOM_CODE}`] = JSON.stringify(ME);
   if (phase === "voting")
     s[`verbete:mydef:${ROOM_ID}:3`] = JSON.stringify(d(303));
   return s;

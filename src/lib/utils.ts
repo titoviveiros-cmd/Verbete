@@ -14,15 +14,27 @@ export function cn(...inputs: ClassValue[]) {
  * `visibleInset` = distância entre a borda do scroller e a borda de clip
  * (padding direito do ancestral). Estilo inline para vencer qualquer
  * utilitário de width/padding do Tailwind.
+ *
+ * `ringGutter` (opcional): a lista também avança esse tanto para a ESQUERDA
+ * e o devolve como padding — o conteúdo fica no mesmo lugar, mas o anel e o
+ * brilho da carta na borda esquerda cabem antes do corte (ver .ring-room).
  */
 export function scrollbarClip(
   visibleInset = "max(1rem, env(safe-area-inset-right, 0px))",
+  ringGutter?: string,
 ): CSSProperties {
   const clip = `(${visibleInset} + 24px)`;
+  const g = ringGutter ? ` + ${ringGutter}` : "";
   return {
+    ...(ringGutter
+      ? { marginLeft: `calc(-1 * ${ringGutter})`, paddingLeft: ringGutter }
+      : {}),
     marginRight: `calc(-1 * ${clip})`,
     paddingRight: `calc(${clip})`,
-    width: `calc(100% + ${clip})`,
-    maxWidth: `calc(100% + ${clip})`,
+    width: `calc(100% + ${clip}${g})`,
+    maxWidth: `calc(100% + ${clip}${g})`,
   };
 }
+
+/** Respiro de anel/brilho das listas da sala (o mesmo de .ring-room). */
+export const RING_GUTTER = "var(--ring-gutter)";

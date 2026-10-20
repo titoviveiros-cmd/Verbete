@@ -3,6 +3,7 @@
 // carregamento da palavra corrente (colunas seguras apenas — S1/S2).
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { hedged } from "@/lib/hedge";
 import type { Room, Player, Definition, Vote, Word } from "@/lib/room";
 import { withPendingConfig } from "@/lib/room-config-writer";
 import type { RoundExtension } from "@/hooks/use-room";
@@ -142,12 +143,17 @@ export function useRoomData(ctx: RoomCtx) {
     }
     (async () => {
       // Colunas seguras apenas — meaning/curiosidade são bloqueadas por grants
-      // e chegam via get_word_reveal() somente após a revelação.
-      const { data } = await supabase
-        .from("words")
-        .select("id,word,category,rarity,nivel,classe,pronuncia")
-        .eq("id", currentWordId)
-        .maybeSingle();
+      // e chegam via get_word_reveal() somente após a revelação. Com "segunda
+      // via": sem a palavra a fase de escrita não abre, e na medição de
+      // 2026-10-20 esta leitura travou 12,4 s só no host (a escrita dele
+      // abriu 11 s depois da do convidado).
+      const { data } = await hedged(() =>
+        supabase
+          .from("words")
+          .select("id,word,category,rarity,nivel,classe,pronuncia")
+          .eq("id", currentWordId)
+          .maybeSingle(),
+      );
       if (data) {
         setWord(data as unknown as Word);
         return;

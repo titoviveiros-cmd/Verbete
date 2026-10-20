@@ -1140,17 +1140,53 @@ button:disabled,
   }
 }
 
-/* Faixa dos controles flutuantes da sala no celular em pé. O chat (bottom
-   120px, 40px de altura) e o ▾ das reações (bottom 76px) flutuam na borda
-   direita, sobre os 100px finais da área útil (o .room-shell já reserva 60px
-   para a barra de reações). O bloco com .float-lane no fim de uma fase ocupa
-   essa altura com folga, e nada da lista acima — ex.: o 🚩 da última cédula —
-   fica embaixo do chat; o padding lateral tira o conteúdo da faixa da borda.
-   Deitado ou no tablet a coluna do jogo é estreita e os botões flutuam fora
-   dela, então a regra não vale. */
+/* ===== Zona de exclusão dos controles flutuantes da sala =====
+   O 💬 do chat (RoomChat) e o ▾ das reações (ReactionsLayer) flutuam numa
+   COLUNA na borda direita, logo acima da barra de reações — que o
+   .room-shell já reserva (--float-dock). As posições deles vêm daqui:
+     ▾  --float-toggle-bottom, 36px de altura, a 16px da borda
+     💬 --float-chat-bottom, 40px de altura, a 10px da borda
+   No celular em pé, TODA fase da sala termina num rodapé que ocupa a faixa
+   desses botões (--float-band: do topo da barra até o topo do 💬, com
+   folga). As listas acima do rodapé terminam antes da faixa — nada rola por
+   baixo dos botões — e o conteúdo do rodapé fica fora da coluna
+   (--float-rail). Duas formas de ocupar a faixa:
+     .float-lane      conteúdo centrado (recua igual dos dois lados)
+     .float-lane-row  fileira de botões larga (só o lado da coluna recua)
+   Playtest 2026-10-20: antes só a votação tinha o rodapé; na revelação, no
+   placar, no fim de jogo, no lobby e na escrita o 💬 e o ▾ cobriam cartas,
+   textos e botões. Deitado ou no tablet a coluna do jogo é estreita e os
+   botões flutuam fora dela, então a faixa não vale. */
+:root {
+  --float-dock: 60px;
+  --float-toggle-bottom: 76px;
+  --float-chat-bottom: 120px;
+  --float-rail: 3rem;
+  --float-band: calc(var(--float-chat-bottom) + 40px + 4px - var(--float-dock));
+}
 @media (max-width: 639.98px) and (min-height: 521px) {
   .float-lane {
-    min-height: 104px;
-    padding-inline: 3rem;
+    min-height: var(--float-band);
+    padding-inline: var(--float-rail);
   }
+  .float-lane-row {
+    min-height: var(--float-band);
+    padding-inline-end: var(--float-rail);
+  }
+}
+
+/* Respiro para anel e brilho de cartas (seleção rosa da cédula, ouro do 1º
+   lugar, "seu blefe") nas listas que rolam. A lista recorta o que passa da
+   própria caixa e a fase recorta o que passa da dela — o anel rosa saía
+   aparado nas laterais (playtest 2026-10-20). .ring-room alarga a FASE
+   sobre o padding do shell e a lista (scrollbarClip com respiro) alarga-se
+   sobre esse espaço, devolvendo tudo como padding: as cartas ficam
+   exatamente onde estavam, mas anel e brilho cabem antes do corte. A fase
+   precisa ser item esticado de uma coluna flex (sem w-full/max-w-full). */
+:root {
+  --ring-gutter: 0.75rem;
+}
+.ring-room {
+  margin-inline: calc(-1 * var(--ring-gutter));
+  padding-inline: var(--ring-gutter);
 }

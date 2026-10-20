@@ -309,7 +309,10 @@ function RoomPage() {
     playerId,
   ]);
 
-  // Fallback global: se o coordenador for bot, qualquer navegador destrava a escolha
+  // Coordenador bot: o HOST sorteia e escolhe; os demais navegadores só
+  // destravam se o host não fizer (antes TODOS sorteavam e chamavam
+  // chooseWord ao mesmo tempo — N buscas e N escolhas duplicadas por rodada,
+  // auditoria de 2026-10-20). A RPC aceita só a primeira escolha.
   const botAutopickRef = useRef<string | null>(null);
   useEffect(() => {
     if (!room || room.status !== "choosing" || room.current_word_id) return;
@@ -338,7 +341,7 @@ function RoomPage() {
           botAutopickRef.current = null;
         }
       },
-      900 + Math.random() * 900,
+      (isHost ? 900 : 4000) + Math.random() * 900,
     );
     return () => clearTimeout(timer);
   }, [
@@ -348,6 +351,7 @@ function RoomPage() {
     room?.current_coordinator,
     room?.current_word_id,
     currentCoordinator?.is_bot,
+    isHost,
   ]);
 
   // Auto-rejoin para o host se o registro de jogador sumiu
@@ -693,7 +697,7 @@ function RoomPage() {
         )}
       </div>
 
-      <PhaseAnnouncer status={room.status} />
+      <PhaseAnnouncer status={room.status} round={room.current_round} />
       <ReactionsLayer roomId={room.id} playerId={playerId} />
       <RoomChat
         roomId={room.id}

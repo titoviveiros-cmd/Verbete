@@ -153,9 +153,10 @@ export const ReactionsLayer = memo(function ReactionsLayer({
         className="glass-tile fixed z-[60] rounded-full w-9 h-9 flex items-center justify-center text-sm"
         style={{
           right: "max(1rem, env(safe-area-inset-right, 0px))",
+          // posição da zona de exclusão (styles.css, --float-toggle-bottom)
           bottom: hidden
             ? "max(1rem, env(safe-area-inset-bottom, 0px))"
-            : "calc(env(safe-area-inset-bottom, 0px) + 76px)",
+            : "calc(env(safe-area-inset-bottom, 0px) + var(--float-toggle-bottom, 76px))",
         }}
       >
         {hidden ? "🎈" : "▾"}

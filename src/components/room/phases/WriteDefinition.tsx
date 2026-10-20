@@ -372,193 +372,221 @@ export function WriteDefinition({
     );
   }
 
+  // Enviar / gerar / aviso. No celular em pé moram no rodapé fixo, na faixa
+  // do 💬/▾ (.float-lane-row): sempre à vista acima do teclado, e o chat
+  // não cobre mais o "gerar definição automática" (playtest 2026-10-20).
+  const ctas = (
+    <>
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          e.preventDefault();
+        }}
+        onClick={() => {
+          void playUITap("primary");
+          handleSubmit();
+        }}
+        disabled={text.trim().length < 1}
+        className="btn-pop btn-gold text-xl !py-3"
+      >
+        ✍️ Enviar definição
+      </button>
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          e.preventDefault();
+        }}
+        onClick={() => {
+          void playUITap("secondary");
+          handleAiGenerate();
+        }}
+        disabled={aiLoading}
+        className="btn-pop btn-turq text-sm !py-2.5"
+      >
+        {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
+      </button>
+      <p className="text-center text-[12px] text-muted-foreground font-semibold">
+        ✏️ tudo será exibido em <b>letras minúsculas e sem acentos</b>
+      </p>
+    </>
+  );
+  const editing = !(submitted || myDef);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      // Rolagem própria (playtest mobile: barra de navegação do Safari cobria
-      // o rodapé e não dava para ver todo o conteúdo). Barra clipada fora do shell.
-      className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:gap-6 lg:content-center"
-      style={scrollbarClip()}
+      className="flex-1 min-h-0 flex flex-col"
     >
-      <div className="flex flex-col gap-4 min-w-0">
-        <WordCard word={word} />
-        <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
-        {extensionAlerts.map(({ player: p, attempt }) => {
-          const seconds = attempt >= 2 ? 15 : 20;
-          const isSelf = p.id === me?.id;
-          const finalChance = attempt >= 2;
-          const pointsLost = attempt;
-          return (
-            <div
-              key={p.id}
-              className={
-                "rounded-xl px-3 py-2 text-center font-display text-xs border " +
-                (isSelf
-                  ? finalChance
-                    ? "bg-destructive/15 border-destructive text-destructive"
-                    : "bg-pink/15 border-pink text-pink"
-                  : "bg-sun/15 border-sun text-sun")
-              }
-            >
-              ⏰{" "}
-              {isSelf ? (
-                "Você"
-              ) : (
-                <>
-                  {p.avatar} <b>{p.nickname}</b>
-                </>
-              )}{" "}
-              perdeu{" "}
-              <b>
-                {pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}
-              </b>
-              .{" "}
-              {finalChance
-                ? `Última prorrogação: ${seconds}s para enviar${isSelf ? " ou você será eliminado(a) da partida" : " ou será eliminado(a) da partida"}.`
-                : `Nova oportunidade: +${seconds}s para enviar. Se ${isSelf ? "você perder" : "perder"} novamente na próxima prorrogação, será eliminado(a) da partida.`}
+      <div
+        // Rolagem própria (playtest mobile: barra de navegação do Safari cobria
+        // o rodapé e não dava para ver todo o conteúdo). Barra clipada fora do shell.
+        className="flex-1 min-h-0 flex flex-col gap-4 pt-2 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:gap-6 lg:content-center"
+        style={scrollbarClip()}
+      >
+        <div className="flex flex-col gap-4 min-w-0">
+          <WordCard word={word} />
+          <TimerBar remaining={remaining} max={timerMax} tickStartAt={10} />
+          {extensionAlerts.map(({ player: p, attempt }) => {
+            const seconds = attempt >= 2 ? 15 : 20;
+            const isSelf = p.id === me?.id;
+            const finalChance = attempt >= 2;
+            const pointsLost = attempt;
+            return (
+              <div
+                key={p.id}
+                className={
+                  "rounded-xl px-3 py-2 text-center font-display text-xs border " +
+                  (isSelf
+                    ? finalChance
+                      ? "bg-destructive/15 border-destructive text-destructive"
+                      : "bg-pink/15 border-pink text-pink"
+                    : "bg-sun/15 border-sun text-sun")
+                }
+              >
+                ⏰{" "}
+                {isSelf ? (
+                  "Você"
+                ) : (
+                  <>
+                    {p.avatar} <b>{p.nickname}</b>
+                  </>
+                )}{" "}
+                perdeu{" "}
+                <b>
+                  {pointsLost} {pointsLost === 1 ? "ponto" : "pontos"}
+                </b>
+                .{" "}
+                {finalChance
+                  ? `Última prorrogação: ${seconds}s para enviar${isSelf ? " ou você será eliminado(a) da partida" : " ou será eliminado(a) da partida"}.`
+                  : `Nova oportunidade: +${seconds}s para enviar. Se ${isSelf ? "você perder" : "perder"} novamente na próxima prorrogação, será eliminado(a) da partida.`}
+              </div>
+            );
+          })}
+          {/* Desktop: o Livro dá a dica no espaço livre da coluna */}
+          <div className="hidden lg:flex items-center gap-3 panel p-4 mt-1">
+            <Mascot mood="thinking" size={84} />
+            <p className="text-sm text-muted-foreground leading-snug">
+              <span className="font-display text-base text-foreground block">
+                Dica de blefe
+              </span>
+              Definição boa parece verbete de dicionário: curta, específica e
+              com cara de verdade.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 min-w-0">
+          {submitted || myDef ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center panel px-4 py-6">
+              <Mascot mood="thinking" size={110} />
+              <p className="font-display text-2xl text-mint">
+                Definição enviada! ✓
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Aguardando os outros…
+              </p>
+              <ProgressBar current={submittedCount} total={writers.length} />
+              <PendingList pending={pending} />
             </div>
-          );
-        })}
-        {/* Desktop: o Livro dá a dica no espaço livre da coluna */}
-        <div className="hidden lg:flex items-center gap-3 panel p-4 mt-1">
-          <Mascot mood="thinking" size={84} />
-          <p className="text-sm text-muted-foreground leading-snug">
-            <span className="font-display text-base text-foreground block">
-              Dica de blefe
-            </span>
-            Definição boa parece verbete de dicionário: curta, específica e com
-            cara de verdade.
-          </p>
+          ) : (
+            <>
+              {/* Sem -mx-4: no celular a margem negativa colava "0/140", chips e
+              "faltam:" na borda esquerda da tela (playtest 5G). */}
+              <div className="-mt-2 lg:mt-0 flex flex-col gap-2.5">
+                <label
+                  htmlFor="definition"
+                  className="eyebrow px-1 sr-only lg:not-sr-only lg:block"
+                >
+                  Sua definição (a mais convincente vence)
+                </label>
+                <textarea
+                  id="definition"
+                  value={text}
+                  onChange={(e) => setText(e.target.value.slice(0, 140))}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === "Enter" &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault();
+                      if (text.trim().length >= 1) handleSubmit();
+                    }
+                  }}
+                  rows={3}
+                  placeholder="escreva sua definicao mirabolante..."
+                  className="field w-full min-h-[118px] lg:min-h-[150px] px-4 py-4 font-body text-base lg:text-lg leading-relaxed resize-none"
+                />
+
+                <div className="flex justify-between text-xs font-bold text-muted-foreground tabular-nums px-1">
+                  <span
+                    className={
+                      text.length > 120
+                        ? "text-pink"
+                        : text.length > 90
+                          ? "text-sun"
+                          : ""
+                    }
+                  >
+                    {text.length}/140
+                  </span>
+                  <span>
+                    {submittedCount}/{writers.length} enviaram
+                  </span>
+                </div>
+
+                {/* Frases prontas: um toque preenche o campo (pedido de playtest —
+                dá opção a quem não quer digitar; ainda dá pra editar antes de enviar). */}
+                {suggestions.length > 0 && !submitted && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          void playUITap();
+                          setText(s.slice(0, 140));
+                        }}
+                        className="glass-tile text-left text-[13px] leading-snug px-3 py-2 rounded-xl hover:border-pink/60 active:translate-y-px transition"
+                      >
+                        💡 {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {pending.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="eyebrow mr-1">faltam:</span>
+                    {pending.map((p) => (
+                      <span key={p.id} className="chip !px-2 !py-0.5">
+                        <span className="text-sm leading-none">{p.avatar}</span>
+                        <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
+                          {p.nickname}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* desktop e celular deitado: os botões seguem no formulário */}
+                <div className="hidden lg:flex short:flex flex-col gap-2.5">
+                  {ctas}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
-      <div className="flex flex-col gap-2 min-w-0">
-        {submitted || myDef ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center panel px-4 py-6">
-            <Mascot mood="thinking" size={110} />
-            <p className="font-display text-2xl text-mint">
-              Definição enviada! ✓
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Aguardando os outros…
-            </p>
-            <ProgressBar current={submittedCount} total={writers.length} />
-            <PendingList pending={pending} />
-          </div>
-        ) : (
-          <>
-            {/* Sem -mx-4: no celular a margem negativa colava "0/140", chips e
-              "faltam:" na borda esquerda da tela (playtest 5G). */}
-            <div className="-mt-2 lg:mt-0 flex flex-col gap-2.5">
-              <label
-                htmlFor="definition"
-                className="eyebrow px-1 sr-only lg:not-sr-only lg:block"
-              >
-                Sua definição (a mais convincente vence)
-              </label>
-              <textarea
-                id="definition"
-                value={text}
-                onChange={(e) => setText(e.target.value.slice(0, 140))}
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing
-                  ) {
-                    e.preventDefault();
-                    if (text.trim().length >= 1) handleSubmit();
-                  }
-                }}
-                rows={3}
-                placeholder="escreva sua definicao mirabolante..."
-                className="field w-full min-h-[118px] lg:min-h-[150px] px-4 py-4 font-body text-base lg:text-lg leading-relaxed resize-none"
-              />
-
-              <div className="flex justify-between text-xs font-bold text-muted-foreground tabular-nums px-1">
-                <span
-                  className={
-                    text.length > 120
-                      ? "text-pink"
-                      : text.length > 90
-                        ? "text-sun"
-                        : ""
-                  }
-                >
-                  {text.length}/140
-                </span>
-                <span>
-                  {submittedCount}/{writers.length} enviaram
-                </span>
-              </div>
-
-              {/* Frases prontas: um toque preenche o campo (pedido de playtest —
-                dá opção a quem não quer digitar; ainda dá pra editar antes de enviar). */}
-              {suggestions.length > 0 && !submitted && (
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        void playUITap();
-                        setText(s.slice(0, 140));
-                      }}
-                      className="glass-tile text-left text-[13px] leading-snug px-3 py-2 rounded-xl hover:border-pink/60 active:translate-y-px transition"
-                    >
-                      💡 {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {pending.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="eyebrow mr-1">faltam:</span>
-                  {pending.map((p) => (
-                    <span key={p.id} className="chip !px-2 !py-0.5">
-                      <span className="text-sm leading-none">{p.avatar}</span>
-                      <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
-                        {p.nickname}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <button
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                }}
-                onClick={() => {
-                  void playUITap("primary");
-                  handleSubmit();
-                }}
-                disabled={text.trim().length < 1}
-                className="btn-pop btn-gold text-xl !py-3"
-              >
-                ✍️ Enviar definição
-              </button>
-              <button
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                }}
-                onClick={() => {
-                  void playUITap("secondary");
-                  handleAiGenerate();
-                }}
-                disabled={aiLoading}
-                className="btn-pop btn-turq text-sm !py-2.5"
-              >
-                {aiLoading ? "🤖 gerando…" : "🤖 gerar definição automática"}
-              </button>
-              <p className="text-center text-[12px] text-muted-foreground font-semibold">
-                ✏️ tudo será exibido em <b>letras minúsculas e sem acentos</b>
-              </p>
-            </div>
-          </>
-        )}
+      <div
+        // Mesmo depois de enviar, o rodapé (vazio) segue reservando a faixa
+        // do 💬/▾ no celular em pé: o painel "Definição enviada!" e a lista
+        // acima nunca rolam por baixo deles.
+        className={
+          "float-lane-row shrink-0 flex flex-col justify-center gap-2 lg:hidden short:hidden" +
+          (editing ? " pt-2" : "")
+        }
+      >
+        {editing && ctas}
       </div>
     </motion.div>
   );

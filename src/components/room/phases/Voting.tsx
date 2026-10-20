@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import {
   applyVotingTimeoutOrAdvance,
   botsVote,
+  type BotVoteHandle,
   castVote,
   revealAndScore,
   type Definition,
@@ -16,7 +17,7 @@ import { getStored } from "@/lib/player-id";
 import { scalePhaseSecs } from "@/lib/game-times";
 import { ReportButton } from "@/components/room/ReportButton";
 import type { RoundExtension } from "@/hooks/use-room";
-import { scrollbarClip } from "@/lib/utils";
+import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -103,6 +104,14 @@ function VotingImpl({
   );
 
   const botsVotedRef = useRef(false);
+  const botVotes = useRef<BotVoteHandle | null>(null);
+  // Todos os humanos já votaram e os bots ainda no atraso "humano": votam
+  // já — a mesa não espera pausa artificial (playtest 2026-10-20).
+  const humansPending = pending.some((p) => !p.is_bot);
+  useEffect(() => {
+    if (!humansPending) botVotes.current?.flush();
+  }, [humansPending]);
+  useEffect(() => () => botVotes.current?.cancel(), []);
   useEffect(() => {
     if (!isHost) return;
     if (botsVotedRef.current) return;
@@ -117,8 +126,16 @@ function VotingImpl({
     );
     if (!ballot.length) return;
     botsVotedRef.current = true;
-    botsVote(room.id, room.current_round, bots, ballot);
-  }, [isHost, players, room.id, room.current_round, definitions]);
+    botVotes.current = botsVote(room.id, room.current_round, bots, ballot);
+    if (!humansPending) botVotes.current.flush();
+  }, [
+    isHost,
+    players,
+    room.id,
+    room.current_round,
+    definitions,
+    humansPending,
+  ]);
 
   const revealFiredRef = useRef<number | null>(null);
   const revealInFlightRef = useRef(false);
@@ -359,7 +376,7 @@ function VotingImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden w-full max-w-full lg:justify-center lg:gap-3"
+      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden ring-room lg:justify-center lg:gap-3"
     >
       {/* Halo de urgência nos últimos 3s — vinheta vermelha pulsante */}
       {critical && (
@@ -441,8 +458,10 @@ function VotingImpl({
       )}
 
       <div
-        className="flex flex-col gap-2.5 flex-1 lg:flex-initial min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pt-1 pb-2 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start"
-        style={scrollbarClip()}
+        className="flex flex-col gap-2.5 flex-1 lg:flex-initial min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pt-2 pb-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start"
+        // Respiro do anel rosa: a cédula escolhida (ring-neon + escala)
+        // passava da caixa da lista e saía aparada (playtest 2026-10-20).
+        style={scrollbarClip(undefined, RING_GUTTER)}
         onCopy={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >

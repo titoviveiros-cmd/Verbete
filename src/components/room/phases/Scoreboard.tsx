@@ -13,7 +13,7 @@ import {
   type Vote,
 } from "@/lib/room";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
-import { scrollbarClip } from "@/lib/utils";
+import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 
 // Contador rolante (Fase 4, aprovado): o número "sobe" do placar anterior
 // para o novo com easing — dá a sensação de pontos sendo somados ao vivo.
@@ -50,10 +50,13 @@ function ScoreboardImpl({
   room,
   players,
   isHost,
+  embedded = false,
 }: {
   room: Room;
   players: Player[];
   isHost: boolean;
+  /** Dentro do fim de jogo ("📊 Placar"): sem o rodapé de próxima rodada. */
+  embedded?: boolean;
 }) {
   const sorted = useMemo(
     () => [...players].sort((a, b) => b.score - a.score),
@@ -332,7 +335,7 @@ function ScoreboardImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
+      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden ring-room"
     >
       <div className="shrink-0">
         <p className="eyebrow text-center">Rodada {room.current_round}</p>
@@ -351,8 +354,9 @@ function ScoreboardImpl({
         tabIndex={0}
         role="region"
         aria-label="Placar da rodada"
-        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:content-start lg:[mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
-        style={scrollbarClip()}
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pt-1 pb-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:content-start lg:[mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
+        // respiro do anel dourado do 1º lugar (saía aparado nas laterais)
+        style={scrollbarClip(undefined, RING_GUTTER)}
       >
         {sortedTeams.length > 0 && (
           <div className="sticker py-3">
@@ -576,19 +580,27 @@ function ScoreboardImpl({
           );
         })}
       </div>
-      {isHost ? (
-        <button
-          onClick={() => nextRound(room, players)}
-          className="btn-pop btn-gold text-2xl py-3.5 shrink-0 lg:self-center lg:min-w-[360px] max-lg:mr-12"
-        >
-          ▶ Próxima rodada
-        </button>
-      ) : (
-        <p className="text-center text-muted-foreground font-display shrink-0">
-          {holdLeft > 0
-            ? `Lendo o placar… ${holdLeft}s`
-            : "Aguardando o host continuar…"}
-        </p>
+      {/* Rodapé na faixa do 💬/▾ (.float-lane): a lista termina antes dela
+          e o botão fica centrado fora da coluna. "Próxima rodada" com tamanho
+          de botão — era text-2xl esticado na largura toda e saía cortado
+          (playtest 2026-10-20). */}
+      {!embedded && (
+        <div className="float-lane shrink-0 flex items-center justify-center">
+          {isHost ? (
+            <button
+              onClick={() => nextRound(room, players)}
+              className="btn-pop btn-gold w-full max-w-[18rem] lg:w-auto lg:max-w-none lg:min-w-[360px] text-lg max-[359px]:text-base lg:text-2xl px-4 py-3 lg:py-3.5 whitespace-nowrap"
+            >
+              ▶ Próxima rodada
+            </button>
+          ) : (
+            <p className="text-center text-muted-foreground font-display">
+              {holdLeft > 0
+                ? `Lendo o placar… ${holdLeft}s`
+                : "Aguardando o host continuar…"}
+            </p>
+          )}
+        </div>
       )}
     </motion.div>
   );
