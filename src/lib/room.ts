@@ -180,23 +180,26 @@ export async function joinRoom(
   color: string,
 ) {
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
-  const { data: room, error } = await supabase
-    .from("rooms")
-    .select("*")
-    .eq("code", code)
-    .maybeSingle();
+  // Leituras com "segunda via" (hedged): na medição de 2026-10-20 a
+  // checagem de banimento travou 19,8 s e o host só viu o convidado
+  // entrar 21,5 s depois. Mesma consulta, mesmo resultado.
+  const { data: room, error } = await hedged(() =>
+    supabase.from("rooms").select("*").eq("code", code).maybeSingle(),
+  );
   if (error) throw error;
   if (!room) throw new Error("Sala não encontrada");
 
   // Bloqueia jogadores banidos antes de inserir na sala
   const { data: authData } = await supabase.auth.getUser();
   const authUserId = authData?.user?.id ?? null;
-  const { data: banned } = await supabase.rpc("is_player_banned", {
-    _player_id: playerId,
-    // A função SQL aceita NULL (visitante sem sessão), mas o tipo gerado
-    // marca o arg como obrigatório — cast preserva o comportamento.
-    _user_id: authUserId as unknown as string,
-  });
+  const { data: banned } = await hedged(() =>
+    supabase.rpc("is_player_banned", {
+      _player_id: playerId,
+      // A função SQL aceita NULL (visitante sem sessão), mas o tipo gerado
+      // marca o arg como obrigatório — cast preserva o comportamento.
+      _user_id: authUserId as unknown as string,
+    }),
+  );
   if (banned === true) {
     throw new Error(
       "Esta conta ou dispositivo foi banido por violar as regras da comunidade.",
