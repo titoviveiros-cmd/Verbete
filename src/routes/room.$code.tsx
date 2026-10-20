@@ -28,15 +28,10 @@ import {
 import {
   playAlert,
   primeAudio,
-  playCorrectReveal,
   playGameWin,
   playPointMagnitude,
   playVoteReceived,
-  playRevealStinger,
   playWhooshUp,
-  playRevealBuildUp,
-  playCrowdReactionFooled,
-  playCrowdReactionNoOne,
   playStreak,
 } from "@/lib/sound";
 import { setMusicMood, stopMusic } from "@/lib/music";
@@ -74,27 +69,6 @@ const PhaseFallback = () => (
     <Mascot mood="thinking" size={90} />
   </div>
 );
-
-/** Quantos votos um único jogador (que não seja "__truth__") recebeu na rodada.
- *  Usado para detectar perfect round / savage e suprimir crowd genérico. */
-function countMaxFooledByOnePlayer(
-  roundVotes: Array<{ definition_id: string }>,
-  truthDefId: string,
-  definitions: Array<{ id: string; player_id: string | null }>,
-): number {
-  const counts = new Map<string, number>();
-  for (const v of roundVotes) {
-    if (v.definition_id === truthDefId) continue;
-    const def = definitions.find((d) => d.id === v.definition_id);
-    if (!def || !def.player_id || def.player_id === "__truth__") continue;
-    counts.set(def.player_id, (counts.get(def.player_id) ?? 0) + 1);
-  }
-  let max = 0;
-  counts.forEach((c) => {
-    if (c > max) max = c;
-  });
-  return max;
-}
 
 export const Route = createFileRoute("/room/$code")({
   head: ({ params }) => ({
@@ -250,49 +224,9 @@ function RoomPage() {
         setMusicMood("tension");
         break;
       case "reveal":
+        // Os sons da revelação saem da própria Reveal, um por passo da
+        // coreografia ("verdade primeiro", 2026-10-20) — aqui só a trilha.
         setMusicMood("reveal");
-        // Build-up cinematográfico: drumroll + riser + crash → stinger.
-        // playCorrectReveal só toca se ALGUÉM acertou (senão soaria cínico).
-        void playRevealBuildUp();
-        setTimeout(() => {
-          void playRevealStinger();
-        }, 1200);
-        // Reação coletiva e acorde resolvido — só se não houver stinger personalizado pesado
-        setTimeout(() => {
-          try {
-            const truthDef = definitions.find(
-              (d) => d.player_id === "__truth__",
-            );
-            if (!truthDef) return;
-            const roundVotes = votes.filter(
-              (v) => v.round === room.current_round,
-            );
-            const correctCount = roundVotes.filter(
-              (v) => v.definition_id === truthDef.id,
-            ).length;
-            const fooledCount = roundVotes.length - correctCount;
-            // Toca o acorde C maj9 só quando alguém acertou (representa "resolução")
-            if (correctCount > 0) void playCorrectReveal();
-
-            // Skip reações genéricas quando o Reveal.tsx vai disparar perfect/savage
-            // (4+ enganados por um único jogador = stinger personalizado já inclui crowd).
-            const maxFooledByOne = countMaxFooledByOnePlayer(
-              roundVotes,
-              truthDef.id,
-              definitions,
-            );
-            const willPlayPerfectOrSavage =
-              maxFooledByOne >= 4 ||
-              (maxFooledByOne >= 3 && maxFooledByOne >= roundVotes.length);
-            if (willPlayPerfectOrSavage) return;
-
-            if (roundVotes.length > 0 && correctCount === 0) {
-              void playCrowdReactionNoOne();
-            } else if (fooledCount >= 1) {
-              void playCrowdReactionFooled(fooledCount);
-            }
-          } catch {}
-        }, 2400);
         break;
       case "finished":
         setMusicMood("victory");

@@ -32,11 +32,9 @@ const LABELS: Record<string, { title: string; emoji: string; tint: string }> = {
   // voting: intencionalmente sem cortina — a fase Shuffling imediatamente
   // anterior já é uma tela cheia de transição ("Embaralhando as cédulas"),
   // então mostrar outra cortina logo depois soa duplicado.
-  reveal: {
-    title: "Revelação!",
-    emoji: "✨",
-    tint: "from-sun/40 via-transparent to-transparent",
-  },
+  // reveal: intencionalmente sem cortina (2026-10-20, "verdade primeiro") — a
+  // própria Revelação abre com uma preparação de ~0,5 s e mostra a verdade em
+  // seguida; 3 s de cortina atrasariam justamente o momento principal.
   scoreboard: {
     title: "Placar da Rodada",
     emoji: "🏆",
