@@ -180,16 +180,25 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
       T[R + "host_escolhendo"] = await when(host, "escolhendo", since);
       T[R + "conv_escolhendo"] = await when(guest, "escolhendo", since);
 
-      // 5) coordenador humano: sorteia depois da cortina; bot: escolhe sozinho
+      // 5) coordenador humano: sorteia depois da cortina; bot: escolhe sozinho.
+      // Decide pelo estado DEPOIS da transição: o início da partida mostra
+      // um coordenador provisório (sorteado no navegador) que o servidor
+      // pode trocar — por baixo da transição, o "Sortear" pode piscar.
+      for (const [, p] of pages) await curtainGone(p);
       let coord: Page | null = null;
       let coordName = "bot";
+      const onNow = (p: Page, key: string) =>
+        p.evaluate(
+          (k) =>
+            !!(
+              window as unknown as { __perf?: { on: Record<string, boolean> } }
+            ).__perf?.on[k],
+          key,
+        );
       await expect(async () => {
+        coord = null;
         for (const [name, p] of pages) {
-          if (
-            (await marks(p)).some(
-              ([t, k, on]) => k === "sortear" && on && t >= since,
-            )
-          ) {
+          if (await onNow(p, "sortear")) {
             coord = p;
             coordName = name;
           }
