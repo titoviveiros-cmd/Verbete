@@ -3,6 +3,11 @@ project_id = "mvicfbqyjeypxikzrahb"
 # players.user_id — o E2E do CI exercita o caminho real de identidade (S4).
 [auth]
 enable_anonymous_sign_ins = true
+# Retorno do login do app nativo (Android: custom_url_scheme = appId). Em
+# produção a MESMA URL precisa estar em Authentication → URL Configuration →
+# Redirect URLs no painel do Supabase (docs/store-checklist.md §Login no app).
+# A primeira é o padrão do CLI, mantida.
+additional_redirect_urls = ["https://127.0.0.1:3000", "app.verbete.game://auth/callback"]
 [functions.bot-definitions]
 verify_jwt = false
 [functions.score-similarity]

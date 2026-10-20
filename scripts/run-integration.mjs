@@ -18,6 +18,7 @@ const SUITES = [
   "test-ops-health.mjs",
   "test-r4-anti-loop.mjs",
   "test-p2-xp.mjs",
+  "test-native-auth-callback.mjs",
   "test-rollback.mjs",
   "test-probe-local.mjs",
   "ci-android.mjs",

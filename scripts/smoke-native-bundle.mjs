@@ -72,6 +72,25 @@ check(
 );
 check("sem URL de servidor de desenvolvimento", !/localhost:5173/.test(blob));
 
+// Login no app (Google e link de e-mail): o retorno é o esquema próprio do
+// Android — nunca a origem do WebView (https://localhost, que fora dele não
+// existe) — e o fluxo é PKCE (o código que chega no esquema é inútil sem o
+// verificador guardado no app).
+check(
+  "retorno da autenticação = app.verbete.game://auth/callback",
+  /"app\.verbete\.game"/.test(blob) && blob.includes("://auth/callback"),
+);
+check(
+  "nenhum retorno de auth montado com window.location.origin",
+  !/(?:emailR|r)edirectTo:\s*window\.location\.origin/.test(blob),
+);
+const cb = blob.indexOf("://auth/callback");
+check(
+  "função de retorno nativa não consulta a origem do WebView (ramo web eliminado no build)",
+  cb > 0 && !/location\.origin/.test(blob.slice(cb, cb + 300)),
+);
+check('cliente do app em PKCE (flowType:"pkce")', /flowType:"pkce"/.test(blob));
+
 const build = process.env.EXPECT_BUILD_ID;
 if (build)
   check(

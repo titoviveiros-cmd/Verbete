@@ -72,6 +72,31 @@ if (existsSync(apk)) {
   );
   const cfg = run("unzip", ["-p", apk, "assets/public/index.html"], { capture: true }).stdout ?? "";
   check("bundle embarcado no APK traz o build id do commit", sha !== "" && cfg.includes(sha), `sha=${sha.slice(0, 7)}`);
+
+  // Login no app: o retorno app.verbete.game://auth/callback abre o Verbete,
+  // sem perder os App Links verificados dos convites.
+  check(
+    "intent-filters do APK de debug (retorno do login + App Links)",
+    !!ver && run("node", ["scripts/check-android-intents.mjs", apk, join(bt, ver, "aapt2")]).status === 0,
+  );
+}
+
+console.log("\n— Gradle release (sem assinatura no PR: a assinada segue só no workflow_dispatch)");
+const release = run("./gradlew", ["assembleRelease", "--no-daemon", "--stacktrace"], { cwd: "android" });
+const relDir = "android/app/build/outputs/apk/release";
+const relApk = existsSync(relDir) ? readdirSync(relDir).find((f) => f.endsWith(".apk")) : undefined;
+check(
+  "gradlew assembleRelease (R8/minify ligados) gera o APK de release",
+  release.status === 0 && !!relApk,
+  `exit=${release.status} apk=${relApk ?? "-"}`,
+);
+if (relApk) {
+  const bt = join(process.env.ANDROID_HOME, "build-tools");
+  const ver = existsSync(bt) ? readdirSync(bt).sort().at(-1) : undefined;
+  check(
+    "intent-filters do APK de release (retorno do login + App Links)",
+    !!ver && run("node", ["scripts/check-android-intents.mjs", join(relDir, relApk), join(bt, ver, "aapt2")]).status === 0,
+  );
 }
 
 console.log(fails ? `\n${fails}/${total} FALHAS` : `\nANDROID OK — ${total}/${total}`);

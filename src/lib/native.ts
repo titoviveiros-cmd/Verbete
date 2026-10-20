@@ -1,6 +1,7 @@
 // Comportamentos exclusivos do app nativo (Capacitor). No web é no-op.
 import { Capacitor } from "@capacitor/core";
 import { APP_URL } from "./app-url";
+import { handleAuthCallback, isAuthCallback } from "./native-auth";
 
 let installed = false;
 
@@ -38,8 +39,12 @@ export async function installNativeHandlers() {
   });
 
   // App Links (https://jogo.verbete.workers.dev/?join=1234) com o app JÁ
-  // aberto chegam como evento — o WebView não navega sozinho.
-  void App.addListener("appUrlOpen", ({ url }) => openAppLink(url));
+  // aberto chegam como evento — o WebView não navega sozinho. O retorno do
+  // login (app.verbete.game://auth/callback) vai para native-auth.ts.
+  void App.addListener("appUrlOpen", ({ url }) => {
+    if (isAuthCallback(url)) void handleAuthCallback(url);
+    else openAppLink(url);
+  });
 
   // App FECHADO aberto pelo link (ex.: convite no WhatsApp): o appUrlOpen não
   // dispara; a URL vem em getLaunchUrl(). Ela continua sendo devolvida a cada
@@ -47,6 +52,10 @@ export async function installNativeHandlers() {
   try {
     const launch = await App.getLaunchUrl();
     if (!launch?.url) return;
+    if (isAuthCallback(launch.url)) {
+      await handleAuthCallback(launch.url); // dedup por código lá dentro
+      return;
+    }
     let already = false;
     try {
       already = sessionStorage.getItem(LAUNCH_HANDLED_KEY) === launch.url;
