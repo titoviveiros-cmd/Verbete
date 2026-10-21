@@ -106,6 +106,18 @@ function ScoreboardImpl({
     return () => clearTimeout(t);
   }, [scoreTransitionDone, history, room.current_round]);
 
+  // Bônus 🧠 que chega DEPOIS da tela montar (juiz demorou, host pulou a
+  // revelação): o total em players.score muda pelo realtime — relê o
+  // histórico para o detalhamento ganhar a linha 🧠 junto (antes o total
+  // tinha +3 e o detalhamento não, auditoria 2026-10-21).
+  const scoreSig = useMemo(
+    () =>
+      players
+        .map((p) => `${p.id}:${p.score}`)
+        .sort()
+        .join("|"),
+    [players],
+  );
   useEffect(() => {
     (async () => {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -148,7 +160,7 @@ function ScoreboardImpl({
         }[],
       });
     })();
-  }, [room.id, room.current_round]);
+  }, [room.id, room.current_round, scoreSig]);
 
   // Alinhado com o servidor: o score persistido em `players.score` é calculado
   // a partir de TODOS os votos da rodada (sem filtro de tolerância). Para que

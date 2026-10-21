@@ -6,6 +6,7 @@ import { AVATARS, COLORS, randomAvatar, randomColor } from "@/lib/avatars";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { createRoom, joinRoom } from "@/lib/room";
+import { friendlyEntryError } from "@/lib/entry-errors";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SoundToggle } from "@/components/SoundToggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.",
+          "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 4 a 12 jogadores, direto no navegador.",
       },
       {
         property: "og:title",
@@ -39,7 +40,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
+          "Invente significados, engane os amigos e descubra a verdade. De 4 a 12 jogadores.",
       },
       { property: "og:url", content: `${APP_URL}/` },
     ],
@@ -118,7 +119,8 @@ function HomePage() {
       setStored("hosted:" + room.code, room.host_id ?? playerId);
       nav({ to: "/room/$code", params: { code: room.code } });
     } catch (e) {
-      setError((e as Error).message);
+      console.error("create room failed", e);
+      setError(friendlyEntryError(e, "create"));
     } finally {
       setBusy(false);
     }
@@ -141,7 +143,8 @@ function HomePage() {
       const room = await joinRoom(code, playerId, cleanNick, avatar, color);
       nav({ to: "/room/$code", params: { code: room.code } });
     } catch (e) {
-      setError((e as Error).message);
+      console.error("join room failed", e);
+      setError(friendlyEntryError(e, "join"));
     } finally {
       setBusy(false);
     }
@@ -437,7 +440,7 @@ function HomePage() {
                 do HTML e no painel /admin/ops (área técnica). */}
             <div className="text-center mt-1">
               <p className="text-[12px] font-bold text-muted-foreground">
-                2 a 12 jogadores · Conta opcional
+                4 a 12 jogadores · Conta opcional
               </p>
             </div>
           </motion.div>

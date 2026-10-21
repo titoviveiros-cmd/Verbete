@@ -197,6 +197,7 @@ function VotingImpl({
   // (revealAndScore é idempotente) após delay maior.
   useEffect(() => {
     if (revealFiredRef.current === room.current_round) return;
+    if (room.paused_at) return; // pausada: o prazo não vale até retomar
     if (remaining > 0 || !room.round_phase_ends_at) return;
 
     if (isHost || isDeputy) {
@@ -277,6 +278,7 @@ function VotingImpl({
     room.id,
     room.current_round,
     room.round_phase_ends_at,
+    room.paused_at,
     pending.length,
   ]);
 

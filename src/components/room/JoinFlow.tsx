@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "@tanstack/react-router";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { joinRoom } from "@/lib/room";
+import { friendlyEntryError } from "@/lib/entry-errors";
 import { AVATARS, COLORS, randomAvatar, randomColor } from "@/lib/avatars";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
@@ -69,6 +70,15 @@ export function JoinFlow({
       }
       try {
         await joinRoom(code, playerId, cleanNick, avatar, color);
+        // Id local trocado (player_id_taken → id novo): some o otimista do
+        // id antigo; o jogador real chega pelo realtime com o id novo.
+        if (getPlayerId() !== playerId && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("player:optimistic-remove", {
+              detail: { playerId },
+            }),
+          );
+        }
       } catch (e) {
         if (typeof window !== "undefined") {
           window.dispatchEvent(
@@ -80,7 +90,8 @@ export function JoinFlow({
         throw e;
       }
     } catch (e) {
-      setError((e as Error).message);
+      console.error("join room failed", e);
+      setError(friendlyEntryError(e, "join"));
     } finally {
       setBusy(false);
     }

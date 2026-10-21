@@ -131,7 +131,7 @@ export function useRoomPolling(ctx: RoomCtx) {
         supabase
           .from("rooms")
           .select(
-            "status,current_round,current_word_id,round_phase_ends_at,current_coordinator,host_id",
+            "status,current_round,current_word_id,round_phase_ends_at,current_coordinator,host_id,paused_at",
           )
           .eq("id", roomId)
           .maybeSingle(),
@@ -210,7 +210,8 @@ export function useRoomPolling(ctx: RoomCtx) {
           cur &&
           (cur.round_phase_ends_at !== data.round_phase_ends_at ||
             cur.current_coordinator !== data.current_coordinator ||
-            cur.host_id !== data.host_id)
+            cur.host_id !== data.host_id ||
+            (cur.paused_at ?? null) !== (data.paused_at ?? null))
             ? ({ ...cur, ...data } as Room)
             : cur,
         );

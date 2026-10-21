@@ -478,6 +478,134 @@ try {
         final === 6,
         `escritor=${final} gateway=${gw} pg_net=${short(resp)}`,
       );
+
+      // 🧠 reenvio (2026-10-21): disparo com prazo de 20 s e id guardado na
+      // rodada; o cron lê a resposta e marca julgado, reenvia se falhou.
+      const fired = await row(
+        `SELECT judge_request_id, judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      check(
+        "juiz disparado por fire_round_judge (id da requisição guardado, 1ª tentativa)",
+        fired?.judge_request_id != null && fired?.judge_attempts === 1,
+        short(fired),
+      );
+      const timeout = await row(
+        `SELECT timeout_milliseconds FROM net.http_request_queue WHERE id = $1
+         UNION ALL SELECT NULL LIMIT 1`,
+        [fired?.judge_request_id ?? -1],
+      ).catch(() => null);
+      console.log("   (fila do pg_net:", short(timeout), ")");
+      let judged = null;
+      for (let i = 0; i < 20 && !judged?.judged_at; i++) {
+        await db.query(
+          `UPDATE public.rounds SET judge_fired_at = now() - interval '30 seconds', scored_at = now() - interval '30 seconds' WHERE room_id = $1 AND round = 1`,
+          [rid],
+        );
+        await db.query(`SELECT public.retry_round_judgments()`);
+        judged = await row(
+          `SELECT judged_at, judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+          [rid],
+        );
+        if (!judged?.judged_at) await sleep(500);
+      }
+      check(
+        "resposta 200 sem erro → rodada marcada como julgada, sem reenvio",
+        !!judged?.judged_at && judged?.judge_attempts === 1,
+        short(judged),
+      );
+
+      // bônus PERDIDO (simulado: desfaz o +3 e a marca) e resposta sumida há
+      // mais de 1 min → o reenvio recupera o +3 — e só uma vez
+      const undoBonus = async () => {
+        await db.query(
+          `UPDATE public.definitions SET near_truth = false WHERE room_id = $1 AND round = 1`,
+          [rid],
+        );
+        await db.query(`UPDATE public.players SET score = score - 3 WHERE id = $1`, [N]);
+      };
+      await undoBonus();
+      await db.query(
+        `UPDATE public.rounds SET judged_at = NULL, judge_request_id = -1,
+                judge_fired_at = now() - interval '2 minutes', scored_at = now() - interval '30 seconds'
+          WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      const lostBefore = await score(N);
+      const retry = await row(`SELECT public.retry_round_judgments() AS r`);
+      const again = await row(
+        `SELECT judge_request_id, judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      check(
+        "bônus perdido/resposta sumida → 2ª tentativa disparada",
+        retry.r?.retried >= 1 && again.judge_attempts === 2 && again.judge_request_id > 0,
+        short({ r: retry.r, again }),
+      );
+      let recovered = 0;
+      for (let i = 0; i < 40 && recovered !== 6; i++) {
+        await sleep(500);
+        recovered = await score(N);
+      }
+      check(
+        "o reenvio do juiz RECUPERA o +3 perdido",
+        lostBefore === 3 && recovered === 6,
+        `antes=${lostBefore} depois=${recovered}`,
+      );
+      const idem = await row(`SELECT public.retry_round_judgments() AS r`);
+      const judged2 = await row(
+        `SELECT judged_at, judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      await sleep(2000);
+      check(
+        "bônus já gravado → rodada julgada, sem novo disparo e sem +3 dobrado",
+        !!judged2.judged_at && judged2.judge_attempts === 2 && (await score(N)) === 6,
+        short({ idem: idem.r, judged2 }),
+      );
+
+      // 3ª falha → desiste e avisa
+      await undoBonus();
+      await db.query(
+        `UPDATE public.rounds SET judged_at = NULL, judge_request_id = -1, judge_attempts = 3,
+                judge_fired_at = now() - interval '2 minutes', scored_at = now() - interval '30 seconds'
+          WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      await db.query(`SELECT public.retry_round_judgments()`);
+      const gave = await row(
+        `SELECT judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      const gaveEv = await row(
+        `SELECT count(*)::int AS n FROM public.ops_events
+          WHERE kind = 'judge_gave_up' AND payload->>'room_id' = $1::text`,
+        [rid],
+      );
+      check(
+        "3ª falha → desiste (sem laço) e registra judge_gave_up",
+        gave.judge_attempts === 4 && gaveEv.n === 1,
+        short({ gave, gaveEv }),
+      );
+
+      // partida já encerrada → não reenvia (o pódio/XP já foram gravados)
+      await db.query(
+        `UPDATE public.rounds SET judged_at = NULL, judge_request_id = -1, judge_attempts = 1,
+                judge_fired_at = now() - interval '2 minutes', scored_at = now() - interval '30 seconds'
+          WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [rid]);
+      const fin = await row(`SELECT public.retry_round_judgments() AS r`);
+      const finRow = await row(
+        `SELECT judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
+      check(
+        "partida encerrada → não reenvia o juiz (pódio intacto)",
+        finRow.judge_attempts === 4 && (fin.r?.retried ?? 0) === 0 && (await score(N)) === 3,
+        short({ fin: fin.r, finRow }),
+      );
     } finally {
       await db.query(
         `DELETE FROM public.app_config WHERE key IN ('supabase_url', 'supabase_anon_key')`,

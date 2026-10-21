@@ -228,16 +228,28 @@ export function WriteDefinition({
   const timeoutHandledRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isHost && !isDeputy) return;
+    if (room.paused_at) return; // pausada: o prazo não vale até retomar
     if (remaining === 0 && room.round_phase_ends_at) {
       const key = `${room.id}:${room.current_round}:${room.round_phase_ends_at}`;
       if (timeoutHandledRef.current === key) return;
-      const delay = isHost ? 600 : 6000;
+      // Depois da carência de 2 s do servidor (como na votação): antes, o
+      // host chamava aos 0,6 s, levava "noop_grace" e caía no embaralhamento,
+      // cujo gatilho prorrogava/expulsava sem olhar a pausa (Red Team).
+      const phaseEndsAt = room.round_phase_ends_at;
+      const delay = Math.max(
+        isHost ? 600 : 6000,
+        new Date(phaseEndsAt).getTime() + 2300 - Date.now(),
+      );
       const t = setTimeout(async () => {
         if (timeoutHandledRef.current === key) return;
         timeoutHandledRef.current = key;
         try {
-          const { extended } = await applyWritingTimeoutOrAdvance(room.id);
-          if (!extended) await startShuffling(room.id);
+          const { action } = await applyWritingTimeoutOrAdvance(room.id);
+          // Só segue para o embaralhamento quando o servidor não prorrogou,
+          // não pausou e não pediu para esperar a carência.
+          if (action === "advanced" || action === "noop")
+            await startShuffling(room.id);
+          else if (action === "noop_grace") timeoutHandledRef.current = null;
         } catch (e) {
           console.error("writing timeout handler failed", e);
           timeoutHandledRef.current = null;
@@ -252,6 +264,7 @@ export function WriteDefinition({
     room.id,
     room.current_round,
     room.round_phase_ends_at,
+    room.paused_at,
   ]);
 
   // Fonte de verdade do banner: round_extensions (assinado em tempo real).

@@ -13,3 +13,18 @@ export function phaseTimeFactor(activePlayers: number): number {
 export function scalePhaseSecs(base: number, activePlayers: number): number {
   return Math.round(base * phaseTimeFactor(activePlayers));
 }
+
+// Coordenador BOT (playtest 2026-10-21): a tela "Coordenador da rodada —
+// 🤖 Fulano está escolhendo a palavra…" sumia sem ser lida — o host escolhia
+// em ~1 s, ainda sob a cortina. Agora a escolha sai só depois da cortina
+// inteira + BOT_COORDINATOR_HOLD_MS (≈2,6–3 s de tela legível em todos os
+// navegadores, já que a virada de fase chega a todos juntos). As palavras são
+// buscadas em paralelo durante a espera; os demais navegadores só cobrem a
+// falta do host bem depois (a RPC aceita só a primeira escolha).
+export const BOT_COORDINATOR_HOLD_MS = 2400;
+export const BOT_PICK_GUEST_EXTRA_MS = 4000;
+
+export function botPickDelayMs(isHost: boolean, curtainTotalMs: number) {
+  const host = curtainTotalMs + BOT_COORDINATOR_HOLD_MS;
+  return isHost ? host : host + BOT_PICK_GUEST_EXTRA_MS;
+}

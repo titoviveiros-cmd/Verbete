@@ -5,12 +5,13 @@ import { normalizeForGame, sanitizeDefinition } from "../src/lib/text-filter";
 // Partida multiplayer REAL: dois navegadores independentes (host + convidado)
 // jogam uma rodada completa — criar sala, entrar pelo código, iniciar,
 // coordenador sorteia e escolhe a palavra, escritor blefa, ambos votam,
-// revelação e placar. Mesa mínima de 4: o host completa com 2 bots (sem tocar no banco): o teste se adapta a
-// qualquer um dos dois ser sorteado coordenador.
+// revelação e placar. Mesa mínima de 4: o host completa com 2 bots (sem
+// tocar no banco); o teste se adapta a qualquer participante — humano ou
+// bot — ser sorteado coordenador.
 //
-// Determinismo da pontuação: com 2 jogadores a cédula tem 2 opções (verdade +
-// blefe do escritor); o escritor não pode votar na própria → vota na verdade
-// → o placar dele SEMPRE mostra "Acertou a verdade".
+// Determinismo da pontuação: o escritor acha a VERDADE por eliminação (não é
+// blefe de humano nem reserva de bot) → o placar dele SEMPRE mostra
+// "Acertou a verdade".
 test.setTimeout(240_000);
 
 const NICK_PLACEHOLDER = "Ex: Bia, Zé, Dudu...";

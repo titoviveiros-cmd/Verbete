@@ -50,6 +50,8 @@ export interface Room {
   categories?: string[];
   round_phase_ends_at: string | null;
   phase_started_at?: string | null;
+  /** Partida pausada (todos os humanos fora) — playtest 2026-10-21. */
+  paused_at?: string | null;
   created_at: string;
   mode?: RoomMode;
   teams?: Team[];
@@ -566,6 +568,9 @@ export async function chooseWord(
   wordId: string,
   durationSec = 60,
   activePlayers = 0,
+  /** false = sem otimismo (quem só cobre a falta do host não pode mostrar
+   *  uma palavra que talvez perca a corrida para a escolha dele). */
+  opts: { optimistic?: boolean } = {},
 ) {
   // O servidor escala o prazo em salas de 7-12 (public.phase_secs); o otimismo
   // usa a mesma conta para a barra não "pular" quando o realtime confirmar.
@@ -575,7 +580,7 @@ export async function chooseWord(
   // demais clientes que estiverem ouvindo o evento. A RPC `choose_word` é
   // quem decide de fato (guarda atômica: status='choosing' + current_word_id
   // ainda nulo, sob lock de linha) — se perder a corrida, o realtime corrige.
-  if (typeof window !== "undefined") {
+  if (opts.optimistic !== false && typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
         detail: {
@@ -1333,19 +1338,25 @@ export function computeTeamScores(players: Player[], teams: Team[]) {
 //   - Se ninguém precisou de prorrogação, retorna { extended: false } e o
 //     chamador deve seguir o fluxo normal (startShuffling).
 // ============================================================
-export async function applyWritingTimeoutOrAdvance(
-  roomId: string,
-): Promise<{ extended: boolean; kickedIds: string[] }> {
+export async function applyWritingTimeoutOrAdvance(roomId: string): Promise<{
+  action: string;
+  extended: boolean;
+  paused: boolean;
+  kickedIds: string[];
+}> {
   const { data, error } = await supabase.rpc("extend_writing_or_advance", {
     p_room_id: roomId,
   });
   if (error) {
     console.error("extend_writing_or_advance failed", error);
-    return { extended: false, kickedIds: [] };
+    return { action: "error", extended: false, paused: false, kickedIds: [] };
   }
   const payload = (data ?? {}) as { action?: string; kicked?: string[] };
   return {
+    action: payload.action ?? "noop",
     extended: payload.action === "extended",
+    // Mesa inteira fora (pausa de partida): ninguém avança a fase.
+    paused: payload.action === "paused",
     kickedIds: payload.kicked ?? [],
   };
 }

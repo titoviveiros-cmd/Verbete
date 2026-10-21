@@ -135,6 +135,8 @@ Deno.serve(async (req) => {
         kind: "judge_ai_error",
         payload: {
           fn: "score-similarity",
+          room_id: roomId,
+          round,
           reason: judged.reason,
           ...(judged.status ? { status: judged.status } : {}),
           candidates: candidates.length,
@@ -155,13 +157,37 @@ Deno.serve(async (req) => {
     // Aplica o bônus (near_truth=true + score+3) direto no banco via RPC
     // SECURITY DEFINER, service-role only. Idempotente e presa à sala/rodada
     // (auditoria 2026-07-29): replay não soma de novo.
+    // Nota de CADA candidata + sala/rodada no evento (auditoria 2026-10-21:
+    // o caso CONTUMAZ só pôde ser reconstruído por horário e reproduzindo o
+    // juiz — o evento guardava só a maior nota da rodada).
+    const trail = {
+      room_id: roomId,
+      round,
+      scores: Object.fromEntries(judged.scores),
+    };
     if (matches.length > 0) {
       const { error: bonusError } = await admin.rpc("apply_similarity_bonus", {
         p_room_id: roomId,
         p_round: round,
         p_definition_ids: matches,
       });
-      if (bonusError) console.error("apply_similarity_bonus failed", bonusError);
+      if (bonusError) {
+        // Aprovado pelo juiz e NÃO gravado: vira erro (antes saía como
+        // sucesso com matched=N) e a resposta leva "error" — o reenvio do
+        // banco (retry_round_judgments) tenta de novo; a soma é idempotente.
+        console.error("apply_similarity_bonus failed", bonusError);
+        await logEvent(admin, {
+          kind: "judge_ai_error",
+          payload: {
+            fn: "score-similarity",
+            reason: "apply_failed",
+            matched: matches.length,
+            ...trail,
+            latency_ms: Date.now() - t0,
+          },
+        });
+        return json({ matches, error: "apply_failed" });
+      }
     }
 
     await logEvent(admin, {
@@ -173,6 +199,7 @@ Deno.serve(async (req) => {
         max_score: Math.max(-1, ...judged.scores.values()),
         attempts: judged.attempts,
         latency_ms: Date.now() - t0,
+        ...trail,
       },
     });
     return json({ matches });

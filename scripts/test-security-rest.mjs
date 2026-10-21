@@ -482,6 +482,10 @@ const DENY = [
   "guard_no_self_vote", "guard_writing_phase_advance", "handle_new_user", "get_random_words",
   "submit_daily_attempt", "submit_daily_attempt_scored", "insert_truth_definition",
   "is_sessionless_api_call", "ops_health_check",
+  // pausa de partida (2026-10-21): peças internas do motor
+  "room_humans_present", "room_pause_due", "resume_paused_room", "rooms_clear_paused_at",
+  // 🧠 reenvio do juiz (2026-10-21)
+  "fire_round_judge", "retry_round_judgments",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
@@ -494,6 +498,8 @@ const ALLOW_ANON = [
   "join_public_room", "kick_player", "leave_room", "log_ops_event", "migrate_host", "phase_secs",
   "record_match_result", "rejoin_room", "reset_room", "send_reaction", "send_room_message", "start_game",
   "start_shuffling", "submit_bot_definitions_bulk", "submit_definition", "xp_to_level",
+  // pausa de partida (2026-10-21): presença e "Continuar" — identidade checada
+  "touch_presence", "resume_room",
 ];
 const execRows = await rows(
   `SELECT DISTINCT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_x,

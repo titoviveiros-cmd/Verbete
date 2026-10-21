@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Validação pós-deploy (só com E2E_BASE_URL): 2 jogadores reais (com e sem
-// 1 bot) jogam uma rodada completa no ambiente publicado — add_bot por RPC,
+// Validação pós-deploy (só com E2E_BASE_URL): 2 humanos (com e sem 1 bot
+// adicionado à mão; a mesa sempre completa até 4) jogam uma rodada completa no ambiente publicado — add_bot por RPC,
 // bot escrevendo pela IA (lote do host), sugestões da IA, votação, revelação
 // (pg_net → bônus 🧠) e placar. Se a tela de um jogador ficar presa na fase
 // anterior enquanto a sala já avançou, o teste REGISTRA o travamento e
@@ -58,7 +58,7 @@ async function visibleOrReload(
 }
 
 for (const withBot of [false, true]) {
-  test(`2 jogadores${withBot ? " + 1 bot" : ""} jogam uma rodada no deploy`, async ({
+  test(`2 humanos${withBot ? " + 1 bot" : ""} (mesa completa até 4) jogam uma rodada no deploy`, async ({
     browser,
   }) => {
     const tag = withBot ? "BOT" : "HUMANOS";

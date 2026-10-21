@@ -234,6 +234,7 @@ export function ChooseWord({
       ) : (
         <div className="panel px-5 py-4 text-center flex flex-col items-center gap-2">
           <p className="font-display text-lg">
+            {coord?.is_bot ? "🤖 " : ""}
             {coord?.nickname ?? "O coordenador"} está escolhendo a palavra…
           </p>
           <div className="flex items-center gap-1.5" aria-hidden>

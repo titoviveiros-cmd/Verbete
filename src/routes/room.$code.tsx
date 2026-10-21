@@ -8,6 +8,9 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRoom } from "@/hooks/use-room";
 import { getPlayerId, getStored, setPlayerId } from "@/lib/player-id";
+import { botPickDelayMs } from "@/lib/game-times";
+import { usePausePresence } from "@/hooks/room/use-pause-presence";
+import { PausedBanner } from "@/components/room/PausedBanner";
 import {
   fetchThreeWords,
   chooseWord,
@@ -311,36 +314,47 @@ function RoomPage() {
   // Coordenador bot: o HOST sorteia e escolhe; os demais navegadores só
   // destravam se o host não fizer (antes TODOS sorteavam e chamavam
   // chooseWord ao mesmo tempo — N buscas e N escolhas duplicadas por rodada,
-  // auditoria de 2026-10-20). A RPC aceita só a primeira escolha.
+  // auditoria de 2026-10-20). A RPC aceita só a primeira escolha. A escolha
+  // espera a cortina + a tela do coordenador ficar legível (botPickDelayMs);
+  // as palavras já vêm sendo buscadas durante a espera. Sala pausada não
+  // escolhe nada.
   const botAutopickRef = useRef<string | null>(null);
   useEffect(() => {
     if (!room || room.status !== "choosing" || room.current_word_id) return;
-    if (!currentCoordinator?.is_bot) return;
+    if (!currentCoordinator?.is_bot || room.paused_at) return;
     const key = `${room.id}:${room.current_round}:${room.current_coordinator}`;
     if (botAutopickRef.current === key) return;
+    // Só o host busca já (N navegadores buscando por rodada era o problema
+    // de 2026-10-20); quem cobre a falta dele busca na hora.
+    const fetchWords = () =>
+      fetchThreeWords(
+        room.used_word_ids ?? [],
+        room.categories ?? [],
+        room.id,
+        room.nivel ?? "aleatorio",
+      ).catch(() => []);
+    const words = isHost ? fetchWords() : null;
     const timer = setTimeout(
       async () => {
         if (botAutopickRef.current === key) return;
         botAutopickRef.current = key;
         try {
-          const options = await fetchThreeWords(
-            room.used_word_ids ?? [],
-            room.categories ?? [],
-            room.id,
-            room.nivel ?? "aleatorio",
-          );
+          const options = await (words ?? fetchWords());
           if (!options.length) {
             botAutopickRef.current = null;
             return;
           }
           const pick = options[Math.floor(Math.random() * options.length)]!;
-          await chooseWord(room.id, pick.id, 60, players.length);
+          await chooseWord(room.id, pick.id, 60, players.length, {
+            optimistic: isHost,
+          });
         } catch (e) {
           console.error("bot global auto-pick failed", e);
           botAutopickRef.current = null;
         }
       },
-      (isHost ? 900 : 4000) + Math.random() * 900,
+      botPickDelayMs(isHost, PHASE_ANNOUNCER_TOTAL_MS) +
+        (isHost ? 0 : Math.random() * 900),
     );
     return () => clearTimeout(timer);
   }, [
@@ -349,6 +363,7 @@ function RoomPage() {
     room?.current_round,
     room?.current_coordinator,
     room?.current_word_id,
+    room?.paused_at,
     currentCoordinator?.is_bot,
     isHost,
   ]);
@@ -394,6 +409,17 @@ function RoomPage() {
       if (!ok) migrateTriedRef.current = null;
     });
   }, [room?.id, room?.host_id, players, playerId]);
+
+  // Pausa de partida: presença do jogador (toque/tela) para o servidor saber
+  // se a mesa inteira saiu antes de punir alguém pelo prazo.
+  usePausePresence({
+    roomId: room?.id,
+    playerId,
+    // desde o lobby: o registro de presença nasce na entrada e marca o
+    // cliente novo (humano sem registro = cliente antigo, nunca pausa)
+    inGame: !!room && room.status !== "finished",
+    activeHuman: !!me && !me.is_bot,
+  });
 
   // Kicked notice
   const wasInGameRef = useRef(false);
@@ -554,6 +580,14 @@ function RoomPage() {
         degraded={degraded}
         onReset={() => setConfirmReset(true)}
       />
+      {room.paused_at &&
+        (room.status === "writing" || room.status === "voting") && (
+          <PausedBanner
+            roomId={room.id}
+            playerId={playerId}
+            canResume={!!me && !me.is_bot}
+          />
+        )}
 
       <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
         <AlertDialogContent>

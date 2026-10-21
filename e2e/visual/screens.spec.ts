@@ -236,11 +236,14 @@ async function checkScreen(page: Page, screen: Screen, w: number, h: number) {
   const pageErrors: string[] = [];
   page.on("pageerror", (e) => pageErrors.push(String(e)));
   const log = await installSupabaseMock(page, screen.backend());
-  if (screen.storage) {
-    await page.addInitScript((entries) => {
+  // Padrão do app virou CLARO (2026-10-21): as telas-base seguem conferindo
+  // a noite roxa com o escuro SALVO; as "-claro" sobrescrevem com "light".
+  await page.addInitScript(
+    (entries) => {
       for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
-    }, screen.storage);
-  }
+    },
+    { "verbete:theme": "dark", ...(screen.storage ?? {}) },
+  );
   // O dev server às vezes recarrega a página logo após a 1ª carga
   // (otimização de dependências do Vite / auto-update de bundle): se
   // houve recarga durante a espera, espera de novo na página nova.
@@ -519,7 +522,7 @@ for (const tr of TRANSITIONS) {
         },
         {
           ...roomStorage("lobby"),
-          ...(theme === "claro" ? { "verbete:theme": "light" } : {}),
+          "verbete:theme": theme === "claro" ? "light" : "dark",
         },
       );
       await page.goto(`/room/${ROOM_CODE}`);
