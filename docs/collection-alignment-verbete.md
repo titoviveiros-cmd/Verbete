@@ -169,6 +169,8 @@ Simulação do balão do WhatsApp (cartão grande e miniatura quadrada; antes
 | `description` | …Multiplayer em tempo real para 4 a 12 amigos… | **Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.** |
 | `og:image:alt` | Verbete — jogo multiplayer de blefe com palavras raras do português | **Verbete: a marca V, o Livro Mascote e cédulas de votação na noite roxa — Invente. Engane. Descubra a verdade.** |
 
+> Atualização 21/10: a regra virou **4 a 12 jogadores** (mínimo de 4, humanos + bots) — `description`, `og:description`, Twitter, manifest e rodapé da Home dizem "4 a 12" desde o PR #9. A tabela acima é o registro de 18/10.
+
 ### Cache do WhatsApp — como validar (depois do deploy aprovado)
 1. Conferir que a imagem responde: `https://jogo.verbete.workers.dev/verbete-social-v2-1200x630.jpg` → 200, `image/jpeg`.
 2. O WhatsApp guarda a prévia **por endereço compartilhado**. Para forçar
