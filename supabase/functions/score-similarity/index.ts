@@ -163,7 +163,8 @@ Deno.serve(async (req) => {
     const trail = {
       room_id: roomId,
       round,
-      scores: Object.fromEntries(judged.scores),
+      // OpsEvent aceita só valores simples: as notas vão como JSON compacto
+      scores: JSON.stringify(Object.fromEntries(judged.scores)),
     };
     if (matches.length > 0) {
       const { error: bonusError } = await admin.rpc("apply_similarity_bonus", {

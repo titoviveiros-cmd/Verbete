@@ -552,6 +552,10 @@ try {
         lostBefore === 3 && recovered === 6,
         `antes=${lostBefore} depois=${recovered}`,
       );
+      await db.query(
+        `UPDATE public.rounds SET judge_fired_at = now() - interval '30 seconds' WHERE room_id = $1 AND round = 1`,
+        [rid],
+      );
       const idem = await row(`SELECT public.retry_round_judgments() AS r`);
       const judged2 = await row(
         `SELECT judged_at, judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,

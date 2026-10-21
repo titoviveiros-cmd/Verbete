@@ -216,7 +216,7 @@ DECLARE
 BEGIN
   FOR r IN
     SELECT x.room_id, x.round, x.judge_request_id, x.judge_fired_at, x.judge_attempts,
-           ro.status AS room_status,
+           (ro.status IS NOT DISTINCT FROM 'finished') AS room_finished,
            EXISTS (
              SELECT 1 FROM public.definitions d
               WHERE d.room_id = x.room_id AND d.round = x.round AND d.near_truth
@@ -238,7 +238,7 @@ BEGIN
     END IF;
     -- Partida encerrada: o pódio e o XP já foram gravados — um +3 tardio
     -- reordenaria o pódio depois do pagamento. Desiste sem reenviar.
-    IF r.room_status = 'finished' THEN
+    IF r.room_finished THEN
       UPDATE public.rounds SET judge_attempts = 4 WHERE room_id = r.room_id AND round = r.round;
       INSERT INTO public.ops_events (kind, payload)
       VALUES ('judge_gave_up', jsonb_build_object('room_id', r.room_id, 'round', r.round, 'reason', 'room_finished'));
