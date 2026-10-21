@@ -1140,6 +1140,12 @@ button:disabled,
   }
 }
 
+/* Escala fixa de jogo (decisão de produto 2026-10-20, ver lib/viewport.ts):
+   sem pinça e sem duplo toque para ampliar; a rolagem (pan) continua. */
+html {
+  touch-action: pan-x pan-y;
+}
+
 /* ===== Rodapé da sala: só a barra de reações =====
    Com o chat removido e a barra compacta (playtest 2026-10-20), a única peça
    fixa no rodapé é a barra de reações (ReactionsLayer): pílula de 44px a 4px

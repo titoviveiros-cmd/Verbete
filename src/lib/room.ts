@@ -518,7 +518,32 @@ export async function startGame(room: Room, players: Player[]) {
       }),
     );
   }
-  await supabase.rpc("start_game", { p_room_id: room.id });
+  const { data, error } = await supabase.rpc("start_game", {
+    p_room_id: room.id,
+  });
+  const res = data as { ok?: boolean; reason?: string } | null;
+  if (error || res?.ok === false) {
+    // O servidor recusou (ex.: min_players — alguém saiu no meio do
+    // clique): desfaz o "choosing" otimista e devolve a mesa ao lobby.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("room:optimistic-update", {
+          detail: {
+            roomId: room.id,
+            patch: {
+              status: "lobby",
+              current_round: 0,
+              current_coordinator: null,
+              current_word_id: null,
+            },
+          },
+        }),
+      );
+    }
+    throw new Error(
+      `start_game: ${error?.message ?? res?.reason ?? "recusado"}`,
+    );
+  }
 }
 
 function pickNextCoordinator(

@@ -586,7 +586,9 @@ function ScoreboardImpl({
           botão — a área de leitura do placar vem primeiro (playtest
           2026-10-20, 2ª rodada de ajustes). */}
       {!embedded && (
-        <div className="shrink-0 flex items-center justify-center pt-1">
+        // pb-2: a raiz do placar corta o que passa da caixa (overflow) — o
+        // relevo de 5px do botão candy sumia embaixo ("cortado", 2º playtest).
+        <div className="shrink-0 flex items-center justify-center pt-1 pb-2">
           {isHost ? (
             <button
               onClick={() => nextRound(room, players)}

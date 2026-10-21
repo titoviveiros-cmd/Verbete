@@ -25,6 +25,12 @@ import { roomInviteUrl } from "@/lib/app-url";
 import { shareInvite } from "@/lib/share";
 import { playJoin, playBotJoin, playKick, playUITap } from "@/lib/sound";
 import { scrollbarClip } from "@/lib/utils";
+import {
+  activeCount,
+  botsToMinimum,
+  canStartGame,
+  startButtonLabel,
+} from "@/lib/game-rules";
 
 export const CATEGORY_META: Record<string, { emoji: string; label: string }> = {
   // Categorias enxutas (pedido do usuário 2026-07-19: natureza, história,
@@ -85,9 +91,11 @@ export function Lobby({
   nivel?: NivelFilter;
 }) {
   const slotsLeft = Math.max(0, 12 - players.length);
-  const canStart = players.length >= 2;
+  // Mínimo de 4 participantes ativos (humanos + bots) — o servidor
+  // (start_game) recusa abaixo disso; aqui só se evita o clique inútil.
+  const canStart = canStartGame(players);
   const humans = players.filter((p) => !p.is_bot).length;
-  const botsNeeded = Math.max(0, 4 - players.length);
+  const botsNeeded = botsToMinimum(players);
   const [copied, setCopied] = useState(false);
   const [shareWarn, setShareWarn] = useState<string | null>(null);
   const code = location.pathname.split("/").pop() ?? "";
@@ -136,7 +144,7 @@ export function Lobby({
   const action = isHost ? (
     <StartButton
       canStart={canStart}
-      playersCount={players.length}
+      playersCount={activeCount(players)}
       roomId={roomId}
       players={players}
       mode={mode}
@@ -710,13 +718,7 @@ function StartButton({
       setStarting(false);
     }
   };
-  const label = starting
-    ? "Iniciando…"
-    : !canStart
-      ? `Mín. 2 jogadores (${playersCount}/2)`
-      : !teamsOK
-        ? "⚠️ Atribua todos a um time"
-        : "🚀 Começar!";
+  const label = startButtonLabel({ count: playersCount, starting, teamsOK });
   return (
     <button
       disabled={!allOK || starting}

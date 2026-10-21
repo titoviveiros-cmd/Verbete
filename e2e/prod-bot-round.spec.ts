@@ -116,8 +116,12 @@ for (const withBot of [false, true]) {
         console.log(`[${tag}] BOT ADICIONADO`);
       }
 
-      // 4) começa
-      await host.getByRole("button", { name: /Começar/ }).click();
+      // 4) mínimo de 4 participantes: completa com bots e começa
+      const encher = host.getByRole("button", { name: /Encher até 4/ });
+      if (await encher.isVisible().catch(() => false)) await encher.click();
+      await host
+        .getByRole("button", { name: /Começar/ })
+        .click({ timeout: 30_000 });
 
       // 5) coordenador: quem vê "Sortear palavra"; ninguém = o bot
       const pages: Page[] = [host, guest];
@@ -219,7 +223,7 @@ for (const withBot of [false, true]) {
             .getByRole("button", { name: /Sim, resetar/ })
             .click({ timeout: 10_000 });
           await expect(
-            host.getByRole("button", { name: /Começar|Mín\. 2/ }),
+            host.getByRole("button", { name: /Começar|Mín\. 4/ }),
           ).toBeVisible({
             timeout: 30_000,
           });

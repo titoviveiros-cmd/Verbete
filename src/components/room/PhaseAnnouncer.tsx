@@ -6,13 +6,15 @@ import { hapticTick } from "@/lib/sound";
 // Tempo total real da transição, incluindo a saída do overlay + folga. O
 // Placar usa essa constante para só iniciar a contagem regressiva DEPOIS que
 // a transição sai da tela, e o alerta de "sua vez" toca depois dela.
-export const PHASE_ANNOUNCER_TOTAL_MS = 2900;
+export const PHASE_ANNOUNCER_TOTAL_MS = 3500;
 // Playtest 2026-10-20: a cortina antiga (3 s de varredura com faíscas,
 // granulado e um emoji gigante) parecia genérica e lenta. A nova é um
 // verbete da marca — o mascote-livro, a rodada, o título em ouro com aresta e
-// um fio dourado que se desenha — e fica 2,2 s na tela. Só transform e
-// opacidade: nada de backdrop-blur em tela cheia (caro no Android).
-const CURTAIN_VISIBLE_MS = 2200;
+// um fio dourado que se desenha. Só transform e opacidade: nada de
+// backdrop-blur em tela cheia (caro no Android). Tempo de tela: 2,8 s (2º
+// playtest de 2026-10-20: 2,2 s era rápido para ler rodada + título + dica;
+// a dica entra em ~0,3 s e fica ~2,5 s legível).
+const CURTAIN_VISIBLE_MS = 2800;
 const EXIT_S = 0.45;
 
 type Mood = "idle" | "excited" | "thinking" | "wow" | "sad";
@@ -87,7 +89,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
   const cfg = LABELS[status];
   if (!cfg) return null;
 
-  // Entrada em cascata curta (≈0,9 s até o último elemento); com movimento
+  // Entrada em cascata curta (≈0,7 s até o último elemento); com movimento
   // reduzido, só opacidade.
   const rise = (delay: number, y = 10) =>
     reduce
@@ -169,7 +171,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
               </motion.div>
               <motion.p
                 className="eyebrow mt-3 !text-[var(--c-gold-low)] tabular-nums"
-                {...rise(0.12, 6)}
+                {...rise(0.08, 6)}
               >
                 {cfg.eyebrow(round)}
               </motion.p>
@@ -181,7 +183,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
                   filter:
                     "drop-shadow(0 2px 0 var(--c-gold-edge)) drop-shadow(0 8px 22px rgb(244 197 66 / 0.28))",
                 }}
-                {...rise(0.18)}
+                {...rise(0.12)}
               >
                 {cfg.title}
               </motion.h2>
@@ -195,7 +197,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
                   initial={{ scaleX: 0, opacity: reduce ? 0 : 1 }}
                   animate={{ scaleX: 1, opacity: 1 }}
                   transition={{
-                    delay: reduce ? 0 : 0.32,
+                    delay: reduce ? 0 : 0.2,
                     duration: reduce ? 0.2 : 0.6,
                     ease: [0.16, 1, 0.3, 1],
                   }}
@@ -208,7 +210,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
                     reduce
                       ? { duration: 0.2 }
                       : {
-                          delay: 0.42,
+                          delay: 0.28,
                           type: "spring",
                           stiffness: 420,
                           damping: 14,
@@ -218,7 +220,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
               </div>
               <motion.p
                 className="mt-3 text-sm text-muted-foreground font-display text-balance"
-                {...rise(0.48, 6)}
+                {...rise(0.3, 6)}
               >
                 {cfg.hint}
               </motion.p>

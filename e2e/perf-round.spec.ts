@@ -24,7 +24,8 @@ const BLUFFS = [
 const REACT_MS = 300;
 // PERF_BOTS=0: só humanos — o coordenador é sempre humano (mede o caminho
 // das 3 palavras); padrão: 2 bots (mede a escrita e o voto dos bots).
-const BOTS = Number(process.env.PERF_BOTS ?? 2);
+// mesa mínima de 4 (2 humanos + bots): no mínimo 2 bots
+const BOTS = Math.max(2, Number(process.env.PERF_BOTS ?? 2));
 
 type Mark = [number, string, 0 | 1];
 type Call = { name: string; start: number; end: number | null; ok: boolean };
@@ -314,7 +315,7 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
           .getByRole("button", { name: /Sim, resetar/ })
           .click({ timeout: 10_000 });
         await expect(
-          host.getByRole("button", { name: /Começar|Mín\. 2/ }),
+          host.getByRole("button", { name: /Começar|Mín\. 4/ }),
         ).toBeVisible({ timeout: 30_000 });
         console.log(`SALA ${code} RESETADA PARA O LOBBY`);
       } catch (e) {

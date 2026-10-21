@@ -250,13 +250,13 @@ describe("Shuffling — ~2 s na tela, igual para host e convidados", () => {
 describe("PhaseAnnouncer — transição da marca, curta", () => {
   const status = () => screen.getByRole("status");
 
-  it("anuncia a fase com a rodada e sai em ~2,2 s", async () => {
+  it("anuncia a fase com a rodada e fica ~2,8 s (tempo de leitura)", async () => {
     const { rerender } = render(<PhaseAnnouncer status="lobby" round={0} />);
     rerender(<PhaseAnnouncer status="choosing" round={3} />);
     expect(status().textContent).toBe("Escolha da Palavra");
     expect(screen.getByText("Rodada 3")).toBeTruthy();
     expect(screen.getByText(/palavra rara/)).toBeTruthy();
-    await wait(2199);
+    await wait(2799);
     expect(status().textContent).toBe("Escolha da Palavra");
     await wait(1);
     expect(status().textContent).toBe("");
@@ -281,7 +281,8 @@ describe("PhaseAnnouncer — transição da marca, curta", () => {
   });
 
   it("a constante cobre a transição inteira (o placar só conta depois dela)", () => {
-    expect(PHASE_ANNOUNCER_TOTAL_MS).toBeGreaterThanOrEqual(2200 + 450);
+    // 2,8 s na tela + 0,45 s de saída: o placar só começa a contar depois
+    expect(PHASE_ANNOUNCER_TOTAL_MS).toBeGreaterThanOrEqual(2800 + 450);
     expect(PHASE_ANNOUNCER_TOTAL_MS).toBeLessThan(3800);
   });
 });

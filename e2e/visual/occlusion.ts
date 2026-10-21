@@ -204,12 +204,24 @@ export async function clippedByAncestors(page: Page): Promise<string[]> {
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 40);
-    const ringSpread = (shadow: string) => {
-      let max = 0;
-      // "rgb(…) 0px 0px 0px 3px, …": anel = sombra sem deslocamento nem desfoque.
-      for (const m of shadow.matchAll(/0px 0px 0px (\d+(?:\.\d+)?)px/g))
-        max = Math.max(max, Number(m[1]));
-      return max;
+    // Sombras DURAS (sem desfoque) fazem parte do desenho do alvo: o anel
+    // ("0 0 0 3px") e o relevo das peças candy ("0 5px 0 0", embaixo). No
+    // 2º playtest o "Próxima rodada" saía sem o relevo — aparado embaixo.
+    const shadowExtents = (shadow: string) => {
+      const e = { left: 0, right: 0, top: 0, bottom: 0 };
+      const re =
+        /(-?\d+(?:\.\d+)?)px (-?\d+(?:\.\d+)?)px (-?\d+(?:\.\d+)?)px (-?\d+(?:\.\d+)?)px( inset)?/g;
+      for (const m of shadow.matchAll(re)) {
+        if (m[5] || Number(m[3]) > 1) continue; // interna ou desfocada
+        const x = Number(m[1]);
+        const y = Number(m[2]);
+        const s = Number(m[4]);
+        e.left = Math.max(e.left, s - x);
+        e.right = Math.max(e.right, s + x);
+        e.top = Math.max(e.top, s - y);
+        e.bottom = Math.max(e.bottom, s + y);
+      }
+      return e;
     };
     const targets = Array.from(
       document.querySelectorAll(
@@ -222,12 +234,12 @@ export async function clippedByAncestors(page: Page): Promise<string[]> {
       if (cs.display === "none" || cs.visibility === "hidden") continue;
       const r0 = el.getBoundingClientRect();
       if (r0.width < 4 || r0.height < 4) continue;
-      const s = ringSpread(cs.boxShadow);
+      const ext = shadowExtents(cs.boxShadow);
       const r = {
-        left: r0.left - s,
-        right: r0.right + s,
-        top: r0.top - s,
-        bottom: r0.bottom + s,
+        left: r0.left - ext.left,
+        right: r0.right + ext.right,
+        top: r0.top - ext.top,
+        bottom: r0.bottom + ext.bottom,
       };
       // Dentro de uma lista que rola, o alvo fora da área visível não está
       // cortado — basta rolar. A partir do 1º ancestral que rola num eixo,
@@ -262,6 +274,26 @@ export async function clippedByAncestors(page: Page): Promise<string[]> {
         ) {
           out.push(
             `CORTADO NA LATERAL «${label(el)}» [${Math.round(r.left)}→${Math.round(r.right)}] por ${where} [${Math.round(left)}→${Math.round(right)}]`,
+          );
+          break;
+        }
+        // Sombra/anel aparado: a CAIXA do alvo está inteira à vista dentro do
+        // contêiner, mas o desenho (relevo, anel) passa da borda — sombra não
+        // gera rolagem, então nem um contêiner "auto" a mostra: ela some.
+        const boxInside =
+          r0.left >= left - 0.5 &&
+          r0.right <= right + 0.5 &&
+          r0.top >= top - 0.5 &&
+          r0.bottom <= bottom + 0.5;
+        // (num eixo em que uma lista de dentro já rola e recorta, o que
+        // passa dela não conta — o item está só fora da área visível)
+        const shadowOutY =
+          checkY && (r.top < top - 0.5 || r.bottom > bottom + 0.5);
+        const shadowOutX =
+          checkX && (r.left < left - 0.5 || r.right > right + 0.5);
+        if (boxInside && (shadowOutX || shadowOutY)) {
+          out.push(
+            `RELEVO/ANEL APARADO «${label(el)}» [${Math.round(r.left)},${Math.round(r.top)}→${Math.round(r.right)},${Math.round(r.bottom)}] por ${where} [${Math.round(left)},${Math.round(top)}→${Math.round(right)},${Math.round(bottom)}]`,
           );
           break;
         }
