@@ -20,10 +20,13 @@ export function startButtonLabel(o: {
   count: number;
   starting: boolean;
   teamsOK: boolean;
+  /** O servidor acabou de recusar por mesa incompleta (min_players). */
+  refused?: boolean;
 }): string {
   if (o.starting) return "Iniciando…";
   if (o.count < MIN_PLAYERS)
     return `Mín. ${MIN_PLAYERS} jogadores (${o.count}/${MIN_PLAYERS})`;
+  if (o.refused) return "Os bots ainda estão entrando — toque de novo";
   if (!o.teamsOK) return "⚠️ Atribua todos a um time";
   return "🚀 Começar!";
 }

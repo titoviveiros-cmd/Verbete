@@ -62,6 +62,9 @@ await guest.getByPlaceholder(NICK).waitFor({ timeout: 20000 });
 await guest.getByPlaceholder(NICK).fill("Bia");
 await guest.getByRole("button", { name: /Entrar na sala/ }).click();
 await host.getByText("Bia").first().waitFor({ timeout: 25000 });
+// Mínimo de 4 participantes (playtest 2026-10-20): completa com bots.
+await host.getByRole("button", { name: /Encher até 4/ }).click();
+await host.getByText("Jogadores (4/12)").waitFor({ timeout: 25000 });
 await host.waitForTimeout(1200);
 await shot(host, "shot-2-lobby");
 

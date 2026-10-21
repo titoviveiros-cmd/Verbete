@@ -262,6 +262,24 @@ describe("PhaseAnnouncer — transição da marca, curta", () => {
     expect(status().textContent).toBe("");
   });
 
+  it("o toque não atravessa a cortina enquanto ela está na tela (Red Team)", async () => {
+    const { rerender, container } = render(
+      <PhaseAnnouncer status="lobby" round={0} />,
+    );
+    const shield = () =>
+      container.querySelector("[data-phase-announcer-shield]");
+    expect(shield()).toBeNull();
+    rerender(<PhaseAnnouncer status="scoreboard" round={2} />);
+    expect(shield()).toBeTruthy();
+    // a barreira cobre a tela toda e recebe o toque (a cortina visual não)
+    expect(shield()!.className).toMatch(/fixed inset-0 z-50/);
+    expect(shield()!.className).not.toMatch(/pointer-events-none/);
+    await wait(2799);
+    expect(shield()).toBeTruthy();
+    await wait(1);
+    expect(shield()).toBeNull(); // no fade de saída já dá para tocar
+  });
+
   it("mascote da marca, sem o emoji gigante genérico", () => {
     const { rerender, container } = render(
       <PhaseAnnouncer status="choosing" />,

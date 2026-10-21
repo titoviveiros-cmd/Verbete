@@ -39,6 +39,23 @@ describe("mínimo de 4 participantes (humanos + bots)", () => {
     expect(startButtonLabel({ count: 4, starting: true, teamsOK: true })).toBe(
       "Iniciando…",
     );
+    // recusa do servidor (bot otimista ainda não chegou ao banco)
+    expect(
+      startButtonLabel({
+        count: 4,
+        starting: false,
+        teamsOK: true,
+        refused: true,
+      }),
+    ).toBe("Os bots ainda estão entrando — toque de novo");
+    expect(
+      startButtonLabel({
+        count: 3,
+        starting: false,
+        teamsOK: true,
+        refused: true,
+      }),
+    ).toBe("Mín. 4 jogadores (3/4)");
   });
 
   it("expulso não conta; 'Encher até 4' completa exatamente o que falta", () => {

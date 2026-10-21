@@ -116,9 +116,15 @@ for (const withBot of [false, true]) {
         console.log(`[${tag}] BOT ADICIONADO`);
       }
 
-      // 4) mínimo de 4 participantes: completa com bots e começa
+      // 4) mínimo de 4 participantes: completa com bots e começa. "Encher
+      //    até 4" só aparece quando faltam 2+; faltando 1, é o "+1 Bot".
       const encher = host.getByRole("button", { name: /Encher até 4/ });
       if (await encher.isVisible().catch(() => false)) await encher.click();
+      else if (withBot)
+        await host.getByRole("button", { name: /\+1 Bot/ }).click();
+      await expect(host.getByText("Jogadores (4/12)")).toBeVisible({
+        timeout: 30_000,
+      });
       await host
         .getByRole("button", { name: /Começar/ })
         .click({ timeout: 30_000 });
@@ -136,7 +142,8 @@ for (const withBot of [false, true]) {
           )
             coord = p;
         }
-        // sem humano com "Sortear palavra" e a escrita já aberta = o bot escolheu
+        // sem humano com "Sortear palavra" e a escrita já aberta = um bot
+        // escolheu (com o mínimo de 4, as duas variantes têm bots)
         const writingOpen =
           (await host
             .getByPlaceholder(WRITE)
@@ -146,11 +153,17 @@ for (const withBot of [false, true]) {
             .getByPlaceholder(WRITE)
             .isVisible()
             .catch(() => false));
-        expect(coord !== null || (withBot && writingOpen)).toBeTruthy();
+        expect(coord !== null || writingOpen).toBeTruthy();
       }).toPass({ timeout: 150_000 });
       console.log(`[${tag}] COORDENADOR ${coord ? names.get(coord) : "bot"}`);
       if (coord) {
         const c = coord as Page;
+        // a cortina da fase segura o toque enquanto está na tela (o clique
+        // forçado abaixo seria engolido por ela)
+        await expect(c.locator("[data-phase-announcer-shield]")).toHaveCount(
+          0,
+          { timeout: 10_000 },
+        );
         // botões animados sem parar nunca ficam "estáveis" para o Playwright
         await c
           .getByRole("button", { name: /Sortear palavra/ })

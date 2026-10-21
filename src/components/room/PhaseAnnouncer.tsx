@@ -115,6 +115,17 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
       <span className="sr-only" role="status" aria-live="polite">
         {show ? cfg.title : ""}
       </span>
+      {/* O toque não atravessa a cortina (Red Team 2026-10-20): ela é opaca,
+          então um toque "para pular" acertava às cegas o botão da fase por
+          baixo (Sortear palavra, Próxima rodada, Sair). A barreira some junto
+          com o tempo de tela — no fade de saída (0,45 s) já dá para tocar. */}
+      {show && (
+        <div
+          aria-hidden
+          data-phase-announcer-shield
+          className="fixed inset-0 z-50"
+        />
+      )}
       <AnimatePresence>
         {show && (
           <motion.div

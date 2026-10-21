@@ -523,9 +523,11 @@ export async function startGame(room: Room, players: Player[]) {
   });
   const res = data as { ok?: boolean; reason?: string } | null;
   if (error || res?.ok === false) {
-    // O servidor recusou (ex.: min_players — alguém saiu no meio do
-    // clique): desfaz o "choosing" otimista e devolve a mesa ao lobby.
-    if (typeof window !== "undefined") {
+    // O servidor recusou com a mesa ainda no lobby (ex.: min_players — o bot
+    // otimista ainda não chegou ao banco, ou alguém saiu no meio do clique):
+    // desfaz o "choosing" otimista. invalid_state = a partida JÁ começou
+    // (outra aba, clique duplo, resposta perdida): mantém e o poll sincroniza.
+    if (res?.reason !== "invalid_state" && typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("room:optimistic-update", {
           detail: {

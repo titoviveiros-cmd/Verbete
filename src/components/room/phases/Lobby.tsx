@@ -700,6 +700,12 @@ function StartButton({
   teams: Team[];
 }) {
   const [starting, setStarting] = useState(false);
+  const [refused, setRefused] = useState(false);
+  useEffect(() => {
+    if (!refused) return;
+    const t = setTimeout(() => setRefused(false), 3000);
+    return () => clearTimeout(t);
+  }, [refused]);
   const teamsOK =
     mode !== "teams" ||
     (teams.length >= 2 && players.every((p) => !!p.team_id));
@@ -716,9 +722,17 @@ function StartButton({
     } catch (e) {
       console.error(e);
       setStarting(false);
+      // Recusa por mesa incompleta: em geral o bot otimista ainda não chegou
+      // ao banco (clique logo depois de "Encher até 4") — explica no botão.
+      if (String(e).includes("min_players")) setRefused(true);
     }
   };
-  const label = startButtonLabel({ count: playersCount, starting, teamsOK });
+  const label = startButtonLabel({
+    count: playersCount,
+    starting,
+    teamsOK,
+    refused,
+  });
   return (
     <button
       disabled={!allOK || starting}
