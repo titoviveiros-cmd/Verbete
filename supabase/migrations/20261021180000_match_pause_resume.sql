@@ -74,7 +74,7 @@ BEGIN
   NEW.phase_started_at := now();
   RETURN NEW;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.rooms_clear_paused_at() FROM PUBLIC, anon, authenticated;
 
@@ -96,7 +96,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1
       FROM public.players p
@@ -112,7 +112,7 @@ AS $
              AND (pr.away_at IS NULL OR pr.away_at < pr.active_at))
        )
   );
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.room_humans_present(uuid) FROM PUBLIC, anon, authenticated;
 
@@ -126,7 +126,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
-AS $
+AS $$
   SELECT r.status IN ('writing', 'voting')
      AND r.paused_at IS NULL
      AND EXISTS (
@@ -150,7 +150,7 @@ AS $
      AND NOT public.room_humans_present(r.id)
   FROM public.rooms r
   WHERE r.id = p_room_id;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.room_pause_due(uuid) FROM PUBLIC, anon, authenticated;
 
