@@ -93,12 +93,17 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
   // F — aviso PERDIDO (SYNC_DROP_NUDGE=1): o host não recebe nenhum
   // "round-sync-needed"; o que ele vê tem de chegar pelo realtime/poll
   let dropped = 0;
+  let frames = 0;
   if (process.env.SYNC_DROP_NUDGE === "1")
     await host.routeWebSocket(/realtime/, (ws) => {
       const server = ws.connectToServer();
       ws.onMessage((m) => server.send(m));
       server.onMessage((m) => {
-        if (typeof m === "string" && m.includes("round-sync-needed")) {
+        frames++;
+        // o realtime-js 2.x manda broadcast em quadro BINÁRIO
+        const txt =
+          typeof m === "string" ? m : Buffer.from(m).toString("latin1");
+        if (txt.includes("round-sync-needed")) {
           dropped++;
           return;
         }
@@ -319,7 +324,9 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
       );
     console.log("=== SINCRONIZAÇÃO\n" + rows.join("\n"));
     if (process.env.SYNC_DROP_NUDGE === "1")
-      console.log(`=== AVISOS DESCARTADOS NO HOST: ${dropped}`);
+      console.log(
+        `=== AVISOS DESCARTADOS NO HOST: ${dropped} (quadros do servidor vistos: ${frames})`,
+      );
     const sorted = [...autoMs].sort((a, b) => a - b);
     const pct = (q: number) =>
       sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
