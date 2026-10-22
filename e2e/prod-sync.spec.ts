@@ -182,11 +182,17 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
       for (const [name, p] of order) {
         const field = p.getByPlaceholder(WRITE);
         const coord = p.getByText(/Você é o coordenador/i).first();
+        // coordenador (não escreve) cuja escrita já acabou — convidado + bots
+        // fecharam antes de chegar a vez dele: segue para a votação
+        const past = p
+          .getByText(/embaralhando as cédulas|Qual é o significado de/i)
+          .first();
         await expect
           .poll(
             async () =>
               (await field.isVisible().catch(() => false)) ||
-              (await coord.isVisible().catch(() => false)),
+              (await coord.isVisible().catch(() => false)) ||
+              (await past.isVisible().catch(() => false)),
             { timeout: 90_000, intervals: [250] },
           )
           .toBe(true);
