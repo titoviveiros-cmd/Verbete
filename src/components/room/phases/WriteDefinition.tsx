@@ -30,6 +30,7 @@ import {
 import type { RoundExtension } from "@/hooks/use-room";
 import { scrollbarClip } from "@/lib/utils";
 import {
+  AUTO_DEF_PREFETCH_DELAY_MS,
   AUTO_DEF_WAIT_MS,
   autoDefKey,
   prefetchAutoDefinition,
@@ -140,6 +141,10 @@ export function WriteDefinition({
     : null;
   const autoKeyRef = useRef(autoKey);
   autoKeyRef.current = autoKey;
+  const textRef = useRef(text);
+  textRef.current = text;
+  const sentRef = useRef(false);
+  sentRef.current = submitted || !!myDef;
   const generateAuto = useMemo(
     () => () =>
       generateAiDefinitionForPlayer(word, room.id, room.current_round),
@@ -147,8 +152,13 @@ export function WriteDefinition({
     [word.id, room.id, room.current_round],
   );
   useEffect(() => {
-    if (!autoKey || isCoordinator || submitted) return;
-    prefetchAutoDefinition(autoKey, generateAuto);
+    if (!autoKey || isCoordinator) return;
+    // um pouco depois da leva dos bots e dos 💡 (não disputa a IA com eles);
+    // quem já enviou (ex.: recarregou a página) não gasta IA
+    const t = setTimeout(() => {
+      if (!sentRef.current) prefetchAutoDefinition(autoKey, generateAuto);
+    }, AUTO_DEF_PREFETCH_DELAY_MS);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoKey, isCoordinator]);
   const writers = useMemo(
@@ -376,6 +386,7 @@ export function WriteDefinition({
         return pick ?? pool[0] ?? "";
       };
       const key = autoKey;
+      const before = text;
       const got = await takeAutoDefinition(key, {
         generate: generateAuto,
         fallback: localFallback,
@@ -384,6 +395,8 @@ export function WriteDefinition({
       });
       // trocou de rodada no meio: o texto velho não entra no campo novo
       if (autoKeyRef.current !== key) return;
+      // digitou ou tocou num 💡 durante a espera: não apaga o que ele fez
+      if (textRef.current !== before) return;
       setText(got.text.slice(0, 140));
     } catch (e) {
       console.error("generateAiDefinitionForPlayer failed", e);

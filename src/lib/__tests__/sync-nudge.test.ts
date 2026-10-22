@@ -31,6 +31,19 @@ describe("aviso de sincronização", () => {
     expect(gate.accept(old)).toBe(false);
   });
 
+  it("leitura que FALHOU não gasta a vez: a resposta boa mais antiga ainda vale", () => {
+    const gate = createLatestGate();
+    const old = gate.next();
+    const failed = gate.next();
+    // a mais nova falhou (não passa pelo accept) e nada mais novo foi aplicado
+    expect(gate.stale(failed)).toBe(false);
+    expect(gate.accept(old)).toBe(true);
+    // já com uma boa mais nova aplicada, a falha velha não acende o aviso
+    const fresh = gate.next();
+    expect(gate.accept(fresh)).toBe(true);
+    expect(gate.stale(failed)).toBe(true);
+  });
+
   it("o aviso não leva texto, autor, verdade nem significado — só sala, rodada, tipo e versão", () => {
     const p = nudgePayload("sala-1", 3, "definition", 123);
     expect(Object.keys(p).sort()).toEqual(["kind", "room_id", "round", "v"]);

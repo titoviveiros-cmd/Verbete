@@ -54,7 +54,9 @@ export function createCoalescer(fn: () => void, ms = 100) {
 }
 
 /** Respostas fora de ordem: só vale a de um pedido mais novo que o último
- *  aplicado (um poll lento não desfaz o que um aviso já trouxe). */
+ *  aplicado (um poll lento não desfaz o que um aviso já trouxe). Só resposta
+ *  BOA entra em `accept` — uma leitura que falhou não "gasta" a vez de uma
+ *  mais antiga que ainda pode chegar (Red Team 2026-10-22). */
 export function createLatestGate() {
   let issued = 0;
   let applied = 0;
@@ -65,5 +67,7 @@ export function createLatestGate() {
       applied = seq;
       return true;
     },
+    /** já existe resposta aplicada mais nova que este pedido */
+    stale: (seq: number) => seq < applied,
   };
 }

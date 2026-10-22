@@ -41,7 +41,10 @@ import {
   botSubmitDefinitions,
   castBotVotes,
   fetchThreeWords,
+  generateAiDefinitionForPlayer,
 } from "@/lib/room";
+import { NUDGE_EVENT } from "@/lib/sync-nudge";
+import { PERSONA_PROMPTS } from "../../../supabase/functions/bot-definitions-v2/prompts.ts";
 
 const named = (name: string) => h.calls.filter((c) => c.name === name);
 const tick = async () => {
@@ -373,5 +376,87 @@ describe("botSubmitDefinitions — sem pausa artificial depois da IA", () => {
     vi.advanceTimersByTime(1);
     await settle();
     expect(named("rpc:submit_bot_definitions_bulk")).toHaveLength(1);
+  });
+});
+
+describe("aviso dos bots e sugestão do jogador (Red Team 2026-10-22)", () => {
+  const word = { id: "w1", word: "rapapé", meaning: "bajulação" } as Word;
+  const settle = async () => {
+    for (let i = 0; i < 3; i++) {
+      await vi.dynamicImportSettled();
+      await tick();
+    }
+  };
+  const botsSent = async () => {
+    void botSubmitDefinitions("room-1", 2, [bot("b1")], word);
+    await tick();
+    named("rpc:get_room_definitions")[0]!.resolve({ data: [] });
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: { definitions: ["pequeno instrumento de sopro usado em festas"] },
+    });
+    await tick();
+    vi.advanceTimersByTime(BOT_WRITE_MIN_MS);
+    await settle();
+    const sent = named("rpc:submit_bot_definitions_bulk");
+    expect(sent).toHaveLength(1);
+    return sent[0]!;
+  };
+
+  it("bots: servidor não gravou nada (0 linhas) → nenhum aviso à sala", async () => {
+    vi.useFakeTimers();
+    const seen = vi.fn();
+    window.addEventListener(NUDGE_EVENT, seen);
+    try {
+      (await botsSent()).resolve({
+        data: { ok: true, inserted: 0 },
+        error: null,
+      });
+      await settle();
+      expect(seen).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(NUDGE_EVENT, seen);
+    }
+  });
+
+  it("bots: servidor gravou → UM aviso à sala", async () => {
+    vi.useFakeTimers();
+    const seen = vi.fn();
+    window.addEventListener(NUDGE_EVENT, seen);
+    try {
+      (await botsSent()).resolve({
+        data: { ok: true, inserted: 1 },
+        error: null,
+      });
+      await settle();
+      expect(seen).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(NUDGE_EVENT, seen);
+    }
+  });
+
+  it("sugestão do jogador: estilo VÁLIDO da v2 e nunca o 1º dos bots/💡", async () => {
+    for (let i = 0; i < 12; i++)
+      void generateAiDefinitionForPlayer(word, "room-1", 2);
+    await tick();
+    const ps = named("edge:bot-definitions-v2").map(
+      (c) => (c.args as { body: { personas: string[] } }).body.personas[0],
+    );
+    expect(ps).toHaveLength(12);
+    for (const p of ps) {
+      expect(Object.keys(PERSONA_PROMPTS)).toContain(p);
+      expect(["conciso", "contextual"]).not.toContain(p);
+    }
+  });
+
+  it("IA sem candidata: usa a reserva que o SERVIDOR vetou contra a verdade", async () => {
+    const p = generateAiDefinitionForPlayer(word, "room-1", 2);
+    await tick();
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: {
+        definitions: [],
+        fallbacks: ["reserva vetada pelo servidor para teste"],
+      },
+    });
+    expect(await p).toBe("reserva vetada pelo servidor para teste");
   });
 });

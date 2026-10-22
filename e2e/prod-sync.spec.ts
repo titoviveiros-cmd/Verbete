@@ -45,7 +45,9 @@ const SAMPLER = () => {
       )
         return "votacao";
       if (/embaralhando as cédulas/i.test(t)) return "embaralhando";
-      if (/enviaram/i.test(t)) return "escrita";
+      // a tela do COORDENADOR na escrita não tem "X/Y enviaram" — sem isto o
+      // medidor casava o início da escrita com a tela de saída (falso 6 s)
+      if (/enviaram|Você é o coordenador/i.test(t)) return "escrita";
       if (/Coordenador da rodada/i.test(t)) return "escolha";
       return "";
     },

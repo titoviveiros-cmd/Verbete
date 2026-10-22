@@ -71,10 +71,16 @@ export function useRoomPolling(ctx: RoomCtx) {
         "get_round_sync",
         { p_room_id: roomId },
       );
-      if (cancelled || !gate.accept(seq)) return;
+      if (cancelled) return;
       // Fase 3 (ConnectionState): o poll é o batimento com o servidor —
-      // falha liga o indicador de reconexão; sucesso desliga.
-      setDegraded(!!syncErr);
+      // falha liga o indicador de reconexão; sucesso desliga. A falha não
+      // passa pelo gate: uma resposta boa mais antiga ainda vale.
+      if (syncErr) {
+        if (!gate.stale(seq)) setDegraded(true);
+        return;
+      }
+      if (!gate.accept(seq)) return;
+      setDegraded(false);
       const payload = sync as {
         definitions?: Definition[];
         votes?: Vote[];

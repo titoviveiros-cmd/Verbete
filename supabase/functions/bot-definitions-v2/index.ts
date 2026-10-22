@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
     ];
     let gate: "ok" | "failed" | "skipped" = "skipped";
     let gateMs = 0;
-    let definitions: string[] = [];
+    let passed: string[] = [];
     let fallbacks: string[] = fbFresh.kept;
     let droppedGate = 0;
     const left = TOTAL_BUDGET_MS - (Date.now() - t0);
@@ -242,10 +242,9 @@ Deno.serve(async (req) => {
         gate = "ok";
         const pass = gateByScores(items, judged.scores, BOT_GATE_MAX_SCORE);
         droppedGate = pass.dropped;
-        definitions = pass.kept
+        passed = pass.kept
           .filter((it) => it.id.startsWith("c"))
-          .map((it) => it.text)
-          .slice(0, count);
+          .map((it) => it.text);
         fallbacks = pass.kept
           .filter((it) => it.id.startsWith("r"))
           .map((it) => it.text);
@@ -258,6 +257,28 @@ Deno.serve(async (req) => {
       }
     } else if (items.length > 0) {
       gate = "failed"; // sem tempo para o juiz: mesma regra
+    }
+
+    // 4) Memória da rodada RELIDA no fim (Red Team 2026-10-22): a sugestão
+    // antecipada do jogador, os chips e os bots geram AO MESMO TEMPO — a
+    // leitura do início não via o texto das outras chamadas e saíam frases
+    // quase iguais (cédula "denunciada", too_similar no envio). Relida aqui,
+    // a janela de corrida cai para milissegundos, nos dois sentidos.
+    let droppedLate = 0;
+    let definitions: string[] = [];
+    if (passed.length > 0) {
+      const { data: servedNow } = await admin
+        .from("ai_served_defs")
+        .select("norm_text")
+        .eq("room_id", roomId)
+        .eq("round", round);
+      const nowNorms: string[] = (servedNow ?? []).map(
+        (r: { norm_text: string }) => r.norm_text,
+      );
+      const late = dropAlreadyServed(passed, nowNorms);
+      droppedLate = late.dropped;
+      definitions = late.kept.slice(0, count);
+      fallbacks = dropAlreadyServed(fallbacks, nowNorms).kept;
     }
 
     if (definitions.length > 0) {
@@ -286,6 +307,7 @@ Deno.serve(async (req) => {
         dropped_match: notRepeated.dropped,
         dropped_self: distinct.dropped,
         dropped_gate: droppedGate,
+        dropped_late: droppedLate,
         gate,
         gate_ms: gateMs,
         fallbacks_ok: fallbacks.length,

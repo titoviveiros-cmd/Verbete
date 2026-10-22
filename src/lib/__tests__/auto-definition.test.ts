@@ -97,6 +97,32 @@ describe("definição automática antecipada", () => {
     expect(got.source).toBe("reserva");
   });
 
+  it("QUASE igual a um 💡 da tela também não serve (não só o idêntico)", async () => {
+    prefetchAutoDefinition(K1, () =>
+      later(10, "pequeno animal que vive no fundo do rio"),
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    const got = await takeAutoDefinition(K1, {
+      generate: () => later(9, "x"),
+      fallback,
+      exclude: ["pequeno animal que vive no fundo do mar"],
+    });
+    expect(got.source).toBe("reserva");
+  });
+
+  it("dois toques juntos (remontagem na espera) não jogam fora a reposição", async () => {
+    const gen = vi.fn(() => later(500, "s"));
+    prefetchAutoDefinition(K1, gen);
+    const a = takeAutoDefinition(K1, { generate: gen, fallback });
+    const b = takeAutoDefinition(K1, { generate: gen, fallback });
+    await vi.advanceTimersByTimeAsync(500);
+    await a;
+    await b;
+    // 1 antecipada + 1 reposição (antes: a 2ª retirada apagava a reposição
+    // e gerava outra — 3 chamadas da IA)
+    expect(gen).toHaveBeenCalledTimes(2);
+  });
+
   it("teto de gerações por rodada (cota da IA)", async () => {
     const gen = vi.fn(() => later(5, "s"));
     prefetchAutoDefinition(K1, gen);

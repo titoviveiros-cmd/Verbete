@@ -863,12 +863,15 @@ async function submitBotRows(
   rows: Array<{ player_id: string; text: string }>,
 ) {
   try {
-    const { error } = await supabase.rpc("submit_bot_definitions_bulk", {
+    const { data, error } = await supabase.rpc("submit_bot_definitions_bulk", {
       p_room_id: roomId,
       p_round: round,
       p_rows: rows,
     });
-    if (!error) nudgeRoundSync(roomId, round, "bot_definitions");
+    // só avisa se o servidor gravou algo ({ok:false} ou 0 linhas = nada novo)
+    const res = data as { ok?: boolean; inserted?: number } | null;
+    if (!error && res?.ok && (res.inserted ?? 0) > 0)
+      nudgeRoundSync(roomId, round, "bot_definitions");
   } catch {
     /* o timer da escrita e o servidor cobrem */
   }
@@ -904,13 +907,16 @@ export async function generateAiDefinitionForPlayer(
   roomId?: string,
   round?: number,
 ): Promise<string> {
+  // Estilos VÁLIDOS da v2 (os nomes antigos caíam no padrão "conciso" — o
+  // mesmo da 1ª candidata dos bots e do 1º 💡: frases convergiam). Sem
+  // "conciso" e "contextual", que os 💡 usam (Red Team 2026-10-22).
   const personas = [
-    "formal",
-    "giria",
-    "tecnico",
-    "regional",
-    "poetico",
-    "pratico",
+    "analitico",
+    "funcional",
+    "descritivo",
+    "comparativo",
+    "acepcao",
+    "popular",
   ];
   const persona = personas[Math.floor(Math.random() * personas.length)];
 
@@ -931,12 +937,18 @@ export async function generateAiDefinitionForPlayer(
         round,
       },
     });
-    const arr = (data as any)?.definitions;
-    const raw = Array.isArray(arr)
-      ? arr.find(
-          (s: unknown) => typeof s === "string" && (s as string).length > 5,
-        )
-      : null;
+    const firstOk = (arr: unknown) =>
+      Array.isArray(arr)
+        ? (arr.find(
+            (s: unknown) => typeof s === "string" && (s as string).length > 5,
+          ) as string | undefined)
+        : undefined;
+    // sem candidata da IA: a reserva que o SERVIDOR já vetou contra a
+    // verdade (a lista local crua fica só como último recurso)
+    const fbs = (data as any)?.fallbacks;
+    const raw =
+      firstOk((data as any)?.definitions) ??
+      firstOk(Array.isArray(fbs) ? shuffle([...fbs]) : null);
     if (raw) {
       const clean = sanitizeDefinition(raw as string, 140, word.word);
       if (!used.has(normalizeDefText(clean))) return clean;

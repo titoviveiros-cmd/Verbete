@@ -7,7 +7,14 @@
 // espera curta (AUTO_DEF_WAIT_MS) e, sem resposta, a reserva local. A
 // resposta atrasada nunca troca o texto já mostrado — fica para o próximo
 // toque. Cache por sala+rodada+jogador+palavra: trocou, descarta tudo.
+import { textSimilarity } from "./text-filter";
+
 export const AUTO_DEF_WAIT_MS = 1000;
+/** Começo da antecipação: depois da leva dos bots e dos 💡 (não disputa a IA
+ *  com eles) e ainda sob a cortina "Hora de Inventar" (3,5 s). */
+export const AUTO_DEF_PREFETCH_DELAY_MS = 1200;
+/** "Quase igual" a algo da tela = mesma régua dos 💡 e da memória do servidor. */
+const AUTO_DEF_SIMILAR = 0.6;
 /** Gerações por rodada (a 1ª antecipada + as seguintes a cada toque). */
 export const AUTO_DEF_MAX_PER_ROUND = 3;
 
@@ -78,8 +85,12 @@ export async function takeAutoDefinition(
 ): Promise<{ text: string; source: "pronta" | "espera" | "reserva" }> {
   enter(key);
   if (queue.length === 0) start(opts.generate);
+  // igual OU quase igual ao campo/💡 da tela não serve (Red Team 2026-10-22)
   const usable = (v: string | null | undefined): v is string =>
-    !!v && !(opts.exclude ?? []).includes(v);
+    !!v &&
+    !(opts.exclude ?? []).some(
+      (e) => !!e && (e === v || textSimilarity(e, v) > AUTO_DEF_SIMILAR),
+    );
   const entry = queue[0];
   if (entry) {
     let value: string | null | undefined;
@@ -97,9 +108,12 @@ export async function takeAutoDefinition(
     if (currentKey !== key)
       return { text: await opts.fallback(), source: "reserva" };
     if (value !== undefined) {
-      // usada (ou vazia): sai da fila e já começa a próxima
-      queue.shift();
-      if (queue.length === 0) start(opts.generate);
+      // usada (ou vazia): sai da fila e já começa a próxima — só quem a
+      // tirou primeiro (dois toques juntos não jogam fora a reposição)
+      if (queue[0] === entry) {
+        queue.shift();
+        if (queue.length === 0) start(opts.generate);
+      }
       if (usable(value)) return { text: value, source };
     }
   }
