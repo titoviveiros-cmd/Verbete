@@ -17,6 +17,13 @@
 -- (apply_similarity_bonus): reenvio nunca soma duas vezes. Valor (+3) e
 -- limiar (80) intocados.
 --
+-- 2026-10-22 (sala 3361, HIENA: o juiz caiu com 503 e o +3 de uma nota 82
+-- se perdeu; 15 de 30 chamadas falharam no dia): o número da tentativa vai
+-- no corpo (a edge o grava em cada evento, com sala, rodada e as notas);
+-- partida ENCERRADA não recebe +3 tardio (apply_similarity_bonus recusa); e
+-- as rodadas pontuadas antes desta migration contam como julgadas — o
+-- reenvio vale só para as novas (nada muda em partida já em andamento).
+--
 -- Compatível com o cliente em produção (nada muda para ele) e com a edge
 -- antiga. Fica para aplicar junto com o merge.
 -- ROLLBACK: supabase/rollback/similarity_judge_retry.sql
@@ -27,6 +34,9 @@ ALTER TABLE public.rounds
   ADD COLUMN IF NOT EXISTS judge_fired_at timestamptz,
   ADD COLUMN IF NOT EXISTS judge_attempts int NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS judged_at timestamptz;
+
+-- rodadas pontuadas antes desta migration já tiveram o juiz (disparo antigo)
+UPDATE public.rounds SET judged_at = scored_at WHERE judged_at IS NULL;
 
 CREATE OR REPLACE FUNCTION public.fire_round_judge(p_room_id uuid, p_round int)
 RETURNS bigint
@@ -39,6 +49,7 @@ DECLARE
   v_anon_key text := public.get_app_config('supabase_anon_key');
   v_candidates jsonb;
   v_req bigint;
+  v_attempt int;
 BEGIN
   IF v_base_url IS NULL OR v_anon_key IS NULL THEN
     RAISE WARNING 'fire_round_judge: app_config supabase_url/supabase_anon_key ausentes — bônus de similaridade pulado nesta rodada';
@@ -56,6 +67,9 @@ BEGIN
     RETURN NULL;  -- nada a julgar
   END IF;
 
+  SELECT judge_attempts + 1 INTO v_attempt
+    FROM public.rounds WHERE room_id = p_room_id AND round = p_round;
+
   SELECT net.http_post(
     url := v_base_url || '/functions/v1/score-similarity',
     headers := jsonb_build_object(
@@ -65,7 +79,8 @@ BEGIN
     body := jsonb_build_object(
       'room_id', p_room_id,
       'round', p_round,
-      'candidates', v_candidates
+      'candidates', v_candidates,
+      'attempt', COALESCE(v_attempt, 1)
     ),
     timeout_milliseconds := 20000
   ) INTO v_req;
@@ -80,6 +95,56 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.fire_round_judge(uuid, int) FROM PUBLIC, anon, authenticated;
+
+-- apply_similarity_bonus: corpo de 20260729120000 + partida ENCERRADA não
+-- muda mais (2026-10-22): uma resposta do juiz que chegue depois do fim
+-- (1ª tentativa ainda em voo) reordenaria o pódio depois do pagamento.
+CREATE OR REPLACE FUNCTION public.apply_similarity_bonus(p_room_id uuid, p_round integer, p_definition_ids uuid[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_count int;
+BEGIN
+  IF p_room_id IS NULL OR p_round IS NULL
+     OR p_definition_ids IS NULL OR array_length(p_definition_ids, 1) IS NULL THEN
+    RETURN jsonb_build_object('ok', true, 'bumped', 0);
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.rooms WHERE id = p_room_id AND status = 'finished') THEN
+    RETURN jsonb_build_object('ok', true, 'bumped', 0, 'reason', 'room_finished');
+  END IF;
+
+  -- Atômico: quem NÃO estava near_truth vira near_truth AGORA e é o único
+  -- que pontua. Replays acham near_truth=true e não retornam linhas.
+  WITH marked AS (
+    UPDATE public.definitions d
+    SET near_truth = true
+    WHERE d.id = ANY(p_definition_ids)
+      AND d.room_id = p_room_id
+      AND d.round = p_round
+      AND d.is_truth = false
+      AND d.player_id <> '__truth__'
+      AND d.near_truth IS DISTINCT FROM true
+    RETURNING d.player_id
+  ),
+  por_jogador AS (
+    SELECT player_id, count(*) AS n FROM marked GROUP BY player_id
+  ),
+  bumped AS (
+    UPDATE public.players p
+    SET score = p.score + 3 * pj.n
+    FROM por_jogador pj
+    WHERE p.id = pj.player_id AND p.room_id = p_room_id
+    RETURNING p.id
+  )
+  SELECT count(*) INTO v_count FROM bumped;
+
+  RETURN jsonb_build_object('ok', true, 'bumped', v_count);
+END;
+$function$;
 
 -- advance_voting_to_reveal: corpo de 20260722130000 com o disparo trocado
 CREATE OR REPLACE FUNCTION public.advance_voting_to_reveal(p_room_id uuid)

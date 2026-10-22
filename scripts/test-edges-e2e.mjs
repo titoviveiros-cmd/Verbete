@@ -45,6 +45,10 @@ const tag = Math.random().toString(36).slice(2, 7);
 // ---------------------------------------------------------------- Gemini simulado
 const calls = [];
 let stubMode = "ok";
+// Próximas chamadas do JUIZ, em ordem (2026-10-22): "503", "timeout" (não
+// responde por 9 s — a edge corta em 8 s) ou a nota da candidata com
+// "ALVO" (as outras levam 10). Cada tentativa do banco = até 2 chamadas.
+let judgeQueue = [];
 let botDefs = [];
 const stub = http.createServer((req, res) => {
   let raw = "";
@@ -57,6 +61,39 @@ const stub = http.createServer((req, res) => {
       /* corpo inválido: responde mesmo assim */
     }
     calls.push(body);
+    const sysQ = String(body?.messages?.[0]?.content ?? "");
+    if (!/lexic[oó]grafo/i.test(sysQ) && judgeQueue.length > 0) {
+      const step = judgeQueue.shift();
+      if (step === "503") {
+        res.writeHead(503);
+        res.end("overloaded");
+        return;
+      }
+      if (step === "timeout") {
+        setTimeout(() => {
+          try {
+            res.writeHead(503);
+            res.end("tarde demais");
+          } catch {
+            /* a edge já desistiu */
+          }
+        }, 9_000);
+        return;
+      }
+      const userQ = String(body?.messages?.[1]?.content ?? "");
+      const listQ = userQ.match(/Candidatas \(JSON\): (\[.*\])\s*$/s)?.[1] ?? "[]";
+      const scoresQ = JSON.parse(listQ).map((c) => ({
+        id: c.id,
+        score: /alvo/i.test(c.texto) ? step : 10,
+      }));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ scores: scoresQ }) } }],
+        }),
+      );
+      return;
+    }
     if (stubMode === "503") {
       res.writeHead(503);
       res.end("overloaded");
@@ -610,6 +647,169 @@ try {
         finRow.judge_attempts === 4 && (fin.r?.retried ?? 0) === 0 && (await score(N)) === 3,
         short({ fin: fin.r, finRow }),
       );
+
+      // ---------- 🧠 regressão (2026-10-22, sala 3361 / HIENA: o juiz caiu
+      // com 503 e o +3 de uma nota 82 se perdeu). Sala nova por cenário.
+      const judgeRoom = async (label) => {
+        const id = await mkRoom("voting");
+        const ids = { V: `edge_${label}v_${tag}`, N: `edge_${label}n_${tag}`, C: `edge_${label}c_${tag}` };
+        await db.query(
+          `INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot, joined_at) VALUES
+           ($1, $4, 'Votante', 'v', '#000', false, now() - interval '10 minutes'),
+           ($2, $4, 'Escritor', 'w', '#000', false, now() - interval '10 minutes'),
+           ($3, $4, 'Coordenador', 'c', '#000', false, now() - interval '10 minutes')`,
+          [ids.V, ids.N, ids.C, id],
+        );
+        const { rows: dd } = await db.query(
+          `INSERT INTO public.definitions (room_id, round, player_id, text, is_truth, letter) VALUES
+           ($1, 1, '__truth__', 'fruto seco do cerrado', true, 'A'),
+           ($1, 1, $2, 'ALVO: fruto seco tipico do cerrado', false, 'B')
+           RETURNING id, player_id`,
+          [id, ids.N],
+        );
+        const truth = dd.find((x) => x.player_id === "__truth__").id;
+        const alvo = dd.find((x) => x.player_id === ids.N).id;
+        await db.query(
+          `INSERT INTO public.votes (room_id, round, voter_id, definition_id) VALUES ($1, 1, $2, $4), ($1, 1, $3, $4)`,
+          [id, ids.V, ids.N, truth],
+        );
+        await db.query(
+          `UPDATE public.rooms SET current_coordinator = $2, round_phase_ends_at = now() - interval '5 minutes' WHERE id = $1`,
+          [id, ids.C],
+        );
+        return { id, ...ids, truth, alvo };
+      };
+      const roundRow = (rid2) =>
+        row(
+          `SELECT judge_request_id, judge_attempts, judged_at FROM public.rounds WHERE room_id = $1 AND round = 1`,
+          [rid2],
+        );
+      // espera a resposta do pg_net da tentativa atual (timeout cobre ~17 s)
+      const waitResponse = async (rid2) => {
+        for (let i = 0; i < 60; i++) {
+          const rr = await roundRow(rid2);
+          const resp = await row(
+            `SELECT id FROM net._http_response WHERE id = $1`,
+            [rr?.judge_request_id ?? -1],
+          );
+          if (resp) return rr;
+          await sleep(500);
+        }
+        return roundRow(rid2);
+      };
+      // um passo do cron: envelhece o disparo e chama o reenvio
+      const cronStep = async (rid2) => {
+        await db.query(
+          `UPDATE public.rounds SET judge_fired_at = now() - interval '30 seconds', scored_at = now() - interval '30 seconds' WHERE room_id = $1 AND round = 1`,
+          [rid2],
+        );
+        return (await row(`SELECT public.retry_round_judgments() AS r`)).r;
+      };
+      const judgeEvents = async (rid2) =>
+        (
+          await db.query(
+            `SELECT kind, payload FROM public.ops_events
+              WHERE kind IN ('judge_ai_success', 'judge_ai_error', 'judge_gave_up')
+                AND payload->>'room_id' = $1::text ORDER BY id`,
+            [rid2],
+          )
+        ).rows;
+      const nearIds = async (rid2) =>
+        (await row(`SELECT public.get_room_reveal($1) AS r`, [rid2])).r?.near_truth_ids ?? [];
+
+      // A) tentativa 1 → 503, tentativa 2 → timeout, tentativa 3 → nota 82
+      const A = await judgeRoom("a");
+      judgeQueue = ["503", "503", "timeout", "timeout", 82];
+      await db.query(`SELECT public.advance_voting_to_reveal($1)`, [A.id]);
+      await waitResponse(A.id);
+      for (let step = 0; step < 4; step++) {
+        const rr = await roundRow(A.id);
+        if (rr?.judged_at) break;
+        await cronStep(A.id);
+        await waitResponse(A.id);
+      }
+      await sleep(1500);
+      const aRow = await roundRow(A.id);
+      const aScore = await score(A.N);
+      const aEv = await judgeEvents(A.id);
+      const aNear = await nearIds(A.id);
+      check(
+        "503 → timeout → 82: na 3ª tentativa vira near_truth e o +3 entra UMA vez",
+        aRow?.judge_attempts === 3 && aScore === 6 && aNear.includes(A.alvo),
+        short({ aRow, aScore, aNear }),
+      );
+      check(
+        "auditoria: cada tentativa registrada (503, timeout, nota 82) com sala, rodada e nº da tentativa",
+        aEv.length === 3 &&
+          aEv[0].kind === "judge_ai_error" && Number(aEv[0].payload.attempt) === 1 && Number(aEv[0].payload.status) === 503 &&
+          aEv[1].kind === "judge_ai_error" && Number(aEv[1].payload.attempt) === 2 && aEv[1].payload.reason === "timeout" &&
+          aEv[2].kind === "judge_ai_success" && Number(aEv[2].payload.attempt) === 3 &&
+          JSON.parse(aEv[2].payload.scores ?? "{}")[A.alvo] === 82,
+        short(aEv.map((e) => [e.kind, e.payload.attempt, e.payload.reason ?? e.payload.scores])),
+      );
+      const aIdem = await cronStep(A.id);
+      await sleep(1500);
+      check(
+        "reexecução depois do sucesso: sem novo disparo e sem +3 dobrado",
+        (aIdem?.retried ?? 0) === 0 && (await score(A.N)) === 6 && (await roundRow(A.id))?.judge_attempts === 3,
+        short(aIdem),
+      );
+
+      // B) nota exatamente 80 → +3; C) 79 → nada
+      const B = await judgeRoom("b");
+      judgeQueue = [80];
+      await db.query(`SELECT public.advance_voting_to_reveal($1)`, [B.id]);
+      await waitResponse(B.id);
+      await sleep(1000);
+      check(
+        "nota 80 (limiar) → near_truth e +3",
+        (await score(B.N)) === 6 && (await nearIds(B.id)).includes(B.alvo),
+        `escritor=${await score(B.N)}`,
+      );
+      const C2 = await judgeRoom("c");
+      judgeQueue = [79];
+      await db.query(`SELECT public.advance_voting_to_reveal($1)`, [C2.id]);
+      await waitResponse(C2.id);
+      await sleep(1000);
+      await cronStep(C2.id);
+      const cRow = await roundRow(C2.id);
+      check(
+        "nota 79 → sem bônus; rodada julgada sem reenvio",
+        (await score(C2.N)) === 3 && !(await nearIds(C2.id)).includes(C2.alvo) && !!cRow?.judged_at && cRow?.judge_attempts === 1,
+        short({ escritor: await score(C2.N), cRow }),
+      );
+
+      // D) resposta aprovada que chega com a partida já ENCERRADA → nada muda
+      await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [C2.id]);
+      judgeQueue = [95];
+      const late = await callEdge({ room_id: C2.id, round: 1, candidates: [{ id: C2.alvo }] });
+      await sleep(500);
+      check(
+        "aprovação tardia em partida encerrada → sem +3 e sem near_truth (pódio intacto)",
+        (await score(C2.N)) === 3 && !(await nearIds(C2.id)).includes(C2.alvo),
+        short({ late: late.json, escritor: await score(C2.N) }),
+      );
+
+      // E) 3 falhas seguidas → desiste, registra, não inventa nota
+      const E = await judgeRoom("e");
+      judgeQueue = ["503", "503", "503", "503", "503", "503"];
+      await db.query(`SELECT public.advance_voting_to_reveal($1)`, [E.id]);
+      await waitResponse(E.id);
+      for (let step = 0; step < 4; step++) {
+        await cronStep(E.id);
+        await waitResponse(E.id);
+      }
+      const eRow = await roundRow(E.id);
+      const eEv = await judgeEvents(E.id);
+      check(
+        "3 falhas seguidas → desiste (judge_gave_up), sem nota inventada e sem +3",
+        eRow?.judge_attempts === 4 && (await score(E.N)) === 3 && !(await nearIds(E.id)).includes(E.alvo) &&
+          eEv.filter((e) => e.kind === "judge_ai_error").length === 3 &&
+          eEv.some((e) => e.kind === "judge_gave_up") &&
+          !eEv.some((e) => e.kind === "judge_ai_success"),
+        short(eEv.map((e) => [e.kind, e.payload.attempt])),
+      );
+      judgeQueue = [];
     } finally {
       await db.query(
         `DELETE FROM public.app_config WHERE key IN ('supabase_url', 'supabase_anon_key')`,

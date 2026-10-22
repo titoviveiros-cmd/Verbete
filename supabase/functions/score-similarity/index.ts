@@ -44,6 +44,10 @@ Deno.serve(async (req) => {
     const body = await readJsonObject(req);
     const roomId = isUuid(body?.room_id) ? body.room_id : "";
     const round = Number(body?.round);
+    // tentativa do banco (fire_round_judge; 1–3) — vai em cada evento
+    const attempt = Number.isInteger(body?.attempt)
+      ? Number(body?.attempt)
+      : undefined;
     const candidatesRaw = body?.candidates;
     if (!roomId || !Number.isInteger(round) || !Array.isArray(candidatesRaw) || candidatesRaw.length === 0) {
       return json({ matches: [] });
@@ -137,6 +141,7 @@ Deno.serve(async (req) => {
           fn: "score-similarity",
           room_id: roomId,
           round,
+          ...(attempt ? { attempt } : {}),
           reason: judged.reason,
           ...(judged.status ? { status: judged.status } : {}),
           candidates: candidates.length,
@@ -163,6 +168,7 @@ Deno.serve(async (req) => {
     const trail = {
       room_id: roomId,
       round,
+      ...(attempt ? { attempt } : {}),
       // OpsEvent aceita só valores simples: as notas vão como JSON compacto
       scores: JSON.stringify(Object.fromEntries(judged.scores)),
     };

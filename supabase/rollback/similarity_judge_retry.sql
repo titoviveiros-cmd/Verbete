@@ -146,6 +146,50 @@ BEGIN
 END;
 $function$;
 
+-- apply_similarity_bonus ← 20260729120000 (sem a trava de partida encerrada)
+CREATE OR REPLACE FUNCTION public.apply_similarity_bonus(p_room_id uuid, p_round integer, p_definition_ids uuid[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_count int;
+BEGIN
+  IF p_room_id IS NULL OR p_round IS NULL
+     OR p_definition_ids IS NULL OR array_length(p_definition_ids, 1) IS NULL THEN
+    RETURN jsonb_build_object('ok', true, 'bumped', 0);
+  END IF;
+
+  -- Atômico: quem NÃO estava near_truth vira near_truth AGORA e é o único
+  -- que pontua. Replays acham near_truth=true e não retornam linhas.
+  WITH marked AS (
+    UPDATE public.definitions d
+    SET near_truth = true
+    WHERE d.id = ANY(p_definition_ids)
+      AND d.room_id = p_room_id
+      AND d.round = p_round
+      AND d.is_truth = false
+      AND d.player_id <> '__truth__'
+      AND d.near_truth IS DISTINCT FROM true
+    RETURNING d.player_id
+  ),
+  por_jogador AS (
+    SELECT player_id, count(*) AS n FROM marked GROUP BY player_id
+  ),
+  bumped AS (
+    UPDATE public.players p
+    SET score = p.score + 3 * pj.n
+    FROM por_jogador pj
+    WHERE p.id = pj.player_id AND p.room_id = p_room_id
+    RETURNING p.id
+  )
+  SELECT count(*) INTO v_count FROM bumped;
+
+  RETURN jsonb_build_object('ok', true, 'bumped', v_count);
+END;
+$function$;
+
 DROP FUNCTION IF EXISTS public.retry_round_judgments();
 DROP FUNCTION IF EXISTS public.fire_round_judge(uuid, int);
 ALTER TABLE public.rounds
