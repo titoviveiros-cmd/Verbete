@@ -235,11 +235,11 @@ describe("Shuffling — ~2 s na tela, igual para host e convidados", () => {
     expect(room.startVoting).not.toHaveBeenCalled();
   });
 
-  it("fica visível na faixa pedida (1,8–2,5 s com a ida ao banco)", () => {
-    // medido numa partida real: a tela fica o hold + ~0,4 s (convidado) a
-    // ~1,0 s (host) de RPC, tempo real e saída animada — os dois na faixa
-    expect(SHUFFLE_HOLD_MS + 400).toBeGreaterThanOrEqual(1800);
-    expect(SHUFFLE_HOLD_MS + 1000).toBeLessThanOrEqual(2500);
+  it("fica visível ≥ 2,5 s, sem passar muito de 3 s (com a ida ao banco)", () => {
+    // medido na prévia (2026-10-22, 2h+2b e 1h+3b): a tela fica o hold +
+    // 0,73–1,15 s de RPC, tempo real e saída animada, em host e convidado
+    expect(SHUFFLE_HOLD_MS + 730).toBeGreaterThanOrEqual(2500);
+    expect(SHUFFLE_HOLD_MS + 1150).toBeLessThanOrEqual(3200);
     expect(SHUFFLE_HOLD_MS).toBeGreaterThan(400); // antes: 0,4 s
     expect(SHUFFLE_GUEST_FALLBACK_MS - SHUFFLE_HOLD_MS).toBeGreaterThanOrEqual(
       1500,
