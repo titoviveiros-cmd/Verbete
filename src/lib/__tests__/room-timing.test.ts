@@ -39,7 +39,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: h.supabase }));
 import {
   BOT_WRITE_MIN_MS,
   botSubmitDefinitions,
-  botsVote,
+  castBotVotes,
   fetchThreeWords,
 } from "@/lib/room";
 
@@ -160,41 +160,41 @@ const ballot: Definition[] = [
   { id: "d-h", player_id: "", letter: "C", round: 2 },
 ] as Definition[];
 
-describe("botsVote — atraso humano, mas sem segurar a mesa", () => {
-  it("vota UMA vez, depois do atraso (0,9–2,3 s)", async () => {
-    vi.useFakeTimers();
-    botsVote("room-1", 2, [bot("b1"), bot("b2")], ballot);
-    vi.advanceTimersByTime(899);
-    expect(named("rpc:cast_votes_bulk")).toHaveLength(0);
-    vi.advanceTimersByTime(1401);
-    expect(named("rpc:cast_votes_bulk")).toHaveLength(1);
-    vi.advanceTimersByTime(10_000);
-    expect(named("rpc:cast_votes_bulk")).toHaveLength(1);
-  });
-
-  it("todos os humanos já votaram: flush vota na hora, e o atraso não vota de novo", () => {
-    vi.useFakeTimers();
-    const handle = botsVote("room-1", 2, [bot("b1")], ballot);
-    handle.flush();
-    expect(named("rpc:cast_votes_bulk")).toHaveLength(1);
-    handle.flush();
-    vi.advanceTimersByTime(10_000);
-    expect(named("rpc:cast_votes_bulk")).toHaveLength(1);
-  });
-
-  it("a fase acabou antes (cancel): ninguém vota", () => {
-    vi.useFakeTimers();
-    const handle = botsVote("room-1", 2, [bot("b1")], ballot);
-    handle.cancel();
-    handle.flush();
-    vi.advanceTimersByTime(10_000);
+// Playtest 2026-10-22: o SERVIDOR escolhe o voto dos bots (onde a verdade
+// é conhecida); o cliente não sorteia nem manda cédula nenhuma.
+describe("castBotVotes — o servidor escolhe, o cliente só pede", () => {
+  it("pede UMA vez, só com sala e rodada (nenhuma cédula sai do cliente)", async () => {
+    const p = castBotVotes("room-1", 2, [bot("b1"), bot("b2")], ballot);
+    await tick();
+    const calls = named("rpc:cast_bot_votes");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args).toEqual({ p_room_id: "room-1", p_round: 2 });
+    calls[0]!.resolve({ data: { ok: true, inserted: 2 }, error: null });
+    await p;
     expect(named("rpc:cast_votes_bulk")).toHaveLength(0);
   });
 
-  it("bot nunca vota na própria cédula", () => {
-    vi.useFakeTimers();
-    for (let i = 0; i < 25; i++)
-      botsVote("room-1", 2, [bot("b1")], ballot).flush();
+  it("sem bots: nem pede", async () => {
+    await castBotVotes("room-1", 2, [], ballot);
+    expect(named("rpc:cast_bot_votes")).toHaveLength(0);
+  });
+
+  it("banco sem a política nova (PGRST202): cai no voto antigo, nunca na própria cédula", async () => {
+    for (let i = 0; i < 25; i++) {
+      const p = castBotVotes("room-1", 2, [bot("b1")], ballot);
+      await tick();
+      named("rpc:cast_bot_votes")
+        .at(-1)!
+        .resolve({
+          data: null,
+          error: { code: "PGRST202", message: "Could not find the function" },
+        });
+      await tick();
+      named("rpc:cast_votes_bulk")
+        .at(-1)!
+        .resolve({ data: { ok: true }, error: null });
+      await p;
+    }
     const picks = named("rpc:cast_votes_bulk").map(
       (c) =>
         (c.args as { p_votes: Array<{ definition_id: string }> }).p_votes[0]!
@@ -202,6 +202,17 @@ describe("botsVote — atraso humano, mas sem segurar a mesa", () => {
     );
     expect(picks).toHaveLength(25);
     expect(picks).not.toContain("d-b1");
+  });
+
+  it("outro erro do servidor não vira voto escolhido no cliente", async () => {
+    const p = castBotVotes("room-1", 2, [bot("b1")], ballot);
+    await tick();
+    named("rpc:cast_bot_votes")[0]!.resolve({
+      data: null,
+      error: { code: "57014", message: "canceling statement" },
+    });
+    await expect(p).rejects.toBeTruthy();
+    expect(named("rpc:cast_votes_bulk")).toHaveLength(0);
   });
 });
 

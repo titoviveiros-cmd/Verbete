@@ -486,6 +486,8 @@ const DENY = [
   "room_humans_present", "room_pause_due", "resume_paused_room", "rooms_clear_paused_at",
   // 🧠 reenvio do juiz (2026-10-21)
   "fire_round_judge", "retry_round_judgments",
+  // voto dos bots no servidor (2026-10-22): a escolha pura é interna
+  "bot_vote_pick",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
@@ -500,6 +502,8 @@ const ALLOW_ANON = [
   "start_shuffling", "submit_bot_definitions_bulk", "submit_definition", "xp_to_level",
   // pausa de partida (2026-10-21): presença e "Continuar" — identidade checada
   "touch_presence", "resume_room",
+  // voto dos bots no servidor (2026-10-22): só o host da sala comanda
+  "cast_bot_votes",
 ];
 const execRows = await rows(
   `SELECT DISTINCT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_x,

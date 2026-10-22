@@ -1040,56 +1040,45 @@ export const BOT_WRITE_MIN_MS = 1500;
  */
 export const BOT_AI_GRACE_MS = 6000;
 
-export type BotVoteHandle = {
-  /** Vota já (todos os humanos já votaram: ninguém deve esperar o bot). */
-  flush: () => void;
-  /** Desiste (a fase acabou antes do atraso). */
-  cancel: () => void;
-};
-
-export function botsVote(
+/**
+ * Votos dos bots (playtest 2026-10-22): quem escolhe é o SERVIDOR
+ * (cast_bot_votes), onde a verdade é conhecida com segurança — 17,5% de
+ * chance na verdade e, no resto, um blefe aleatório que não seja o do bot.
+ * Antes o cliente sorteava entre todas as cédulas (a verdade com o mesmo
+ * peso de cada blefe, ~1/3 numa mesa de 4) e os bots disputavam a ponta.
+ * O cliente só pede — e só depois que todos os humanos votaram (ou no fim
+ * do prazo): com a política nova, ver em que cédula um bot votou seria uma
+ * pista da verdade. Banco ainda sem a política (migration pendente): o voto
+ * antigo, uniforme entre as cédulas.
+ */
+export async function castBotVotes(
   roomId: string,
   round: number,
   bots: Player[],
-  defs: Definition[],
-): BotVoteHandle {
-  if (bots.length === 0) return { flush: () => {}, cancel: () => {} };
-  // Atraso "humano" (0,9–2,3 s) para os votos dos bots não chegarem junto
-  // com as cédulas — mas sem segurar a mesa: se todos os humanos já
-  // votaram, flush() envia na hora (playtest 2026-10-20).
-  let done = false;
-  const send = () => {
-    if (done) return;
-    done = true;
-    clearTimeout(timer);
-    const rows = bots
-      .map((bot) => {
-        const choices = defs.filter((d) => d.player_id !== bot.id);
-        if (!choices.length) return null;
-        const pick = choices[Math.floor(Math.random() * choices.length)]!;
-        return { voter_id: bot.id, definition_id: pick.id };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-    if (rows.length === 0) return;
-    supabase
-      .rpc("cast_votes_bulk", {
-        p_room_id: roomId,
-        p_round: round,
-        p_votes: rows,
-      })
-      .then(
-        () => {},
-        () => {},
-      );
-  };
-  const timer = setTimeout(send, 900 + Math.random() * 1400);
-  return {
-    flush: send,
-    cancel: () => {
-      done = true;
-      clearTimeout(timer);
-    },
-  };
+  ballot: Definition[],
+): Promise<void> {
+  if (bots.length === 0) return;
+  const { error } = await supabase.rpc("cast_bot_votes", {
+    p_room_id: roomId,
+    p_round: round,
+  });
+  if (!error) return;
+  // PGRST202 = a função não existe neste banco
+  if (error.code !== "PGRST202") throw error;
+  const rows = bots
+    .map((bot) => {
+      const choices = ballot.filter((d) => d.player_id !== bot.id);
+      if (!choices.length) return null;
+      const pick = choices[Math.floor(Math.random() * choices.length)]!;
+      return { voter_id: bot.id, definition_id: pick.id };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  if (rows.length === 0) return;
+  await supabase.rpc("cast_votes_bulk", {
+    p_room_id: roomId,
+    p_round: round,
+    p_votes: rows,
+  });
 }
 
 export async function revealAndScore(

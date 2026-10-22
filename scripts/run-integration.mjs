@@ -20,6 +20,7 @@ const SUITES = [
   "test-p2-xp.mjs",
   "test-player-id.mjs",
   "test-pause-resume.mjs",
+  "test-bot-votes.mjs",
   "test-native-auth-callback.mjs",
   "test-rollback.mjs",
   "test-probe-local.mjs",

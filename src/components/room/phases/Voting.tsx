@@ -2,8 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   applyVotingTimeoutOrAdvance,
-  botsVote,
-  type BotVoteHandle,
+  castBotVotes,
   castVote,
   revealAndScore,
   type Definition,
@@ -103,39 +102,37 @@ function VotingImpl({
     [voters, roundVotes],
   );
 
-  const botsVotedRef = useRef(false);
-  const botVotes = useRef<BotVoteHandle | null>(null);
-  // Todos os humanos já votaram e os bots ainda no atraso "humano": votam
-  // já — a mesa não espera pausa artificial (playtest 2026-10-20).
+  // Bots votam POR ÚLTIMO (playtest 2026-10-22): o servidor escolhe o voto
+  // deles, e um voto de bot visível enquanto humanos ainda votam seria uma
+  // pista da verdade. O host pede assim que o último humano vota (ou no fim
+  // do prazo, no handler do tempo) — uma vez por rodada.
+  const botsVotedRef = useRef<number | null>(null);
   const humansPending = pending.some((p) => !p.is_bot);
-  useEffect(() => {
-    if (!humansPending) botVotes.current?.flush();
-  }, [humansPending]);
-  useEffect(() => () => botVotes.current?.cancel(), []);
-  useEffect(() => {
-    if (!isHost) return;
-    if (botsVotedRef.current) return;
-    const bots = players.filter((p) => p.is_bot);
-    if (!bots.length) return;
-    // Só dispara quando o BALLOT real chegou (cédulas com letra) — no
-    // mount a lista ainda pode ser o shape da fase de escrita (sem
-    // letras) ou estar vazia; disparar cedo fazia bots "não votarem" e a
-    // rodada esperar o timer inteiro.
+  const pendingHumans = useMemo(
+    () => pending.filter((p) => !p.is_bot),
+    [pending],
+  );
+  const voteBots = useCallback(async () => {
+    if (botsVotedRef.current === room.current_round) return;
+    const bots = players.filter((p) => p.is_bot && !p.kicked_at);
+    // Só com o BALLOT real (cédulas com letra): no mount a lista ainda pode
+    // ser o shape da fase de escrita (sem letras) ou estar vazia.
     const ballot = definitions.filter(
       (d) => d.letter && d.round === room.current_round,
     );
-    if (!ballot.length) return;
-    botsVotedRef.current = true;
-    botVotes.current = botsVote(room.id, room.current_round, bots, ballot);
-    if (!humansPending) botVotes.current.flush();
-  }, [
-    isHost,
-    players,
-    room.id,
-    room.current_round,
-    definitions,
-    humansPending,
-  ]);
+    if (!bots.length || !ballot.length) return;
+    botsVotedRef.current = room.current_round;
+    try {
+      await castBotVotes(room.id, room.current_round, bots, ballot);
+    } catch (e) {
+      console.error("castBotVotes failed", e);
+      botsVotedRef.current = null;
+    }
+  }, [players, definitions, room.id, room.current_round]);
+  useEffect(() => {
+    if (!isHost || humansPending) return;
+    void voteBots();
+  }, [isHost, humansPending, voteBots]);
 
   const revealFiredRef = useRef<number | null>(null);
   const revealInFlightRef = useRef(false);
@@ -218,6 +215,8 @@ function VotingImpl({
               await applyVotingTimeoutOrAdvance(room.id);
             if (extended) return; // sala recebeu +20s/+15s, timer reinicia
             if (advanced) {
+              // prazo acabou com humano sem votar: os bots votam agora
+              if (isHost) await voteBots();
               if (revealFiredRef.current === room.current_round) return;
               if (revealInFlightRef.current) return;
               revealInFlightRef.current = true;
@@ -560,20 +559,23 @@ function VotingImpl({
         <span className="eyebrow tabular-nums">
           {roundVotes.length}/{voters.length} votaram
         </span>
-        {pending.length > 0 ? (
+        {pendingHumans.length > 0 ? (
           <>
             <span aria-hidden>·</span>
             <span>faltam:</span>
-            {pending.slice(0, 6).map((p, i) => (
+            {pendingHumans.slice(0, 6).map((p, i) => (
               <span key={p.id} className="whitespace-nowrap text-foreground/85">
                 {p.avatar} {p.nickname}
-                {i < Math.min(pending.length, 6) - 1 ? "," : ""}
+                {i < Math.min(pendingHumans.length, 6) - 1 ? "," : ""}
               </span>
             ))}
-            {pending.length > 6 && (
-              <span className="opacity-70">+{pending.length - 6}</span>
+            {pendingHumans.length > 6 && (
+              <span className="opacity-70">+{pendingHumans.length - 6}</span>
             )}
           </>
+        ) : pending.length > 0 ? (
+          // só bots faltando: eles votam por último, logo depois dos humanos
+          <span>· 🤖 bots votando…</span>
         ) : (
           <span className="text-mint">· ✨ todos votaram!</span>
         )}

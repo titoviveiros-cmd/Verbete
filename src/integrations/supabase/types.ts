@@ -1038,6 +1038,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      cast_bot_votes: {
+        Args: { p_room_id: string; p_round: number };
+        Returns: Json;
+      };
       cast_votes_bulk: {
         Args: { p_room_id: string; p_round: number; p_votes: Json };
         Returns: Json;
