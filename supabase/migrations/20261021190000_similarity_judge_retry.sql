@@ -113,7 +113,8 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'bumped', 0);
   END IF;
 
-  IF EXISTS (SELECT 1 FROM public.rooms WHERE id = p_room_id AND status = 'finished') THEN
+  -- só LÊ o status (não é caminho para 'finished' — test-p2-xp)
+  IF EXISTS (SELECT 1 FROM public.rooms WHERE id = p_room_id AND status IS NOT DISTINCT FROM 'finished') THEN
     RETURN jsonb_build_object('ok', true, 'bumped', 0, 'reason', 'room_finished');
   END IF;
 
