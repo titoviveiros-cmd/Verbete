@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Definition, Vote } from "@/lib/room";
 import type { RoundExtension } from "@/hooks/use-room";
+import { mergeSamePhasePoll } from "@/lib/transition-floor";
 import type { RoomCtx } from "./ctx";
 
 export function useRoomPolling(ctx: RoomCtx) {
@@ -206,15 +207,10 @@ export function useRoomPolling(ctx: RoomCtx) {
         // o reload pesado de 25s e patches campos secundários (timer,
         // coordenador) sem refazer toda a árvore.
         lastEventAtRef.current = Date.now();
-        setRoom((cur) =>
-          cur &&
-          (cur.round_phase_ends_at !== data.round_phase_ends_at ||
-            cur.current_coordinator !== data.current_coordinator ||
-            cur.host_id !== data.host_id ||
-            (cur.paused_at ?? null) !== (data.paused_at ?? null))
-            ? ({ ...cur, ...data } as Room)
-            : cur,
-        );
+        // Antes, o timer diferente (o otimista calcula o seu) bastava para
+        // regravar a sala com a fase ANTIGA: no host, "Hora de Inventar" →
+        // "Escolha da Palavra" → "Hora de Inventar" (2026-10-22).
+        setRoom((cur) => (cur ? mergeSamePhasePoll(cur, data as Room) : cur));
         return;
       }
       // Divergência real — atualizamos a assinatura ANTES de recarregar

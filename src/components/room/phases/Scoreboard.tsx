@@ -13,6 +13,7 @@ import {
   type Vote,
 } from "@/lib/room";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
+import { NARRATIVE_MIN_VISIBLE_MS } from "@/lib/transition-floor";
 import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 
 // Contador rolante (Fase 4, aprovado): o número "sobe" do placar anterior
@@ -81,6 +82,16 @@ function ScoreboardImpl({
     );
     return () => clearTimeout(t);
   }, [room.current_round]);
+  // Piso (playtest 2026-10-22): logo que a cortina saía o host já podia
+  // tocar "Próxima rodada" e o placar aparecia por meio segundo, com as
+  // fileiras ainda entrando. O botão destrava NARRATIVE_MIN_VISIBLE_MS depois.
+  const [advanceReady, setAdvanceReady] = useState(false);
+  useEffect(() => {
+    setAdvanceReady(false);
+    if (!scoreTransitionDone) return;
+    const t = setTimeout(() => setAdvanceReady(true), NARRATIVE_MIN_VISIBLE_MS);
+    return () => clearTimeout(t);
+  }, [scoreTransitionDone, room.current_round]);
   const [holdLeft, setHoldLeft] = useState(SCORE_HOLD);
   useEffect(() => {
     if (!scoreTransitionDone) return;
@@ -604,6 +615,8 @@ function ScoreboardImpl({
           {isHost ? (
             <button
               onClick={() => nextRound(room, players)}
+              disabled={!advanceReady}
+              data-advance-ready={advanceReady ? "1" : "0"}
               className="btn-pop btn-gold w-full max-w-[15rem] lg:w-auto lg:max-w-none lg:min-w-[320px] text-base lg:text-xl !px-5 !py-2.5 lg:!py-3 whitespace-nowrap"
             >
               ▶ Próxima rodada

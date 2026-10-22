@@ -24,8 +24,10 @@ const BLUFFS = [
 const REACT_MS = 300;
 // PERF_BOTS=0: só humanos — o coordenador é sempre humano (mede o caminho
 // das 3 palavras); padrão: 2 bots (mede a escrita e o voto dos bots).
-// mesa mínima de 4 (2 humanos + bots): no mínimo 2 bots
-const BOTS = Math.max(2, Number(process.env.PERF_BOTS ?? 2));
+// PERF_HUMANS=1: só o host humano (mesa 1 humano + bots).
+const HUMANS = process.env.PERF_HUMANS === "1" ? 1 : 2;
+// mesa mínima de 4 (humanos + bots)
+const BOTS = Math.max(4 - HUMANS, Number(process.env.PERF_BOTS ?? 2));
 
 type Mark = [number, string, 0 | 1];
 type Call = { name: string; start: number; end: number | null; ok: boolean };
@@ -100,21 +102,19 @@ async function curtainGone(page: Page) {
   return Date.now();
 }
 
-test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
+test(`cronômetro de uma partida: host${HUMANS === 2 ? " + convidado" : ""} + ${BOTS} bots`, async ({
   browser,
 }) => {
   const hostCtx = await browser.newContext();
-  const guestCtx = await browser.newContext();
+  const guestCtx = HUMANS === 2 ? await browser.newContext() : null;
   const host = await hostCtx.newPage();
-  const guest = await guestCtx.newPage();
-  const pages = new Map<string, Page>([
-    ["host", host],
-    ["convidado", guest],
-  ]);
-  const calls = new Map<string, Call[]>([
-    ["host", []],
-    ["convidado", []],
-  ]);
+  const guest = guestCtx ? await guestCtx.newPage() : null;
+  const pages = new Map<string, Page>([["host", host]]);
+  const calls = new Map<string, Call[]>([["host", []]]);
+  if (guest) {
+    pages.set("convidado", guest);
+    calls.set("convidado", []);
+  }
   for (const [name, p] of pages) {
     await p.addInitScript(MARKERS);
     instrument(p, calls.get(name)!);
@@ -146,16 +146,20 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
     console.log(`SALA ${code}`);
 
     // 2) convidado entra
-    await guest.goto(`/room/${code}`);
-    await expect(guest.getByPlaceholder(NICK)).toBeVisible({ timeout: 30_000 });
-    await guest.getByPlaceholder(NICK).fill("Conv P");
-    T.entrar_clique = Date.now();
-    await guest.getByRole("button", { name: /Entrar na sala/ }).click();
-    T.entrar_lobby = await when(guest, "lobby", T.entrar_clique, 30_000);
-    await expect(host.getByText("Conv P").first()).toBeVisible({
-      timeout: 30_000,
-    });
-    T.host_ve_convidado = Date.now();
+    if (guest) {
+      await guest.goto(`/room/${code}`);
+      await expect(guest.getByPlaceholder(NICK)).toBeVisible({
+        timeout: 30_000,
+      });
+      await guest.getByPlaceholder(NICK).fill("Conv P");
+      T.entrar_clique = Date.now();
+      await guest.getByRole("button", { name: /Entrar na sala/ }).click();
+      T.entrar_lobby = await when(guest, "lobby", T.entrar_clique, 30_000);
+      await expect(host.getByText("Conv P").first()).toBeVisible({
+        timeout: 30_000,
+      });
+      T.host_ve_convidado = Date.now();
+    }
 
     // 3) dois bots (conta pelo "Jogadores (N/12)" do lobby)
     const seated = async () =>
@@ -179,7 +183,8 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
         await host.getByRole("button", { name: /Começar/ }).click();
       }
       T[R + "host_escolhendo"] = await when(host, "escolhendo", since);
-      T[R + "conv_escolhendo"] = await when(guest, "escolhendo", since);
+      if (guest)
+        T[R + "conv_escolhendo"] = await when(guest, "escolhendo", since);
 
       // 5) coordenador humano: sorteia depois da cortina; bot: escolhe sozinho.
       // Decide pelo estado DEPOIS da transição: o início da partida mostra
@@ -251,9 +256,10 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
         }),
       );
       T[R + "host_embaralhando"] = await when(host, "embaralhando", since);
-      T[R + "conv_embaralhando"] = await when(guest, "embaralhando", since);
+      if (guest)
+        T[R + "conv_embaralhando"] = await when(guest, "embaralhando", since);
       T[R + "host_votacao"] = await when(host, "votacao", since);
-      T[R + "conv_votacao"] = await when(guest, "votacao", since);
+      if (guest) T[R + "conv_votacao"] = await when(guest, "votacao", since);
 
       // 7) votos rápidos (cada humano na primeira cédula habilitada)
       await Promise.all(
@@ -267,11 +273,12 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
         }),
       );
       T[R + "host_revelacao"] = await when(host, "revelacao", since);
-      T[R + "conv_revelacao"] = await when(guest, "revelacao", since);
+      if (guest)
+        T[R + "conv_revelacao"] = await when(guest, "revelacao", since);
 
       // 8) a revelação corre sozinha até o placar
       T[R + "host_placar"] = await when(host, "placar", since);
-      T[R + "conv_placar"] = await when(guest, "placar", since);
+      if (guest) T[R + "conv_placar"] = await when(guest, "placar", since);
       if (round === 2) break;
 
       // 9) host: próxima rodada assim que a cortina do placar sai
@@ -323,6 +330,6 @@ test(`cronômetro de uma partida: host + convidado + ${BOTS} bots`, async ({
       }
     }
     await hostCtx.close();
-    await guestCtx.close();
+    await guestCtx?.close();
   }
 });

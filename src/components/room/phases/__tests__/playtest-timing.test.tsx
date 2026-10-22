@@ -298,6 +298,72 @@ describe("PhaseAnnouncer — transição da marca, curta", () => {
     }
   });
 
+  // Coordenador bot (playtest 2026-10-22): a cortina não é cortada nem
+  // trocada antes de ser lida, e uma virada de ida e volta não a reinicia.
+  it("virada sem cortina própria não corta a cortina da tela", async () => {
+    const { rerender, container } = render(
+      <PhaseAnnouncer status="lobby" round={0} />,
+    );
+    const shield = () =>
+      container.querySelector("[data-phase-announcer-shield]");
+    rerender(<PhaseAnnouncer status="writing" round={2} />);
+    await wait(1000);
+    rerender(<PhaseAnnouncer status="shuffling" round={2} />);
+    expect(shield(), "cortina segue na tela").toBeTruthy();
+    expect(status().textContent).toBe("Hora de Inventar");
+    await wait(1799);
+    expect(shield()).toBeTruthy();
+    await wait(1);
+    expect(shield()).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("cortina nova espera a da tela ficar legível (sem piscar ~0,5 s)", async () => {
+    const { rerender } = render(<PhaseAnnouncer status="lobby" round={0} />);
+    rerender(<PhaseAnnouncer status="choosing" round={1} />);
+    await wait(500);
+    rerender(<PhaseAnnouncer status="writing" round={1} />);
+    expect(status().textContent).toBe("Escolha da Palavra");
+    await wait(1999);
+    expect(status().textContent).toBe("Escolha da Palavra");
+    await wait(1);
+    expect(status().textContent).toBe("Hora de Inventar");
+    await wait(2799);
+    expect(status().textContent).toBe("Hora de Inventar");
+    await wait(1);
+    expect(status().textContent).toBe("");
+  });
+
+  it("cortina na fila não entra se a fase já passou dela", async () => {
+    const { rerender } = render(<PhaseAnnouncer status="lobby" round={0} />);
+    rerender(<PhaseAnnouncer status="choosing" round={1} />);
+    await wait(500);
+    rerender(<PhaseAnnouncer status="writing" round={1} />);
+    await wait(500);
+    rerender(<PhaseAnnouncer status="shuffling" round={1} />);
+    await wait(1600);
+    expect(status().textContent).toBe("Escolha da Palavra");
+    await wait(200);
+    expect(screen.queryByRole("status")).toBeNull();
+    await wait(3000);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("fase que volta à já anunciada não reinicia a cortina", async () => {
+    sound.hapticTick.mockClear();
+    const { rerender } = render(<PhaseAnnouncer status="lobby" round={0} />);
+    rerender(<PhaseAnnouncer status="choosing" round={1} />);
+    await wait(500);
+    rerender(<PhaseAnnouncer status="writing" round={1} />);
+    await wait(100);
+    rerender(<PhaseAnnouncer status="choosing" round={1} />);
+    await wait(2199);
+    expect(status().textContent).toBe("Escolha da Palavra");
+    await wait(1);
+    expect(status().textContent).toBe("");
+    expect(sound.hapticTick).toHaveBeenCalledTimes(1);
+  });
+
   it("a constante cobre a transição inteira (o placar só conta depois dela)", () => {
     // 2,8 s na tela + 0,45 s de saída: o placar só começa a contar depois
     expect(PHASE_ANNOUNCER_TOTAL_MS).toBeGreaterThanOrEqual(2800 + 450);

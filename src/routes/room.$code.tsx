@@ -323,6 +323,13 @@ function RoomPage() {
   // entrar na escolha. Trocar o coordenador depois disso não reinicia a
   // conta (antes, provisório → autoritativo dava ~5,1 s de tela na 1ª rodada).
   const choosingSeenRef = useRef<{ key: string; at: number } | null>(null);
+  // Partida nova (2026-10-22): a rodada 1 do match seguinte tem a mesma chave
+  // da rodada 1 do anterior — sem zerar aqui (mesmo que o lobby passe batido
+  // entre duas leituras), o bot escolhia na hora, ainda sob a cortina.
+  if (room?.status === "lobby" || room?.status === "finished") {
+    choosingSeenRef.current = null;
+    botAutopickRef.current = null;
+  }
   if (room?.status === "choosing") {
     const seenKey = `${room.id}:${room.current_round}`;
     if (choosingSeenRef.current?.key !== seenKey)

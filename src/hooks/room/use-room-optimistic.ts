@@ -5,6 +5,7 @@
 import { useEffect } from "react";
 import type { Room, Player, Definition, Vote } from "@/lib/room";
 import type { RoomCtx } from "./ctx";
+import { markRoomOptimistic, roomPhaseSig } from "@/lib/transition-floor";
 
 export function useRoomOptimistic(ctx: RoomCtx) {
   const {
@@ -15,6 +16,7 @@ export function useRoomOptimistic(ctx: RoomCtx) {
     setVotes,
     optimisticPlayerIdsRef,
     reloadRef,
+    lastRoomSigRef,
   } = ctx;
   const roomId = room?.id;
 
@@ -102,6 +104,20 @@ export function useRoomOptimistic(ctx: RoomCtx) {
       const detail = (e as CustomEvent).detail as
         { roomId?: string; patch?: Partial<Room> } | undefined;
       if (!detail?.patch || detail.roomId !== roomId) return;
+      // Virada de FASE à frente do servidor: guarda, na hora, a fase que ele
+      // tinha — as leituras que saíram antes do commit ainda a trazem.
+      const from = lastRoomSigRef.current;
+      if (from) {
+        const [st, rd, wd] = from.split("|");
+        const patch = detail.patch;
+        const to = roomPhaseSig({
+          status: patch.status ?? st ?? "",
+          current_round: patch.current_round ?? Number(rd),
+          current_word_id:
+            "current_word_id" in patch ? patch.current_word_id : wd || null,
+        });
+        if (to !== from) markRoomOptimistic(from);
+      }
       setRoom((cur) => (cur ? ({ ...cur, ...detail.patch } as Room) : cur));
     };
     const onPlayerUpdate = (e: Event) => {

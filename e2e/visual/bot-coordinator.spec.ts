@@ -18,6 +18,8 @@ const WORDS = [
 async function setup(page: Page, guest: boolean) {
   const backend = roomBackend("lobby", { guest }) as MockBackend;
   backend.rpc["get_random_word_prompts"] = WORDS;
+  // o servidor aceita a escolha (a tabela só "vê" quando o teste mandar)
+  backend.rpc["choose_word"] = { ok: true };
   const picks: number[] = [];
   page.on("request", (r) => {
     if (r.url().includes("/rest/v1/rpc/choose_word")) picks.push(Date.now());
@@ -36,8 +38,21 @@ async function setup(page: Page, guest: boolean) {
     (backend.tables["rooms"] as Record<string, unknown>[]).find(
       (r) => r.id === ROOM_ID,
     )!;
-  // A rodada vira "Escolha da Palavra" com o bot de coordenador — no banco
-  // simulado e no app ao mesmo tempo (como chega pelo realtime).
+  // Virada no banco simulado e no app ao mesmo tempo (como chega pelo
+  // realtime).
+  const flip = async (patch: Record<string, unknown>) => {
+    Object.assign(room(), patch);
+    await page.evaluate(
+      ([roomId, p]) =>
+        window.dispatchEvent(
+          new CustomEvent("room:optimistic-update", {
+            detail: { roomId, patch: p },
+          }),
+        ),
+      [ROOM_ID, patch] as const,
+    );
+  };
+  // A rodada vira "Escolha da Palavra" com o bot de coordenador.
   const toChoosing = async (round: number) => {
     const patch = {
       status: "choosing",
@@ -60,7 +75,7 @@ async function setup(page: Page, guest: boolean) {
   };
   const toWriting = () =>
     Object.assign(room(), { status: "writing", current_word_id: WORDS[0]!.id });
-  return { picks, toChoosing, toWriting };
+  return { picks, toChoosing, toWriting, flip };
 }
 
 /** O "🤖 TioBlefe está escolhendo a palavra…" está na tela e tocável (não
@@ -132,5 +147,93 @@ test("convidado: não escolhe no lugar do host antes da hora e não mostra palav
   await page.waitForTimeout(400);
   expect(await waitingVisible(page), "sem palavra otimista do convidado").toBe(
     true,
+  );
+});
+
+// Partida nova (playtest 2026-10-22): a rodada 1 do 2º match tem a mesma
+// chave da rodada 1 do 1º — a âncora antiga fazia o bot escolher na hora,
+// ainda sob a cortina "Escolha da Palavra".
+test("partida nova: a 1ª rodada do 2º match espera a tela do bot de novo", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const { picks, toChoosing, toWriting, flip } = await setup(page, false);
+  await toChoosing(1);
+  await expect.poll(() => picks.length, { timeout: 12_000 }).toBe(1);
+  toWriting();
+  await page.waitForTimeout(1_500);
+  // "Nova partida": a sala volta ao lobby e recomeça na rodada 1
+  await flip({
+    status: "lobby",
+    current_round: 0,
+    current_coordinator: null,
+    current_word_id: null,
+    round_phase_ends_at: null,
+  });
+  await expect(page.getByText("Jogadores (4/12)")).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.waitForTimeout(800);
+  const t0 = await toChoosing(1);
+  await expect.poll(() => picks.length, { timeout: 12_000 }).toBe(2);
+  const legivel = picks[1]! - t0 - 3_250;
+  console.log(
+    `2º match: escolha em ${picks[1]! - t0} ms → tela legível ${legivel} ms`,
+  );
+  expect(legivel, "não escolheu sob a cortina").toBeGreaterThanOrEqual(2_500);
+  expect(legivel, "sem atraso extra").toBeLessThanOrEqual(3_300);
+});
+
+// Leitura atrasada (playtest 2026-10-22): o host escolhe (otimista) e o poll
+// seguinte ainda lê a fase antiga com a mesma "assinatura" — antes ele
+// regravava a sala e a tela voltava para "TioBlefe está escolhendo…" até o
+// banco confirmar (no host: "Hora de Inventar" → "Escolha" → "Hora de
+// Inventar").
+test("host: leitura atrasada do banco não devolve a tela à escolha do bot", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { picks, toChoosing, toWriting } = await setup(page, false);
+  const polls: number[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/rest/v1/rooms?select=status"))
+      polls.push(Date.now());
+  });
+  await page.evaluate(() => {
+    const w = window as unknown as { __seq: string[] };
+    w.__seq = [];
+    setInterval(() => {
+      const waiting = [...document.querySelectorAll("p")].some((p) =>
+        /está escolhendo a palavra/.test(p.textContent ?? ""),
+      );
+      const v = waiting ? "bot-escolhendo" : "outra";
+      if (w.__seq[w.__seq.length - 1] !== v) w.__seq.push(v);
+    }, 40);
+  });
+  await toChoosing(1);
+  await expect.poll(() => picks.length, { timeout: 12_000 }).toBe(1);
+  // uma recarga completa (aqui, a volta da rede) que sai antes do commit
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  // o banco simulado só "vê" a escolha depois de DOIS polls (a cada 2,5 s)
+  // terem lido a fase antiga
+  await expect
+    .poll(() => polls.filter((t) => t > picks[0]!).length, {
+      timeout: 8_000,
+    })
+    .toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(400);
+  toWriting();
+  await page.waitForTimeout(3_000);
+  const seq = await page.evaluate(
+    () => (window as unknown as { __seq: string[] }).__seq,
+  );
+  console.log(`sequência na tela: ${seq.join(" → ")}`);
+  const from = seq.indexOf("bot-escolhendo");
+  expect(from, "a tela do bot apareceu").toBeGreaterThan(-1);
+  const after = seq.slice(from);
+  const left = after.findIndex((v) => v !== "bot-escolhendo");
+  expect(left, "a tela do bot saiu depois da escolha").toBeGreaterThan(-1);
+  expect(after.slice(left), "não voltou para a escolha").not.toContain(
+    "bot-escolhendo",
   );
 });

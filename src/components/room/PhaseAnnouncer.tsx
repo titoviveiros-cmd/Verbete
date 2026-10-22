@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { memo, useEffect, useRef, useState } from "react";
 import { Mascot } from "@/components/Mascot";
 import { hapticTick } from "@/lib/sound";
+import { NARRATIVE_MIN_VISIBLE_MS } from "@/lib/transition-floor";
 
 // Tempo total real da transição, incluindo a saída do overlay + folga. O
 // Placar usa essa constante para só iniciar a contagem regressiva DEPOIS que
@@ -65,6 +66,8 @@ const LABELS: Record<string, Cfg> = {
   },
 };
 
+type Curtain = { status: string; round: number; at: number };
+
 export const PhaseAnnouncer = memo(function PhaseAnnouncer({
   status,
   round = 0,
@@ -72,22 +75,58 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
   status: string;
   round?: number;
 }) {
-  const [show, setShow] = useState(false);
+  // A cortina vive à parte da fase (playtest 2026-10-22, coordenador bot):
+  // antes, qualquer virada cortava a da tela de um quadro para o outro e uma
+  // fase nova trocava a cortina na hora — "Escolha da Palavra" piscava por
+  // ~0,5 s antes de "Hora de Inventar". Agora: virada SEM cortina própria
+  // (embaralhamento, votação…) deixa a da tela terminar o seu tempo, com a
+  // saída animada; cortina nova espera a atual ficar NARRATIVE_MIN_VISIBLE_MS
+  // à vista; e uma cortina na fila que a fase já deixou para trás não entra.
+  const [active, setActive] = useState<Curtain | null>(null);
+  const activeRef = useRef<Curtain | null>(null);
   const prev = useRef(status);
+  const roundRef = useRef(round);
+  roundRef.current = round;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduce = useReducedMotion();
+
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (queueTimer.current) clearTimeout(queueTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (prev.current === status) return;
     prev.current = status;
+    if (queueTimer.current) clearTimeout(queueTimer.current);
+    queueTimer.current = null;
     if (!LABELS[status]) return;
-    setShow(true);
-    hapticTick(); // Fase 5: tique tátil na virada de fase
-    const t = setTimeout(() => setShow(false), CURTAIN_VISIBLE_MS);
-    return () => clearTimeout(t);
+    const cur = activeRef.current;
+    // a fase voltou à que já está anunciada: nada a trocar
+    if (cur && cur.status === status && cur.round === roundRef.current) return;
+    const start = () => {
+      queueTimer.current = null;
+      const next = { status, round: roundRef.current, at: Date.now() };
+      activeRef.current = next;
+      setActive(next);
+      hapticTick(); // Fase 5: tique tátil na virada de fase
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => {
+        hideTimer.current = null;
+        activeRef.current = null;
+        setActive(null);
+      }, CURTAIN_VISIBLE_MS);
+    };
+    const wait = cur ? cur.at + NARRATIVE_MIN_VISIBLE_MS - Date.now() : 0;
+    if (wait > 0) queueTimer.current = setTimeout(start, wait);
+    else start();
   }, [status]);
 
-  const cfg = LABELS[status];
-  if (!cfg) return null;
+  const cfg = active ? LABELS[active.status] : undefined;
 
   // Entrada em cascata curta (≈0,7 s até o último elemento); com movimento
   // reduzido, só opacidade.
@@ -112,14 +151,16 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
   return (
     <>
       {/* Fase 7: leitor de tela anuncia a fase (a transição é só visual) */}
-      <span className="sr-only" role="status" aria-live="polite">
-        {show ? cfg.title : ""}
-      </span>
+      {(cfg || LABELS[status]) && (
+        <span className="sr-only" role="status" aria-live="polite">
+          {cfg ? cfg.title : ""}
+        </span>
+      )}
       {/* O toque não atravessa a cortina (Red Team 2026-10-20): ela é opaca,
           então um toque "para pular" acertava às cegas o botão da fase por
           baixo (Sortear palavra, Próxima rodada, Sair). A barreira some junto
           com o tempo de tela — no fade de saída (0,45 s) já dá para tocar. */}
-      {show && (
+      {active && (
         <div
           aria-hidden
           data-phase-announcer-shield
@@ -127,10 +168,10 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
         />
       )}
       <AnimatePresence>
-        {show && (
+        {active && cfg && (
           <motion.div
-            key={status}
-            data-phase-announcer={status}
+            key={`${active.status}:${active.round}`}
+            data-phase-announcer={active.status}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: { duration: 0.22 } }}
             exit={{ opacity: 0, transition: { duration: EXIT_S } }}
@@ -184,7 +225,7 @@ export const PhaseAnnouncer = memo(function PhaseAnnouncer({
                 className="eyebrow mt-3 !text-[var(--c-gold-low)] tabular-nums"
                 {...rise(0.08, 6)}
               >
-                {cfg.eyebrow(round)}
+                {cfg.eyebrow(active.round)}
               </motion.p>
               <motion.h2
                 className="font-display text-[34px] min-[400px]:text-[38px] leading-[1.05] mt-1.5 text-balance text-gold-grad"

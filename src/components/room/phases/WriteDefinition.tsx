@@ -18,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Mascot } from "@/components/Mascot";
 import { playSubmit, playUITap } from "@/lib/sound";
 import { scalePhaseSecs } from "@/lib/game-times";
+import { shuffleAdvanceDelayMs } from "@/lib/transition-floor";
+import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import {
   WordCard,
   ProgressBar,
@@ -174,12 +176,23 @@ export function WriteDefinition({
     }
   }, [isHost, room.id, room.current_round, writers]);
 
+  // Instante em que ESTE aparelho viu a escrita desta rodada começar.
+  const writingSeenRef = useRef<{ round: number; at: number } | null>(null);
+  if (writingSeenRef.current?.round !== room.current_round)
+    writingSeenRef.current = { round: room.current_round, at: Date.now() };
   useEffect(() => {
     if (allSubmitted) {
       // Qualquer cliente pode disparar — startShuffling tem guarda atômica
       // (`eq status writing`). Host dispara mais rápido para evitar latência,
-      // mas se ele cair, os demais cobrem em ~1.8s.
-      const delay = isHost ? 600 : 1800;
+      // mas se ele cair, os demais cobrem em ~1.8s. Piso (2026-10-22): a
+      // cortina "Hora de Inventar" sai e a escrita fica ~2,5 s à vista antes
+      // do embaralhamento (só bots escrevendo encadeava as telas).
+      const delay = shuffleAdvanceDelayMs(
+        isHost,
+        writingSeenRef.current?.at ?? Date.now(),
+        Date.now(),
+        PHASE_ANNOUNCER_TOTAL_MS,
+      );
       const expectedDefs = writers.length;
       const roundAtCheck = room.current_round;
       const t = setTimeout(async () => {

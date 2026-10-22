@@ -4,6 +4,7 @@ import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
 import { scalePhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
 import { queueRoomConfig } from "./room-config-writer";
+import { clearRoomOptimistic } from "./transition-floor";
 import {
   sanitizeDefinition,
   sanitizeNickname,
@@ -566,11 +567,18 @@ export async function chooseWord(
       }),
     );
   }
-  await supabase.rpc("choose_word", {
+  const { data, error } = await supabase.rpc("choose_word", {
     p_room_id: roomId,
     p_word_id: wordId,
     p_duration_sec: durationSec,
   });
+  // Recusada (ou erro de rede): sem a janela otimista, a próxima leitura do
+  // servidor corrige a tela na hora (Red Team 2026-10-22).
+  if (
+    opts.optimistic !== false &&
+    (error || !(data as { ok?: boolean } | null)?.ok)
+  )
+    clearRoomOptimistic();
 }
 
 export class DuplicateDefinitionError extends Error {

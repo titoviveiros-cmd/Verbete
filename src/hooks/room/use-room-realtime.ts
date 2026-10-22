@@ -8,6 +8,7 @@ import type { Room, Player, Vote } from "@/lib/room";
 import type { RoundExtension } from "@/hooks/use-room";
 import { reportOpsEvent } from "@/lib/ops";
 import { withPendingConfig } from "@/lib/room-config-writer";
+import { keepsLocalPhase } from "@/lib/transition-floor";
 import type { RoomCtx } from "./ctx";
 
 export function useRoomRealtime(ctx: RoomCtx) {
@@ -51,7 +52,10 @@ export function useRoomRealtime(ctx: RoomCtx) {
             const nr = p.new as unknown as Room;
             // Eco atrasado de uma configuração antiga do host não desfaz o
             // último toque (room-config-writer); para os demais, no-op.
-            setRoom(withPendingConfig(nr, "realtime"));
+            const next = withPendingConfig(nr, "realtime");
+            // Nem eco de uma escrita de antes do commit de uma virada
+            // otimista deste aparelho (Red Team 2026-10-22).
+            setRoom((cur) => (cur && keepsLocalPhase(cur, next) ? cur : next));
             // Relay: anuncia para os outros clientes a nova assinatura
             // (status, round). Quem não recebeu o postgres_changes via DB
             // ainda assim escuta esse broadcast e se cura sozinho.

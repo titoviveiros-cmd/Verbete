@@ -180,6 +180,13 @@ const SCREENS: Screen[] = [
       timeout: 10_000,
     });
     await page.waitForTimeout(5500);
+    // "Próxima rodada" destrava ~2,5 s depois da cortina (2026-10-22): a
+    // captura confere o botão já ativo
+    await page.waitForFunction(
+      () => !document.querySelector('[data-advance-ready="0"]'),
+      undefined,
+      { timeout: 10_000 },
+    );
   }),
   room(
     "finished",
