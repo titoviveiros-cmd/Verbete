@@ -113,8 +113,10 @@ const stub = http.createServer((req, res) => {
         score: /quase|tardio/i.test(c.texto) ? 95 : 10,
       }));
       content = JSON.stringify({ scores });
-      // "TARDIO": a aprovação demora 2 s — dá tempo de a partida acabar
-      if (/tardio/i.test(json)) {
+      // "TARDIO": a aprovação demora 2 s — dá tempo de a partida acabar.
+      // "DEMORA": o juiz da v2 demora 2 s (nota baixa) — dá tempo de OUTRA
+      // chamada servir o mesmo texto no meio da geração
+      if (/tardio|demora/i.test(json)) {
         setTimeout(() => {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ choices: [{ message: { content } }] }));
@@ -315,6 +317,49 @@ try {
       "pedido malformado (JSON inválido, id não-UUID) → 400, sem evento de erro de IA",
       junk.status === 400 && r.status === 400 && !junkEv,
       `HTTP ${junk.status}/${r.status} ${short(junkEv)}`,
+    );
+  } finally {
+    await stopEdge(edge);
+  }
+
+  // ================================================================ bot-definitions-v2
+  // Red Team 2026-10-22: a sugestão antecipada do jogador, os 💡 e os bots
+  // geram AO MESMO TEMPO. O que outra chamada serviu enquanto esta gerava não
+  // pode sair de novo — a memória da rodada é relida no fim.
+  console.log("\n— bot-definitions-v2 (bots + sugestão do jogador) servida de verdade");
+  edge = await serveEdge("bot-definitions-v2");
+  try {
+    const A = "instrumento de sopro usado em festas demora";
+    const B = "tecido grosso de algodao cru para sacos";
+    botDefs = [A, B];
+    // controle: ninguém serviu nada no meio → sai a 1ª candidata
+    const ridCtl = await mkRoom("writing");
+    let r = await callEdge({ word_id: w.id, count: 1, room_id: ridCtl, round: 1 });
+    check(
+      "v2 controle: sem corrida, a 1ª candidata aprovada é servida",
+      r.status === 200 && (r.json?.definitions ?? [])[0] === A,
+      short(r.json),
+    );
+    // corrida: o juiz leva 2 s; aos 0,8 s OUTRA chamada serve A nesta rodada
+    const rid = await mkRoom("writing");
+    const fromEv = (
+      await row(`SELECT COALESCE(max(id), 0) AS id FROM public.ops_events`)
+    ).id;
+    const pending = callEdge({ word_id: w.id, count: 1, room_id: rid, round: 1 });
+    await sleep(800);
+    await db.query(
+      `INSERT INTO public.ai_served_defs (room_id, round, norm_text)
+       VALUES ($1, 1, $2) ON CONFLICT DO NOTHING`,
+      [rid, A],
+    );
+    r = await pending;
+    const ev = await lastEvent("bot_ai_%", fromEv);
+    check(
+      "v2: texto servido por OUTRA chamada durante a geração não sai de novo (memória relida no fim)",
+      r.status === 200 &&
+        JSON.stringify(r.json?.definitions) === JSON.stringify([B]) &&
+        ev?.payload?.dropped_late === 1,
+      `${short(r.json)} ${short(ev?.payload)}`,
     );
   } finally {
     await stopEdge(edge);
