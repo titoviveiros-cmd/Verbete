@@ -495,16 +495,28 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-export async function startGame(room: Room, players: Player[]) {
-  const resetPlayers = players.map((p) => ({
-    ...p,
-    score: 0,
-    coordinator_count: 0,
-  }));
-  const next = pickNextCoordinator(resetPlayers, null);
-  // Otimismo: já transita a sala para "choosing" localmente para a UI sair
-  // do lobby instantaneamente, enquanto a RPC (autoritativa) roda o reset
-  // completo (players/defs/votes/rounds) numa única transação no servidor.
+export async function startGame(room: Room) {
+  // Sem coordenador provisório (playtest 2026-10-21): antes o app sorteava um
+  // coordenador local e já virava a sala para "choosing"; ~1,2 s depois o
+  // servidor confirmava OUTRO, a tela mostrava o errado e a escolha do bot
+  // recomeçava a conta (~5,1 s de tela na 1ª rodada). Agora a sala só vira
+  // com o coordenador AUTORITATIVO que a RPC devolve — no mesmo instante em
+  // que os outros navegadores recebem a virada pelo realtime.
+  const { data, error } = await supabase.rpc("start_game", {
+    p_room_id: room.id,
+  });
+  const res = data as {
+    ok?: boolean;
+    reason?: string;
+    coordinator?: string;
+  } | null;
+  if (error || res?.ok === false) {
+    // Recusa (min_players, not_authorized, invalid_state…): nada foi mudado
+    // na tela, então não há o que desfazer — o poll sincroniza se já começou.
+    throw new Error(
+      `start_game: ${error?.message ?? res?.reason ?? "recusado"}`,
+    );
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("room:optimistic-update", {
@@ -513,54 +525,13 @@ export async function startGame(room: Room, players: Player[]) {
           patch: {
             status: "choosing",
             current_round: 1,
-            current_coordinator: next.id,
+            current_coordinator: res?.coordinator ?? null,
             current_word_id: null,
           },
         },
       }),
     );
   }
-  const { data, error } = await supabase.rpc("start_game", {
-    p_room_id: room.id,
-  });
-  const res = data as { ok?: boolean; reason?: string } | null;
-  if (error || res?.ok === false) {
-    // O servidor recusou com a mesa ainda no lobby (ex.: min_players — o bot
-    // otimista ainda não chegou ao banco, ou alguém saiu no meio do clique):
-    // desfaz o "choosing" otimista. invalid_state = a partida JÁ começou
-    // (outra aba, clique duplo, resposta perdida): mantém e o poll sincroniza.
-    if (res?.reason !== "invalid_state" && typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("room:optimistic-update", {
-          detail: {
-            roomId: room.id,
-            patch: {
-              status: "lobby",
-              current_round: 0,
-              current_coordinator: null,
-              current_word_id: null,
-            },
-          },
-        }),
-      );
-    }
-    throw new Error(
-      `start_game: ${error?.message ?? res?.reason ?? "recusado"}`,
-    );
-  }
-}
-
-function pickNextCoordinator(
-  players: Player[],
-  lastCoord: string | null,
-): Player {
-  // Prefer players with the lowest coordinator_count, exclude last
-  const candidates = players.filter((p) => p.id !== lastCoord);
-  const pool = candidates.length > 0 ? candidates : players;
-  const minCount = Math.min(...pool.map((p) => p.coordinator_count));
-  const tier = pool.filter((p) => p.coordinator_count === minCount);
-  // tier nunca é vazio: minCount vem do próprio pool
-  return tier[Math.floor(Math.random() * tier.length)]!;
 }
 
 export async function chooseWord(

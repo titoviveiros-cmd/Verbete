@@ -715,10 +715,7 @@ function StartButton({
     void playUITap("primary");
     setStarting(true);
     try {
-      await startGame(
-        { id: roomId, current_coordinator: null } as Room,
-        players,
-      );
+      await startGame({ id: roomId, current_coordinator: null } as Room);
     } catch (e) {
       console.error(e);
       setStarting(false);

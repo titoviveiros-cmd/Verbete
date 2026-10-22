@@ -319,10 +319,22 @@ function RoomPage() {
   // as palavras já vêm sendo buscadas durante a espera. Sala pausada não
   // escolhe nada.
   const botAutopickRef = useRef<string | null>(null);
+  // Âncora da escolha do bot: o instante em que ESTE navegador viu a rodada
+  // entrar na escolha. Trocar o coordenador depois disso não reinicia a
+  // conta (antes, provisório → autoritativo dava ~5,1 s de tela na 1ª rodada).
+  const choosingSeenRef = useRef<{ key: string; at: number } | null>(null);
+  if (room?.status === "choosing") {
+    const seenKey = `${room.id}:${room.current_round}`;
+    if (choosingSeenRef.current?.key !== seenKey)
+      choosingSeenRef.current = { key: seenKey, at: Date.now() };
+  }
   useEffect(() => {
     if (!room || room.status !== "choosing" || room.current_word_id) return;
     if (!currentCoordinator?.is_bot || room.paused_at) return;
-    const key = `${room.id}:${room.current_round}:${room.current_coordinator}`;
+    // uma escolha por RODADA (não por coordenador)
+    const key = `${room.id}:${room.current_round}`;
+    const seen = choosingSeenRef.current;
+    const elapsed = seen?.key === key ? Date.now() - seen.at : 0;
     if (botAutopickRef.current === key) return;
     // Só o host busca já (N navegadores buscando por rodada era o problema
     // de 2026-10-20); quem cobre a falta dele busca na hora.
@@ -353,7 +365,7 @@ function RoomPage() {
           botAutopickRef.current = null;
         }
       },
-      botPickDelayMs(isHost, PHASE_ANNOUNCER_TOTAL_MS) +
+      Math.max(0, botPickDelayMs(isHost, PHASE_ANNOUNCER_TOTAL_MS) - elapsed) +
         (isHost ? 0 : Math.random() * 900),
     );
     return () => clearTimeout(timer);

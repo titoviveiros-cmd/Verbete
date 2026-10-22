@@ -1,29 +1,37 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Player, Room } from "@/lib/room";
+import type { Room } from "@/lib/room";
 
-// Mínimo de 4 (playtest 2026-10-20): quando o servidor recusa o start_game, o
-// "choosing" otimista só é desfeito se a mesa continua no lobby. Partida que
-// JÁ começou (invalid_state: outra aba, clique duplo, resposta perdida) não
-// pode voltar ao lobby na tela do host.
+// Início da partida (playtest 2026-10-21): a sala só vira "choosing" com o
+// coordenador AUTORITATIVO devolvido por start_game — nada de coordenador
+// provisório sorteado no aparelho (ele trocava ~1,2 s depois e reiniciava a
+// escolha do bot). Recusa do servidor = nada mudou na tela, nada a desfazer.
 const h = vi.hoisted(() => ({
   result: { data: null as unknown, error: null as unknown },
+  release: null as null | (() => void),
 }));
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: () => Promise.resolve(h.result) },
+  supabase: {
+    rpc: () =>
+      new Promise((resolve) => {
+        h.release = () => resolve(h.result);
+      }),
+  },
 }));
 
 import { startGame } from "@/lib/room";
 
 const room = { id: "room-1", current_coordinator: null } as Room;
-const players = ["a", "b", "c", "d"].map(
-  (id) => ({ id, score: 3, coordinator_count: 1 }) as Player,
-);
 
-function statuses() {
-  const seen: string[] = [];
+function patches() {
+  const seen: Array<{ status: string; current_coordinator?: string | null }> =
+    [];
   const on = (e: Event) =>
     seen.push(
-      (e as CustomEvent<{ patch: { status: string } }>).detail.patch.status,
+      (
+        e as CustomEvent<{
+          patch: { status: string; current_coordinator?: string | null };
+        }>
+      ).detail.patch,
     );
   window.addEventListener("room:optimistic-update", on);
   return {
@@ -32,42 +40,62 @@ function statuses() {
   };
 }
 
-describe("startGame — recusa do servidor", () => {
-  let spy: ReturnType<typeof statuses> | null = null;
-  afterEach(() => spy?.off());
+async function run(result: { data: unknown; error: unknown }) {
+  h.result = result;
+  const spy = patches();
+  const p = startGame(room);
+  await Promise.resolve();
+  const beforeServer = spy.seen.length;
+  h.release?.();
+  const outcome = await p.then(
+    () => "ok",
+    (e: Error) => e.message,
+  );
+  spy.off();
+  return { beforeServer, seen: spy.seen, outcome };
+}
 
-  it("min_players: desfaz o otimista (volta ao lobby) e avisa o motivo", async () => {
-    h.result = { data: { ok: false, reason: "min_players" }, error: null };
-    spy = statuses();
-    await expect(startGame(room, players)).rejects.toThrow(/min_players/);
-    expect(spy.seen).toEqual(["choosing", "lobby"]);
+describe("startGame — coordenador só o do servidor", () => {
+  afterEach(() => {
+    h.release = null;
   });
 
-  it("not_authorized: também volta ao lobby", async () => {
-    h.result = { data: { ok: false, reason: "not_authorized" }, error: null };
-    spy = statuses();
-    await expect(startGame(room, players)).rejects.toThrow(/not_authorized/);
-    expect(spy.seen).toEqual(["choosing", "lobby"]);
+  it("nada muda na tela antes do servidor responder (sem provisório)", async () => {
+    const r = await run({
+      data: { ok: true, coordinator: "bot_tio" },
+      error: null,
+    });
+    expect(r.beforeServer).toBe(0);
+    expect(r.outcome).toBe("ok");
   });
 
-  it("invalid_state (a partida já começou): NÃO volta ao lobby", async () => {
-    h.result = { data: { ok: false, reason: "invalid_state" }, error: null };
-    spy = statuses();
-    await expect(startGame(room, players)).rejects.toThrow(/invalid_state/);
-    expect(spy.seen).toEqual(["choosing"]);
+  it("aceito: vira 'choosing' UMA vez, já com o coordenador do servidor", async () => {
+    const r = await run({
+      data: { ok: true, coordinator: "bot_tio" },
+      error: null,
+    });
+    expect(r.seen).toEqual([
+      {
+        status: "choosing",
+        current_round: 1,
+        current_coordinator: "bot_tio",
+        current_word_id: null,
+      },
+    ]);
   });
 
-  it("erro de rede: volta ao lobby (o poll corrige se o servidor começou)", async () => {
-    h.result = { data: null, error: { message: "fetch failed" } };
-    spy = statuses();
-    await expect(startGame(room, players)).rejects.toThrow(/fetch failed/);
-    expect(spy.seen).toEqual(["choosing", "lobby"]);
-  });
-
-  it("ok: segue em choosing, sem erro", async () => {
-    h.result = { data: { ok: true, coordinator: "a" }, error: null };
-    spy = statuses();
-    await expect(startGame(room, players)).resolves.toBeUndefined();
-    expect(spy.seen).toEqual(["choosing"]);
+  it("recusado (min_players, not_authorized, invalid_state, rede): nada a desfazer", async () => {
+    for (const result of [
+      { data: { ok: false, reason: "min_players" }, error: null },
+      { data: { ok: false, reason: "not_authorized" }, error: null },
+      { data: { ok: false, reason: "invalid_state" }, error: null },
+      { data: null, error: { message: "fetch failed" } },
+    ]) {
+      const r = await run(result);
+      expect(r.seen).toEqual([]);
+      expect(r.outcome).toMatch(
+        /min_players|not_authorized|invalid_state|fetch failed/,
+      );
+    }
   });
 });
