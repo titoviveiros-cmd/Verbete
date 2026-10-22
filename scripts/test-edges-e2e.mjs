@@ -110,9 +110,17 @@ const stub = http.createServer((req, res) => {
       const json = user.match(/Candidatas \(JSON\): (\[.*\])\s*$/s)?.[1] ?? "[]";
       const scores = JSON.parse(json).map((c) => ({
         id: c.id,
-        score: /quase/i.test(c.texto) ? 95 : 10,
+        score: /quase|tardio/i.test(c.texto) ? 95 : 10,
       }));
       content = JSON.stringify({ scores });
+      // "TARDIO": a aprovação demora 2 s — dá tempo de a partida acabar
+      if (/tardio/i.test(json)) {
+        setTimeout(() => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+        }, 2_000);
+        return;
+      }
     }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ choices: [{ message: { content } }] }));
@@ -650,7 +658,7 @@ try {
 
       // ---------- 🧠 regressão (2026-10-22, sala 3361 / HIENA: o juiz caiu
       // com 503 e o +3 de uma nota 82 se perdeu). Sala nova por cenário.
-      const judgeRoom = async (label) => {
+      const judgeRoom = async (label, text = "ALVO: fruto seco tipico do cerrado") => {
         const id = await mkRoom("voting");
         const ids = { V: `edge_${label}v_${tag}`, N: `edge_${label}n_${tag}`, C: `edge_${label}c_${tag}` };
         await db.query(
@@ -663,9 +671,9 @@ try {
         const { rows: dd } = await db.query(
           `INSERT INTO public.definitions (room_id, round, player_id, text, is_truth, letter) VALUES
            ($1, 1, '__truth__', 'fruto seco do cerrado', true, 'A'),
-           ($1, 1, $2, 'ALVO: fruto seco tipico do cerrado', false, 'B')
+           ($1, 1, $2, $3, false, 'B')
            RETURNING id, player_id`,
-          [id, ids.N],
+          [id, ids.N, text],
         );
         const truth = dd.find((x) => x.player_id === "__truth__").id;
         const alvo = dd.find((x) => x.player_id === ids.N).id;
@@ -779,15 +787,24 @@ try {
         short({ escritor: await score(C2.N), cRow }),
       );
 
-      // D) resposta aprovada que chega com a partida já ENCERRADA → nada muda
-      await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [C2.id]);
-      judgeQueue = [95];
-      const late = await callEdge({ room_id: C2.id, round: 1, candidates: [{ id: C2.alvo }] });
-      await sleep(500);
+      // D) a 1ª tentativa ainda em voo e a partida ENCERRA antes de a
+      //    aprovação (95) chegar → nada muda (o juiz aprovou, mas o pódio
+      //    já foi pago)
+      const D = await judgeRoom("d", "TARDIO: fruto seco tipico do cerrado");
+      judgeQueue = [];
+      await db.query(`SELECT public.advance_voting_to_reveal($1)`, [D.id]);
+      await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [D.id]);
+      await waitResponse(D.id);
+      await sleep(1000);
+      const dEv = await judgeEvents(D.id);
+      const dOk = dEv.find((e) => e.kind === "judge_ai_success");
       check(
-        "aprovação tardia em partida encerrada → sem +3 e sem near_truth (pódio intacto)",
-        (await score(C2.N)) === 3 && !(await nearIds(C2.id)).includes(C2.alvo),
-        short({ late: late.json, escritor: await score(C2.N) }),
+        "aprovação (95) que chega depois do fim da partida → sem +3 e sem near_truth (pódio intacto)",
+        !!dOk &&
+          JSON.parse(dOk.payload.scores ?? "{}")[D.alvo] === 95 &&
+          (await score(D.N)) === 3 &&
+          !(await nearIds(D.id)).includes(D.alvo),
+        short({ dEv: dEv.map((e) => [e.kind, e.payload.scores]), escritor: await score(D.N) }),
       );
 
       // E) 3 falhas seguidas → desiste, registra, não inventa nota
