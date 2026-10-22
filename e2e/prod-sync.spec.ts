@@ -242,7 +242,7 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
   } finally {
     const H = await evs(host).catch(() => [] as Ev[]);
     const G = await evs(guest).catch(() => [] as Ev[]);
-    const xOf = (v: string) => Number((v.match(/^(\d+)\//) ?? [])[1] ?? -1);
+    const xOf = (v: string) => Number((v.match(/(\d+)\//) ?? [])[1] ?? -1);
     const q = (arr: number[], f: number) => {
       const a = [...arr].sort((x, y) => x - y);
       return a.length

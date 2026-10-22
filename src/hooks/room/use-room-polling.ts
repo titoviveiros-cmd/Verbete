@@ -84,8 +84,8 @@ export function useRoomPolling(ctx: RoomCtx) {
       setVotes(payload.votes ?? []);
     };
     refreshRound();
-    // aviso da sala (lib/sync-nudge): relê na hora, vários juntos = 1 leitura
-    const nudged = createCoalescer(() => void refreshRound(), 100);
+    // aviso da sala (lib/sync-nudge): relê na hora, vários juntos (50 ms) = 1 leitura
+    const nudged = createCoalescer(() => void refreshRound(), 50);
     roundSyncRef.current = nudged;
     const interval = roomStatus === "writing" ? 1200 : 700;
     const t = window.setInterval(refreshRound, interval);
