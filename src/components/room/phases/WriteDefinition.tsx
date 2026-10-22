@@ -30,7 +30,6 @@ import {
 import type { RoundExtension } from "@/hooks/use-room";
 import { scrollbarClip } from "@/lib/utils";
 import {
-  AUTO_DEF_PREFETCH_DELAY_MS,
   AUTO_DEF_WAIT_MS,
   autoDefKey,
   prefetchAutoDefinition,
@@ -152,13 +151,12 @@ export function WriteDefinition({
     [word.id, room.id, room.current_round],
   );
   useEffect(() => {
-    if (!autoKey || isCoordinator) return;
-    // um pouco depois da leva dos bots e dos 💡 (não disputa a IA com eles);
-    // quem já enviou (ex.: recarregou a página) não gasta IA
-    const t = setTimeout(() => {
-      if (!sentRef.current) prefetchAutoDefinition(autoKey, generateAuto);
-    }, AUTO_DEF_PREFETCH_DELAY_MS);
-    return () => clearTimeout(t);
+    // já ao entrar na escrita (medido 22/10: começar 0,5–1,2 s depois fazia
+    // o toque logo após a cortina esperar a IA, sem ganho medido para os
+    // bots — a corrida com eles quem resolve é a memória relida no fim da
+    // v2); quem já enviou (ex.: recarregou a página) não gasta IA
+    if (!autoKey || isCoordinator || sentRef.current) return;
+    prefetchAutoDefinition(autoKey, generateAuto);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoKey, isCoordinator]);
   const writers = useMemo(

@@ -10,11 +10,6 @@
 import { textSimilarity } from "./text-filter";
 
 export const AUTO_DEF_WAIT_MS = 1000;
-/** Começo da antecipação: logo depois da leva dos bots e dos 💡 (não sai no
- *  mesmo instante que eles) e bem antes do fim da cortina "Hora de Inventar"
- *  (3,5 s). Medido 22/10: com 1,2 s o toque logo após a cortina ainda
- *  esperava a IA (1,17 s); a memória relida no fim da v2 cobre a corrida. */
-export const AUTO_DEF_PREFETCH_DELAY_MS = 500;
 /** "Quase igual" a algo da tela = mesma régua dos 💡 e da memória do servidor. */
 const AUTO_DEF_SIMILAR = 0.6;
 /** Gerações por rodada (a 1ª antecipada + as seguintes a cada toque). */

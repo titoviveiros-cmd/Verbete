@@ -90,6 +90,21 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
   const evs = (p: Page) =>
     p.evaluate(() => (window as unknown as { __sync: Ev[] }).__sync);
   const autoMs: number[] = [];
+  // F — aviso PERDIDO (SYNC_DROP_NUDGE=1): o host não recebe nenhum
+  // "round-sync-needed"; o que ele vê tem de chegar pelo realtime/poll
+  let dropped = 0;
+  if (process.env.SYNC_DROP_NUDGE === "1")
+    await host.routeWebSocket(/realtime/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((m) => server.send(m));
+      server.onMessage((m) => {
+        if (typeof m === "string" && m.includes("round-sync-needed")) {
+          dropped++;
+          return;
+        }
+        ws.send(m);
+      });
+    });
   let code = "";
   try {
     await host.goto("/");
@@ -303,6 +318,8 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
         `RESUMO ${k}: n=${arr.length} média=${arr.length ? Math.round(arr.reduce((x, y) => x + y, 0) / arr.length) : "—"} P50=${q(arr, 0.5)} P95=${q(arr, 0.95)} máx=${arr.length ? Math.max(...arr) : "—"}`,
       );
     console.log("=== SINCRONIZAÇÃO\n" + rows.join("\n"));
+    if (process.env.SYNC_DROP_NUDGE === "1")
+      console.log(`=== AVISOS DESCARTADOS NO HOST: ${dropped}`);
     const sorted = [...autoMs].sort((a, b) => a - b);
     const pct = (q: number) =>
       sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];

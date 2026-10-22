@@ -41,11 +41,7 @@ vi.mock("@/components/Mascot", () => ({ Mascot: () => <div /> }));
 vi.mock("@/components/VerbeteLogo", () => ({ VerbeteTile: () => <div /> }));
 
 import { WriteDefinition } from "../WriteDefinition";
-import {
-  AUTO_DEF_PREFETCH_DELAY_MS,
-  AUTO_DEF_WAIT_MS,
-  resetAutoDefinitions,
-} from "@/lib/auto-definition";
+import { AUTO_DEF_WAIT_MS, resetAutoDefinitions } from "@/lib/auto-definition";
 
 const ROOM = {
   id: "r1",
@@ -119,23 +115,36 @@ afterEach(() => {
 });
 
 describe("WriteDefinition — 🤖 sugestão antecipada", () => {
-  it("começa um pouco DEPOIS de entrar na escrita (não sai junto com os bots e os 💡)", async () => {
-    show();
+  it("começa ao entrar na escrita — uma vez só (nova renderização não repete)", async () => {
+    const view = show();
     await flush();
-    expect(room.generateAiDefinitionForPlayer).not.toHaveBeenCalled();
-    await wait(AUTO_DEF_PREFETCH_DELAY_MS);
+    expect(room.generateAiDefinitionForPlayer).toHaveBeenCalledTimes(1);
+    view.rerender(
+      <WriteDefinition
+        room={ROOM}
+        players={[ME, COORD]}
+        word={WORD}
+        me={ME}
+        isCoordinator={false}
+        definitions={[]}
+        roundExtensions={[]}
+        isHost={false}
+        isDeputy={false}
+      />,
+    );
+    await wait(2_000);
     expect(room.generateAiDefinitionForPlayer).toHaveBeenCalledTimes(1);
   });
 
   it("quem já enviou (ex.: recarregou a página) não gasta IA", async () => {
     show([{ id: "d1", player_id: "p_me", round: 4 } as Definition]);
-    await wait(AUTO_DEF_PREFETCH_DELAY_MS + 500);
+    await wait(2_000);
     expect(room.generateAiDefinitionForPlayer).not.toHaveBeenCalled();
   });
 
   it("sem digitar: a reserva local entra no campo em até ~1 s", async () => {
     show();
-    await wait(AUTO_DEF_PREFETCH_DELAY_MS);
+    await flush();
     fireEvent.click(screen.getByText(/gerar definição automática/i));
     await flush();
     await wait(AUTO_DEF_WAIT_MS);
@@ -144,7 +153,7 @@ describe("WriteDefinition — 🤖 sugestão antecipada", () => {
 
   it("digitou durante a espera: a sugestão NÃO apaga o que ele escreveu", async () => {
     show();
-    await wait(AUTO_DEF_PREFETCH_DELAY_MS);
+    await flush();
     fireEvent.click(screen.getByText(/gerar definição automática/i));
     await flush();
     fireEvent.change(field(), { target: { value: "minha propria ideia" } });
