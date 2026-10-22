@@ -5,6 +5,7 @@ import { scalePhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
 import { queueRoomConfig } from "./room-config-writer";
 import { clearRoomOptimistic } from "./transition-floor";
+import { nudgeRoundSync } from "./sync-nudge";
 import {
   sanitizeDefinition,
   sanitizeNickname,
@@ -660,6 +661,7 @@ export async function submitDefinition(
     if (realId && typeof window !== "undefined") {
       setStored(`mydef:${roomId}:${round}`, String(realId));
     }
+    nudgeRoundSync(roomId, round, "definition");
   } catch (e) {
     // Rollback do otimismo se a inserção falhou (ex.: erro de rede).
     if (typeof window !== "undefined") {
@@ -861,11 +863,12 @@ async function submitBotRows(
   rows: Array<{ player_id: string; text: string }>,
 ) {
   try {
-    await supabase.rpc("submit_bot_definitions_bulk", {
+    const { error } = await supabase.rpc("submit_bot_definitions_bulk", {
       p_room_id: roomId,
       p_round: round,
       p_rows: rows,
     });
+    if (!error) nudgeRoundSync(roomId, round, "bot_definitions");
   } catch {
     /* o timer da escrita e o servidor cobrem */
   }
@@ -917,7 +920,9 @@ export async function generateAiDefinitionForPlayer(
   const used = new Set<string>();
 
   try {
-    const { data } = await supabase.functions.invoke("bot-definitions", {
+    // v2 (2026-10-22): a mesma edge dos bots — passa pelo juiz e só fica com
+    // sugestão LONGE da verdade (nota < 50) e sem repetir a partida.
+    const { data } = await supabase.functions.invoke("bot-definitions-v2", {
       body: {
         word_id: word.id,
         count: 1,
@@ -1019,6 +1024,7 @@ export async function castVote(
     if (data && (data as any).ok === false) {
       throw new Error(`cast_vote rejected: ${(data as any).reason}`);
     }
+    nudgeRoundSync(roomId, round, "vote");
   } catch (e) {
     if (typeof window !== "undefined") {
       window.dispatchEvent(
@@ -1088,7 +1094,10 @@ export async function castBotVotes(
     return "done";
   }
   const res = data as { ok?: boolean; reason?: string } | null;
-  if (res?.ok) return "done";
+  if (res?.ok) {
+    nudgeRoundSync(roomId, round, "bot_votes");
+    return "done";
+  }
   if (res?.reason === "humans_pending") return "pending";
   // a fase já andou: não há mais o que votar
   if (res?.reason === "invalid_state") return "done";

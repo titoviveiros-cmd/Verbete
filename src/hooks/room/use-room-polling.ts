@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Definition, Vote } from "@/lib/room";
 import type { RoundExtension } from "@/hooks/use-room";
 import { mergeSamePhasePoll } from "@/lib/transition-floor";
+import { createCoalescer, createLatestGate } from "@/lib/sync-nudge";
 import type { RoomCtx } from "./ctx";
 
 export function useRoomPolling(ctx: RoomCtx) {
@@ -24,6 +25,7 @@ export function useRoomPolling(ctx: RoomCtx) {
     setRoundExtensions,
     setDegraded,
     reloadRef,
+    roundSyncRef,
     optimisticPlayerIdsRef,
     lastEventAtRef,
     lastRoomSigRef,
@@ -61,12 +63,15 @@ export function useRoomPolling(ctx: RoomCtx) {
     if (!["writing", "shuffling", "voting", "reveal"].includes(roomStatus))
       return;
     let cancelled = false;
+    // poll e aviso podem se cruzar: vale só a resposta mais nova
+    const gate = createLatestGate();
     const refreshRound = async () => {
+      const seq = gate.next();
       const { data: sync, error: syncErr } = await supabase.rpc(
         "get_round_sync",
         { p_room_id: roomId },
       );
-      if (cancelled) return;
+      if (cancelled || !gate.accept(seq)) return;
       // Fase 3 (ConnectionState): o poll é o batimento com o servidor —
       // falha liga o indicador de reconexão; sucesso desliga.
       setDegraded(!!syncErr);
@@ -79,10 +84,15 @@ export function useRoomPolling(ctx: RoomCtx) {
       setVotes(payload.votes ?? []);
     };
     refreshRound();
+    // aviso da sala (lib/sync-nudge): relê na hora, vários juntos = 1 leitura
+    const nudged = createCoalescer(() => void refreshRound(), 100);
+    roundSyncRef.current = nudged;
     const interval = roomStatus === "writing" ? 1200 : 700;
     const t = window.setInterval(refreshRound, interval);
     return () => {
       cancelled = true;
+      nudged.cancel();
+      if (roundSyncRef.current === nudged) roundSyncRef.current = null;
       window.clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

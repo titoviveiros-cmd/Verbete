@@ -29,6 +29,12 @@ import {
 } from "@/components/room/shared";
 import type { RoundExtension } from "@/hooks/use-room";
 import { scrollbarClip } from "@/lib/utils";
+import {
+  AUTO_DEF_WAIT_MS,
+  autoDefKey,
+  prefetchAutoDefinition,
+  takeAutoDefinition,
+} from "@/lib/auto-definition";
 
 export function WriteDefinition({
   room,
@@ -127,6 +133,24 @@ export function WriteDefinition({
     () => definitions.find((d) => d.player_id === me?.id),
     [definitions, me?.id],
   );
+  // 🤖 sugestão automática ANTECIPADA (2026-10-22): começa a gerar ao
+  // entrar na escrita (enquanto o jogador lê a palavra), só neste aparelho.
+  const autoKey = me?.id
+    ? autoDefKey(room.id, room.current_round, me.id, word.id)
+    : null;
+  const autoKeyRef = useRef(autoKey);
+  autoKeyRef.current = autoKey;
+  const generateAuto = useMemo(
+    () => () =>
+      generateAiDefinitionForPlayer(word, room.id, room.current_round),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [word.id, room.id, room.current_round],
+  );
+  useEffect(() => {
+    if (!autoKey || isCoordinator || submitted) return;
+    prefetchAutoDefinition(autoKey, generateAuto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoKey, isCoordinator]);
   const writers = useMemo(
     () =>
       players.filter((p) => p.id !== room.current_coordinator && !p.kicked_at),
@@ -335,11 +359,10 @@ export function WriteDefinition({
   };
 
   const handleAiGenerate = async () => {
-    if (!word || aiLoading || submitted || myDef) return;
+    if (!word || !autoKey || aiLoading || submitted || myDef) return;
     setAiLoading(true);
     try {
-      // Playtest 5G: IA lenta não pode segurar o jogador — teto de 6s e
-      // cai no pool local (resposta imediata em vez de espera).
+      // Reserva local: a sugestão antecipada não chegou nem na espera curta
       const localFallback = async (): Promise<string> => {
         const { BOT_FAKE_DEFINITIONS_TEMPLATES } =
           await import("@/lib/bot-names");
@@ -352,13 +375,16 @@ export function WriteDefinition({
           .find((s) => s && s !== text && !suggestions.includes(s));
         return pick ?? pool[0] ?? "";
       };
-      const generated = await Promise.race([
-        generateAiDefinitionForPlayer(word, room.id, room.current_round),
-        new Promise<string>((resolve) =>
-          setTimeout(() => void localFallback().then(resolve), 6000),
-        ),
-      ]);
-      setText(generated.slice(0, 140));
+      const key = autoKey;
+      const got = await takeAutoDefinition(key, {
+        generate: generateAuto,
+        fallback: localFallback,
+        exclude: [text, ...suggestions],
+        waitMs: AUTO_DEF_WAIT_MS,
+      });
+      // trocou de rodada no meio: o texto velho não entra no campo novo
+      if (autoKeyRef.current !== key) return;
+      setText(got.text.slice(0, 140));
     } catch (e) {
       console.error("generateAiDefinitionForPlayer failed", e);
       toast.error("Não foi possível gerar uma definição. Tente novamente.");

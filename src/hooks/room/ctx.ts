@@ -30,6 +30,8 @@ export interface RoomCtx {
 
   /** Recarga completa via get_room_state — populada pelo módulo de dados. */
   reloadRef: MutableRefObject<() => Promise<void>>;
+  /** Releitura imediata (e agrupada) de get_round_sync — aviso da sala. */
+  roundSyncRef: MutableRefObject<(() => void) | null>;
   /** id → timestamp de adds otimistas de jogador (bots) ainda não ecoados. */
   optimisticPlayerIdsRef: MutableRefObject<Record<string, number>>;
   /** Último evento realtime/poll recebido (poll adaptativo decide por ele). */
