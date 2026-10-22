@@ -28,12 +28,19 @@ export function Shuffling({
   word,
   definitions,
   isHost,
+  onShown,
 }: {
   room: Room;
   word: Word;
   definitions: Definition[];
   isHost: boolean;
+  /** A tela montou (é daqui que conta o piso do embaralhamento). */
+  onShown?: () => void;
 }) {
+  const shownRef = useRef(onShown);
+  useEffect(() => {
+    shownRef.current?.();
+  }, []);
   // Palavra e cédulas pelo ref: o poll de get_round_sync troca a identidade
   // de `definitions` a cada ~0,7 s, e com elas nas dependências o efeito
   // recomeçava o relógio a cada poll — com 1,8 s o host nunca abriria a

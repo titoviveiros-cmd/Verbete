@@ -8,6 +8,7 @@ import {
   OPTIMISTIC_GRACE_MS,
   roomPhaseSig,
   shuffleAdvanceDelayMs,
+  shuffleScreenHoldUntil,
 } from "@/lib/transition-floor";
 
 // Coordenador bot (playtest 2026-10-22): o processamento pode terminar cedo;
@@ -39,6 +40,21 @@ describe("piso da escrita antes do embaralhamento", () => {
     expect(shuffleAdvanceDelayMs(false, seen, now, CURTAIN)).toBeGreaterThan(
       shuffleAdvanceDelayMs(true, seen, now, CURTAIN),
     );
+  });
+});
+
+describe("piso do embaralhamento neste aparelho", () => {
+  it("votação que chega cedo espera o embaralhamento completar 2,5 s aqui", () => {
+    const seen = { key: "r1:3", at: 1_000_000 };
+    expect(shuffleScreenHoldUntil("voting", seen, "r1:3")).toBe(
+      1_000_000 + NARRATIVE_MIN_VISIBLE_MS,
+    );
+  });
+  it("não segura outra rodada, outra fase nem quem não viu o embaralhamento", () => {
+    const seen = { key: "r1:3", at: 1_000_000 };
+    expect(shuffleScreenHoldUntil("voting", seen, "r1:4")).toBe(0);
+    expect(shuffleScreenHoldUntil("shuffling", seen, "r1:3")).toBe(0);
+    expect(shuffleScreenHoldUntil("voting", null, "r1:3")).toBe(0);
   });
 });
 

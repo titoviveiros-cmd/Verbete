@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRoom } from "@/hooks/use-room";
 import { getPlayerId, getStored, setPlayerId } from "@/lib/player-id";
 import { botPickDelayMs } from "@/lib/game-times";
+import { shuffleScreenHoldUntil } from "@/lib/transition-floor";
 import { usePausePresence } from "@/hooks/room/use-pause-presence";
 import { PausedBanner } from "@/components/room/PausedBanner";
 import {
@@ -322,6 +323,25 @@ function RoomPage() {
   // Âncora da escolha do bot: o instante em que ESTE navegador viu a rodada
   // entrar na escolha. Trocar o coordenador depois disso não reinicia a
   // conta (antes, provisório → autoritativo dava ~5,1 s de tela na 1ª rodada).
+  // Piso do embaralhamento NESTE aparelho (2026-10-22): a votação só toma o
+  // lugar do "Embaralhando" depois de ele ficar NARRATIVE_MIN_VISIBLE_MS à
+  // vista aqui (quem o recebe atrasado via ~2,3 s).
+  const shuffleSeenRef = useRef<{ key: string; at: number } | null>(null);
+  const roundKey = room ? `${room.id}:${room.current_round}` : "";
+  if (room?.status === "shuffling" && shuffleSeenRef.current?.key !== roundKey)
+    shuffleSeenRef.current = { key: roundKey, at: Date.now() };
+  const shuffleHoldUntil = room
+    ? shuffleScreenHoldUntil(room.status, shuffleSeenRef.current, roundKey)
+    : 0;
+  const [, bumpScreen] = useState(0);
+  useEffect(() => {
+    const wait = shuffleHoldUntil - Date.now();
+    if (wait <= 0) return;
+    const t = setTimeout(() => bumpScreen((n) => n + 1), wait);
+    return () => clearTimeout(t);
+  }, [shuffleHoldUntil]);
+  const screenStatus =
+    shuffleHoldUntil > Date.now() ? "shuffling" : room?.status;
   const choosingSeenRef = useRef<{ key: string; at: number } | null>(null);
   // Partida nova (2026-10-22): a rodada 1 do match seguinte tem a mesma chave
   // da rodada 1 do anterior — sem zerar aqui (mesmo que o lobby passe batido
@@ -642,7 +662,7 @@ function RoomPage() {
         >
           <AnimatePresence mode="wait">
             <motion.div
-              key={room.status}
+              key={screenStatus}
               initial={{ opacity: 0, y: 16, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.99 }}
@@ -686,15 +706,23 @@ function RoomPage() {
                     isDeputy={isDeputy}
                   />
                 )}
-                {room.status === "shuffling" && word && (
+                {screenStatus === "shuffling" && word && (
                   <Shuffling
                     room={room}
                     word={word}
                     definitions={definitions}
                     isHost={isHost}
+                    onShown={() => {
+                      // o piso conta de quando a tela montou (depois da
+                      // saída animada da escrita), não da virada da fase
+                      shuffleSeenRef.current = {
+                        key: roundKey,
+                        at: Date.now(),
+                      };
+                    }}
                   />
                 )}
-                {room.status === "voting" && word && (
+                {screenStatus === "voting" && word && (
                   <Voting
                     room={room}
                     players={players}

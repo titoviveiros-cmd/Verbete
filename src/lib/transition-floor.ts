@@ -18,6 +18,20 @@ export function shuffleAdvanceDelayMs(
   return Math.max(base, floor + (isHost ? 0 : 1200));
 }
 
+/** Até quando ESTE aparelho segura a tela "Embaralhando" depois que a
+ *  votação chegou (0 = não segura). Quem recebe o embaralhamento atrasado
+ *  pelo tempo real e a votação quase junto com o host via a tela por ~2,3 s
+ *  (prévia, 2026-10-22). O prazo da votação segue o do servidor. */
+export function shuffleScreenHoldUntil(
+  status: string,
+  shuffleSeen: { key: string; at: number } | null,
+  roundKey: string,
+): number {
+  if (status !== "voting" || !shuffleSeen || shuffleSeen.key !== roundKey)
+    return 0;
+  return shuffleSeen.at + NARRATIVE_MIN_VISIBLE_MS;
+}
+
 type PhaseRoom = {
   status: string;
   current_round: number;
