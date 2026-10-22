@@ -9,7 +9,8 @@
 // bots corta a nota ≥ 50). Humanos: votam na verdade com a taxa medida no
 // banco (42,9% em 28 votos, 22/10) e, no resto, num blefe ao acaso.
 // "Antes": bot sorteia entre todas as cédulas menos a própria (cliente
-// antigo). "Depois": cast_bot_votes — 17,5% na verdade, resto num blefe ao
+// antigo). "Depois": cast_bot_votes — 17,5% na verdade (nunca acima do
+// chute às cegas), resto num blefe ao
 // acaso que não seja o seu (supabase/migrations/20261022160000).
 
 const HUMAN_TRUTH = Number(process.argv[2] ?? 0.429);
@@ -53,7 +54,7 @@ function play(rand, bots, policy, stats) {
         truth =
           policy === "antes"
             ? rand() < 1 / (bluffs.length + 1)
-            : rand() < BOT_TRUTH_AFTER;
+            : rand() < Math.min(BOT_TRUTH_AFTER, 1 / (bluffs.length + 1));
         stats.botVotes++;
         if (truth) stats.botTruth++;
       } else truth = rand() < HUMAN_TRUTH;

@@ -103,36 +103,79 @@ function VotingImpl({
   );
 
   // Bots votam POR ÚLTIMO (playtest 2026-10-22): o servidor escolhe o voto
-  // deles, e um voto de bot visível enquanto humanos ainda votam seria uma
-  // pista da verdade. O host pede assim que o último humano vota (ou no fim
-  // do prazo, no handler do tempo) — uma vez por rodada.
-  const botsVotedRef = useRef<number | null>(null);
+  // deles e só libera depois que todos os humanos votaram — um voto de bot
+  // visível enquanto humanos ainda votam seria uma pista da verdade.
+  // Qualquer aparelho pede (o host primeiro; os demais cobrem se ele saiu
+  // da tela) assim que vê os votos REAIS de todos os humanos; no fim do
+  // prazo, o handler do tempo pede e ESPERA antes de revelar.
   const humansPending = pending.some((p) => !p.is_bot);
   const pendingHumans = useMemo(
     () => pending.filter((p) => !p.is_bot),
     [pending],
   );
-  const voteBots = useCallback(async () => {
-    if (botsVotedRef.current === room.current_round) return;
-    const bots = players.filter((p) => p.is_bot && !p.kicked_at);
-    // Só com o BALLOT real (cédulas com letra): no mount a lista ainda pode
-    // ser o shape da fase de escrita (sem letras) ou estar vazia.
-    const ballot = definitions.filter(
-      (d) => d.letter && d.round === room.current_round,
-    );
-    if (!bots.length || !ballot.length) return;
-    botsVotedRef.current = room.current_round;
-    try {
-      await castBotVotes(room.id, room.current_round, bots, ballot);
-    } catch (e) {
-      console.error("castBotVotes failed", e);
-      botsVotedRef.current = null;
-    }
-  }, [players, definitions, room.id, room.current_round]);
+  const realHumansPending = voters.some(
+    (p) => !p.is_bot && !validVotes.some((v) => v.voter_id === p.id),
+  );
+  const botsPending = pending.some((p) => p.is_bot);
+  // Último estado em ref: o poll troca a identidade das listas a cada ~0,7 s,
+  // e voteBots precisa ser estável (senão o atraso dos convidados recomeça).
+  const latestRef = useRef({ players, definitions });
+  latestRef.current = { players, definitions };
+  const botsRef = useRef<{
+    round: number;
+    done: boolean;
+    tries: number;
+    inFlight: Promise<void> | null;
+  }>({ round: -1, done: false, tries: 0, inFlight: null });
+  const meId = me?.id;
+  const voteBots = useCallback(
+    (force = false): Promise<void> => {
+      const round = room.current_round;
+      const st = botsRef.current;
+      if (st.round !== round)
+        botsRef.current = { round, done: false, tries: 0, inFlight: null };
+      const cur = botsRef.current;
+      if (cur.done) return Promise.resolve();
+      if (cur.inFlight) return cur.inFlight;
+      // tentativas com recuo; o fim do prazo ainda tenta (force)
+      if (!force && cur.tries >= 4) return Promise.resolve();
+      const { players: ps, definitions: ds } = latestRef.current;
+      const bots = ps.filter((p) => p.is_bot && !p.kicked_at);
+      // Só com o BALLOT real (cédulas com letra): no mount a lista ainda
+      // pode ser o shape da fase de escrita (sem letras) ou estar vazia.
+      const ballot = ds.filter((d) => d.letter && d.round === round);
+      if (!meId || !bots.length || !ballot.length) return Promise.resolve();
+      cur.tries++;
+      const run = castBotVotes(room.id, round, meId, { isHost, bots, ballot })
+        .then((r) => {
+          if (r === "done") cur.done = true;
+        })
+        .catch((e) => {
+          console.error("castBotVotes failed", e);
+        })
+        .then(async () => {
+          await wait(force ? 0 : 600 * cur.tries);
+        })
+        .finally(() => {
+          cur.inFlight = null;
+        });
+      cur.inFlight = run;
+      return run;
+    },
+    [room.id, room.current_round, meId, isHost],
+  );
+  const [botsRetry, setBotsRetry] = useState(0);
   useEffect(() => {
-    if (!isHost || humansPending) return;
-    void voteBots();
-  }, [isHost, humansPending, voteBots]);
+    if (realHumansPending || !botsPending) return;
+    const delay = isHost ? 0 : isDeputy ? 900 : 1800;
+    const t = setTimeout(() => {
+      void voteBots().then(() => {
+        // ainda faltando (servidor viu humano pendente): tenta de novo
+        if (!botsRef.current.done) setBotsRetry((n) => n + 1);
+      });
+    }, delay);
+    return () => clearTimeout(t);
+  }, [realHumansPending, botsPending, isHost, isDeputy, voteBots, botsRetry]);
 
   const revealFiredRef = useRef<number | null>(null);
   const revealInFlightRef = useRef(false);
@@ -215,8 +258,9 @@ function VotingImpl({
               await applyVotingTimeoutOrAdvance(room.id);
             if (extended) return; // sala recebeu +20s/+15s, timer reinicia
             if (advanced) {
-              // prazo acabou com humano sem votar: os bots votam agora
-              if (isHost) await voteBots();
+              // prazo acabou com humano sem votar: os bots votam agora — e
+              // a revelação ESPERA o pedido (inclusive um já em voo)
+              await voteBots(true);
               if (revealFiredRef.current === room.current_round) return;
               if (revealInFlightRef.current) return;
               revealInFlightRef.current = true;
@@ -256,6 +300,8 @@ function VotingImpl({
           return;
         }
       }
+      // host e deputy fora: os bots votam antes da revelação
+      await voteBots(true);
       if (revealInFlightRef.current) return;
       revealInFlightRef.current = true;
       const revealed = await revealAndScore(

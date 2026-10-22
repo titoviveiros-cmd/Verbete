@@ -5,9 +5,13 @@
 -- medido nos últimos 10 dias: 35,3% dos votos de bot na verdade) e os bots
 -- disputavam a ponta toda partida. Aqui, onde a verdade já é conhecida com
 -- segurança, cada bot vota na verdade com 17,5% de chance (meio da meta de
--- 15–20%) e, no resto, num blefe ALEATÓRIO que não seja o seu — sem usar a
--- verdade para escolher "o blefe mais parecido". Nada disso sai para o
--- navegador: a resposta é só {ok, inserted}.
+-- 15–20%) — nunca acima do chute às cegas, 1/(cédulas que ele pode
+-- escolher), senão nas mesas de 7 a 12 o bot acertaria MAIS que antes — e,
+-- no resto, num blefe ALEATÓRIO que não seja o seu, sem usar a verdade para
+-- escolher "o blefe mais parecido". Os bots votam por ÚLTIMO (o servidor só
+-- libera depois que todos os humanos votaram, ou passado o prazo): um voto
+-- de bot visível antes disso seria uma pista da verdade. Nada disso sai
+-- para o navegador: a resposta é só {ok, inserted} ou o motivo da recusa.
 --
 -- Compatível com o cliente em produção (que segue usando cast_votes_bulk):
 -- só acrescenta funções. Rollback: supabase/rollback/bot_vote_policy.sql.
@@ -28,7 +32,9 @@ SET search_path TO 'public'
 AS $function$
   SELECT CASE
     WHEN coalesce(cardinality(p_bluff_ids), 0) = 0 THEN p_truth_id
-    WHEN p_truth_id IS NOT NULL AND p_r1 < p_truth_rate THEN p_truth_id
+    WHEN p_truth_id IS NOT NULL
+         AND p_r1 < least(p_truth_rate, 1.0 / (cardinality(p_bluff_ids) + 1))
+      THEN p_truth_id
     ELSE p_bluff_ids[1 + least(
       cardinality(p_bluff_ids) - 1,
       greatest(0, floor(p_r2 * cardinality(p_bluff_ids))::int)
@@ -40,10 +46,12 @@ REVOKE ALL ON FUNCTION public.bot_vote_pick(uuid, uuid[], double precision, doub
 REVOKE ALL ON FUNCTION public.bot_vote_pick(uuid, uuid[], double precision, double precision, double precision) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.bot_vote_pick(uuid, uuid[], double precision, double precision, double precision) TO service_role;
 
--- Só o host pede (mesma checagem de identidade de cast_votes_bulk); vota
+-- Qualquer humano da sala pode pedir (identidade checada): se o host sair
+-- da tela na hora, quem votou por último não deixa os bots sem voto. Vota
 -- por todo bot da sala que ainda não votou nesta rodada — o coordenador
--- também vota, como os humanos. Idempotente: chamar de novo não muda nada.
-CREATE OR REPLACE FUNCTION public.cast_bot_votes(p_room_id uuid, p_round integer)
+-- também vota, como os humanos. Idempotente e serializado pela trava da
+-- sala: chamar de novo, ou de vários aparelhos, não muda nada.
+CREATE OR REPLACE FUNCTION public.cast_bot_votes(p_room_id uuid, p_round integer, p_actor_id text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -63,9 +71,28 @@ BEGIN
   IF v_room IS NULL OR v_room.status <> 'voting' OR v_room.current_round <> p_round THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'invalid_state');
   END IF;
-  v_reason := public.assert_actor_identity(p_room_id, v_room.host_id);
-  IF v_reason IS NOT NULL THEN
+  v_reason := public.assert_actor_identity(p_room_id, p_actor_id);
+  IF v_reason IS NOT NULL OR NOT EXISTS (
+    SELECT 1 FROM public.players p
+     WHERE p.id = p_actor_id AND p.room_id = p_room_id
+       AND NOT p.is_bot AND p.kicked_at IS NULL
+  ) THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'not_authorized');
+  END IF;
+
+  -- Bots votam por último: humano ainda devendo o voto dentro do prazo (a
+  -- mesma folga de 2 s do quórum de advance_voting_to_reveal) = espera.
+  IF (v_room.round_phase_ends_at IS NULL
+      OR now() < v_room.round_phase_ends_at + interval '2 seconds')
+     AND EXISTS (
+       SELECT 1 FROM public.players p
+        WHERE p.room_id = p_room_id AND NOT p.is_bot AND p.kicked_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM public.votes v
+             WHERE v.room_id = p_room_id AND v.round = p_round AND v.voter_id = p.id
+          )
+     ) THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'humans_pending');
   END IF;
 
   SELECT d.id INTO v_truth
@@ -103,5 +130,5 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.cast_bot_votes(uuid, integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.cast_bot_votes(uuid, integer) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.cast_bot_votes(uuid, integer, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.cast_bot_votes(uuid, integer, text) TO anon, authenticated, service_role;

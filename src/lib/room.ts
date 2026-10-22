@@ -1043,42 +1043,56 @@ export const BOT_AI_GRACE_MS = 6000;
 /**
  * Votos dos bots (playtest 2026-10-22): quem escolhe é o SERVIDOR
  * (cast_bot_votes), onde a verdade é conhecida com segurança — 17,5% de
- * chance na verdade e, no resto, um blefe aleatório que não seja o do bot.
- * Antes o cliente sorteava entre todas as cédulas (a verdade com o mesmo
- * peso de cada blefe, ~1/3 numa mesa de 4) e os bots disputavam a ponta.
- * O cliente só pede — e só depois que todos os humanos votaram (ou no fim
- * do prazo): com a política nova, ver em que cédula um bot votou seria uma
- * pista da verdade. Banco ainda sem a política (migration pendente): o voto
- * antigo, uniforme entre as cédulas.
+ * chance na verdade (nunca acima do chute às cegas) e, no resto, um blefe
+ * aleatório que não seja o do bot. Antes o cliente sorteava entre todas as
+ * cédulas (a verdade com o peso de cada blefe, ~1/3 numa mesa de 4) e os
+ * bots disputavam a ponta. O cliente só pede, e o servidor só libera depois
+ * que todos os humanos votaram (ou passado o prazo): com a política nova,
+ * ver em que cédula um bot votou seria uma pista da verdade. Qualquer
+ * humano da sala pode pedir (o host pode ter saído da tela).
+ * "pending" = ainda há humano devendo o voto no servidor (tente de novo).
+ * Banco ainda sem a política (migration pendente): o voto antigo, uniforme
+ * entre as cédulas, só pelo host (cast_votes_bulk é dele).
  */
 export async function castBotVotes(
   roomId: string,
   round: number,
-  bots: Player[],
-  ballot: Definition[],
-): Promise<void> {
-  if (bots.length === 0) return;
-  const { error } = await supabase.rpc("cast_bot_votes", {
+  actorId: string,
+  legacy: { isHost: boolean; bots: Player[]; ballot: Definition[] },
+): Promise<"done" | "pending"> {
+  if (legacy.bots.length === 0) return "done";
+  const { data, error } = await supabase.rpc("cast_bot_votes", {
     p_room_id: roomId,
     p_round: round,
+    p_actor_id: actorId,
   });
-  if (!error) return;
-  // PGRST202 = a função não existe neste banco
-  if (error.code !== "PGRST202") throw error;
-  const rows = bots
-    .map((bot) => {
-      const choices = ballot.filter((d) => d.player_id !== bot.id);
-      if (!choices.length) return null;
-      const pick = choices[Math.floor(Math.random() * choices.length)]!;
-      return { voter_id: bot.id, definition_id: pick.id };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
-  if (rows.length === 0) return;
-  await supabase.rpc("cast_votes_bulk", {
-    p_room_id: roomId,
-    p_round: round,
-    p_votes: rows,
-  });
+  if (error) {
+    // a função não existe neste banco (PGRST202; 42883 com o cache de
+    // esquema ainda velho logo depois de um rollback)
+    if (error.code !== "PGRST202" && error.code !== "42883") throw error;
+    if (!legacy.isHost) return "done";
+    const rows = legacy.bots
+      .map((bot) => {
+        const choices = legacy.ballot.filter((d) => d.player_id !== bot.id);
+        if (!choices.length) return null;
+        const pick = choices[Math.floor(Math.random() * choices.length)]!;
+        return { voter_id: bot.id, definition_id: pick.id };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    if (rows.length > 0)
+      await supabase.rpc("cast_votes_bulk", {
+        p_room_id: roomId,
+        p_round: round,
+        p_votes: rows,
+      });
+    return "done";
+  }
+  const res = data as { ok?: boolean; reason?: string } | null;
+  if (res?.ok) return "done";
+  if (res?.reason === "humans_pending") return "pending";
+  // a fase já andou: não há mais o que votar
+  if (res?.reason === "invalid_state") return "done";
+  throw new Error(`cast_bot_votes: ${res?.reason ?? "sem resposta"}`);
 }
 
 export async function revealAndScore(

@@ -161,57 +161,117 @@ const ballot: Definition[] = [
 ] as Definition[];
 
 // Playtest 2026-10-22: o SERVIDOR escolhe o voto dos bots (onde a verdade
-// é conhecida); o cliente não sorteia nem manda cédula nenhuma.
+// é conhecida) e só libera depois que todos os humanos votaram; o cliente
+// não sorteia nem manda cédula nenhuma.
 describe("castBotVotes — o servidor escolhe, o cliente só pede", () => {
-  it("pede UMA vez, só com sala e rodada (nenhuma cédula sai do cliente)", async () => {
-    const p = castBotVotes("room-1", 2, [bot("b1"), bot("b2")], ballot);
+  const legacy = (isHost: boolean, bots: Player[]) => ({
+    isHost,
+    bots,
+    ballot,
+  });
+  const answer = async (name: string, res: unknown) => {
     await tick();
+    named(name).at(-1)!.resolve(res);
+    await tick();
+  };
+
+  it("pede UMA vez, só com sala, rodada e quem pede (nenhuma cédula sai do cliente)", async () => {
+    const p = castBotVotes(
+      "room-1",
+      2,
+      "p_me",
+      legacy(true, [bot("b1"), bot("b2")]),
+    );
+    await answer("rpc:cast_bot_votes", {
+      data: { ok: true, inserted: 2 },
+      error: null,
+    });
+    expect(await p).toBe("done");
     const calls = named("rpc:cast_bot_votes");
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.args).toEqual({ p_room_id: "room-1", p_round: 2 });
-    calls[0]!.resolve({ data: { ok: true, inserted: 2 }, error: null });
-    await p;
+    expect(calls[0]!.args).toEqual({
+      p_room_id: "room-1",
+      p_round: 2,
+      p_actor_id: "p_me",
+    });
     expect(named("rpc:cast_votes_bulk")).toHaveLength(0);
   });
 
   it("sem bots: nem pede", async () => {
-    await castBotVotes("room-1", 2, [], ballot);
+    expect(await castBotVotes("room-1", 2, "p_me", legacy(true, []))).toBe(
+      "done",
+    );
     expect(named("rpc:cast_bot_votes")).toHaveLength(0);
   });
 
-  it("banco sem a política nova (PGRST202): cai no voto antigo, nunca na própria cédula", async () => {
-    for (let i = 0; i < 25; i++) {
-      const p = castBotVotes("room-1", 2, [bot("b1")], ballot);
-      await tick();
-      named("rpc:cast_bot_votes")
-        .at(-1)!
-        .resolve({
-          data: null,
-          error: { code: "PGRST202", message: "Could not find the function" },
-        });
-      await tick();
-      named("rpc:cast_votes_bulk")
-        .at(-1)!
-        .resolve({ data: { ok: true }, error: null });
-      await p;
+  it("humano ainda devendo o voto no servidor: 'pending' (o cliente tenta de novo)", async () => {
+    const p = castBotVotes("room-1", 2, "p_me", legacy(false, [bot("b1")]));
+    await answer("rpc:cast_bot_votes", {
+      data: { ok: false, reason: "humans_pending" },
+      error: null,
+    });
+    expect(await p).toBe("pending");
+  });
+
+  it("a fase já andou (invalid_state): nada mais a votar", async () => {
+    const p = castBotVotes("room-1", 2, "p_me", legacy(true, [bot("b1")]));
+    await answer("rpc:cast_bot_votes", {
+      data: { ok: false, reason: "invalid_state" },
+      error: null,
+    });
+    expect(await p).toBe("done");
+  });
+
+  it("banco sem a política nova (PGRST202 ou 42883): o host cai no voto antigo, nunca na própria cédula", async () => {
+    for (let i = 0; i < 24; i++) {
+      const p = castBotVotes("room-1", 2, "p_me", legacy(true, [bot("b1")]));
+      await answer("rpc:cast_bot_votes", {
+        data: null,
+        error: {
+          code: i % 2 ? "42883" : "PGRST202",
+          message: "function does not exist",
+        },
+      });
+      await answer("rpc:cast_votes_bulk", { data: { ok: true }, error: null });
+      expect(await p).toBe("done");
     }
     const picks = named("rpc:cast_votes_bulk").map(
       (c) =>
         (c.args as { p_votes: Array<{ definition_id: string }> }).p_votes[0]!
           .definition_id,
     );
-    expect(picks).toHaveLength(25);
+    expect(picks).toHaveLength(24);
     expect(picks).not.toContain("d-b1");
   });
 
-  it("outro erro do servidor não vira voto escolhido no cliente", async () => {
-    const p = castBotVotes("room-1", 2, [bot("b1")], ballot);
-    await tick();
-    named("rpc:cast_bot_votes")[0]!.resolve({
+  it("banco sem a política: convidado não usa o voto antigo (é do host)", async () => {
+    const p = castBotVotes("room-1", 2, "p_me", legacy(false, [bot("b1")]));
+    await answer("rpc:cast_bot_votes", {
+      data: null,
+      error: { code: "PGRST202", message: "Could not find the function" },
+    });
+    expect(await p).toBe("done");
+    expect(named("rpc:cast_votes_bulk")).toHaveLength(0);
+  });
+
+  it("recusa ou outro erro do servidor vira erro, sem voto escolhido no cliente", async () => {
+    const refused = castBotVotes(
+      "room-1",
+      2,
+      "p_me",
+      legacy(true, [bot("b1")]),
+    );
+    await answer("rpc:cast_bot_votes", {
+      data: { ok: false, reason: "not_authorized" },
+      error: null,
+    });
+    await expect(refused).rejects.toBeTruthy();
+    const failed = castBotVotes("room-1", 2, "p_me", legacy(true, [bot("b1")]));
+    await answer("rpc:cast_bot_votes", {
       data: null,
       error: { code: "57014", message: "canceling statement" },
     });
-    await expect(p).rejects.toBeTruthy();
+    await expect(failed).rejects.toBeTruthy();
     expect(named("rpc:cast_votes_bulk")).toHaveLength(0);
   });
 });
