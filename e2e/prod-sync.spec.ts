@@ -78,6 +78,7 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
   const guest = await guestCtx.newPage();
   const pages = { host, convidado: guest } as const;
   const acts: Array<{ who: string; what: string; at: number }> = [];
+  const botVoteRpcs: Record<string, number[]> = {};
   for (const [who, p] of Object.entries(pages)) {
     await p.addInitScript(SAMPLER);
     p.on("response", (r) => {
@@ -85,6 +86,12 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
         .url()
         .match(/\/rpc\/(submit_definition|cast_vote|rejoin_room)\b/);
       if (m && r.ok()) acts.push({ who, what: m[1]!, at: Date.now() });
+    });
+    // votos dos bots: qual caminho o cliente usou (política no servidor ×
+    // legado cast_votes_bulk, em que o host escolhia os votos)
+    p.on("response", (r) => {
+      const b = r.url().match(/\/rpc\/(cast_bot_votes|cast_votes_bulk)\b/);
+      if (b) (botVoteRpcs[`${who}:${b[1]}`] ??= []).push(r.status());
     });
   }
   const evs = (p: Page) =>
@@ -332,6 +339,9 @@ test("sincronização entre 2 aparelhos + definição automática", async ({
       sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
     console.log(
       `=== AUTO ${JSON.stringify(autoMs)} P50=${pct(0.5)} P95=${pct(0.95)}`,
+    );
+    console.log(
+      `=== VOTOS DOS BOTS (RPC → status): ${JSON.stringify(botVoteRpcs)}`,
     );
     console.log(`=== JSON ${JSON.stringify({ code, acts, H, G, autoMs })}`);
     if (code) {
