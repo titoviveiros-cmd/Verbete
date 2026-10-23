@@ -36,7 +36,17 @@ export function nativeCorsFor(request: Request): NativeCors {
       }),
     };
   }
-  return { kind: "headers", headers };
+  // O cliente do TanStack decide pelo x-tss-serialized/x-tss-raw — fora da
+  // mesma origem o navegador os esconde sem isto, e o resultado vira um nó
+  // cru do serializador (Red Team: exclusão feita no servidor e "falhou" no
+  // app; erros sumindo).
+  return {
+    kind: "headers",
+    headers: {
+      ...headers,
+      "Access-Control-Expose-Headers": "x-tss-serialized, x-tss-raw",
+    },
+  };
 }
 
 /** Copia a resposta com os cabeçalhos de CORS (cabeçalhos podem ser imutáveis). */

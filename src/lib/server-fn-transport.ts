@@ -31,34 +31,64 @@ export function resolveServerFnUrl(
   return new URL(url, base).toString();
 }
 
-const SERVER_FN_CONTENT_TYPES = [
+const SERVER_FN_CONTENT_TYPES = new Set([
   "application/x-tss-framed",
   "application/x-ndjson",
   "application/json",
-];
+]);
+const UNEXPECTED =
+  "Resposta inesperada do servidor — a ação não foi concluída.";
 
-/**
- * Resposta 2xx só passa se for do protocolo das funções de servidor. Erros
- * HTTP (401/403/500…) seguem para o cliente do TanStack, que os transforma
- * em erro com a mensagem do servidor.
- */
-export async function assertServerFnResponse(res: Response): Promise<Response> {
-  if (!res.ok) return res;
-  const type = (res.headers.get("content-type") ?? "").toLowerCase();
-  if (!SERVER_FN_CONTENT_TYPES.some((t) => type.includes(t))) {
+async function jsonBody(res: Response): Promise<unknown> {
+  try {
+    return JSON.parse(await res.clone().text());
+  } catch {
     throw new ServerFnResponseError(
-      "Resposta inesperada do servidor — a ação não foi concluída.",
+      "Resposta ilegível do servidor — a ação não foi concluída.",
     );
   }
-  if (type.includes("application/json")) {
-    try {
-      JSON.parse(await res.clone().text());
-    } catch {
+}
+
+/**
+ * Só passa resposta do PROTOCOLO das funções de servidor: o Worker marca
+ * todo resultado com x-tss-serialized (ou x-tss-raw). Sem a marca — o
+ * index.html do WebView, ou a marca escondida pelo navegador fora da mesma
+ * origem — o cliente do TanStack devolveria a página/o JSON cru como
+ * "resultado". Erro HTTP em texto/HTML segue para o cliente (que lança com
+ * a mensagem do servidor); erro em JSON sem a marca vira erro aqui.
+ */
+export async function assertServerFnResponse(res: Response): Promise<Response> {
+  const media = (res.headers.get("content-type") ?? "")
+    .split(";")[0]!
+    .trim()
+    .toLowerCase();
+  const serialized = !!res.headers.get("x-tss-serialized");
+  if (!res.ok) {
+    if (media === "application/json" && !serialized)
       throw new ServerFnResponseError(
-        "Resposta ilegível do servidor — a ação não foi concluída.",
+        "O servidor recusou a ação — ela não foi concluída.",
       );
-    }
+    return res;
   }
+  if (res.headers.get("x-tss-raw") === "true") return res;
+  if (!serialized) {
+    // única exceção do protocolo: redirecionamento/notFound em JSON puro
+    const body = media === "application/json" ? await jsonBody(res) : undefined;
+    const flags = body as {
+      isSerializedRedirect?: unknown;
+      isNotFound?: unknown;
+    };
+    if (
+      flags &&
+      typeof flags === "object" &&
+      (flags.isSerializedRedirect || flags.isNotFound)
+    )
+      return res;
+    throw new ServerFnResponseError(UNEXPECTED);
+  }
+  if (!SERVER_FN_CONTENT_TYPES.has(media))
+    throw new ServerFnResponseError(UNEXPECTED);
+  if (media === "application/json") await jsonBody(res);
   return res;
 }
 

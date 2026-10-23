@@ -31,6 +31,7 @@ describe("CORS do app nativo", () => {
       headers: {
         "Access-Control-Allow-Origin": "https://localhost",
         Vary: "Origin",
+        "Access-Control-Expose-Headers": "x-tss-serialized, x-tss-raw",
       },
     });
   });
