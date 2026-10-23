@@ -22,6 +22,7 @@ import {
   type DailyReview,
 } from "@/lib/daily";
 import { submitDailyAttempt } from "@/lib/daily.functions";
+import { ServerFnResponseError } from "@/lib/server-fn-transport";
 import { burst, fireworks } from "@/lib/confetti";
 import { pushAchievement } from "@/components/AchievementToaster";
 import { TimerBar } from "@/components/room/shared";
@@ -129,6 +130,15 @@ function DailyPage() {
       const res = await submit({
         data: { guess: submittedGuess, timeSeconds },
       });
+      // tentativa só conta se o servidor devolveu o resultado de verdade
+      if (
+        !res ||
+        typeof res !== "object" ||
+        typeof res.already_played !== "boolean"
+      )
+        throw new ServerFnResponseError(
+          "Não foi possível registrar a tentativa. Tente novamente.",
+        );
       if (res.already_played) {
         // Re-fetch review (already played in another tab / earlier)
         const fresh = await fetchTodayAttempt(user!.id);

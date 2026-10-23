@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
 import { reportDefinition } from "@/lib/moderation.functions";
+import { expectOk } from "@/lib/server-fn-transport";
 import { useAuth } from "@/hooks/use-auth";
 import type { Definition, Player, Room } from "@/lib/room";
 
@@ -56,7 +57,7 @@ export function ReportButton({
         // esta é a definição verdadeira.
         await new Promise((r) => setTimeout(r, 600));
       } else {
-        await runReport({
+        const sent = await runReport({
           data: {
             definitionId: definition.id,
             definitionText: definition.text,
@@ -68,6 +69,7 @@ export function ReportButton({
             reason,
           },
         });
+        expectOk(sent, "Não foi possível enviar a denúncia.");
       }
 
       setDone(true);
