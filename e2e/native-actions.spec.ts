@@ -87,8 +87,8 @@ async function disposableAccount() {
 test("reports: token de jogador não lê nem grava (só o servidor)", async () => {
   const { uid, session } = await disposableAccount();
   try {
-    const asPlayer = (query: string, init: RequestInit = {}) =>
-      fetch(`${SB_URL}/rest/v1/reports${query}`, {
+    const asPlayer = (path: string, init: RequestInit = {}) =>
+      fetch(`${SB_URL}/rest/v1/${path}`, {
         ...init,
         headers: {
           apikey: SB_KEY,
@@ -97,8 +97,12 @@ test("reports: token de jogador não lê nem grava (só o servidor)", async () =
           Prefer: "return=minimal",
         },
       });
-    const read = await asPlayer("?select=id&limit=1");
-    const write = await asPlayer("", {
+    // controle positivo: o MESMO token lê o próprio perfil — um 401 por token
+    // ou apikey inválidos não pode passar por "recusado"
+    const own = await asPlayer(`profiles?user_id=eq.${uid}&select=user_id`);
+    expect(own.status, "controle: token válido lê o próprio perfil").toBe(200);
+    const read = await asPlayer("reports?select=id&limit=1");
+    const write = await asPlayer("reports", {
       method: "POST",
       body: JSON.stringify({
         definition_text: "sonda do teste e2e",
@@ -107,11 +111,14 @@ test("reports: token de jogador não lê nem grava (só o servidor)", async () =
         reason: "other",
       }),
     });
+    const code = async (r: Response) =>
+      ((await r.json().catch(() => ({}))) as { code?: string }).code ?? "-";
+    const [readCode, writeCode] = [await code(read), await code(write)];
     console.log(
-      `REPORTS com token de jogador: leitura ${read.status}, gravação ${write.status} (esperado 401/403)`,
+      `REPORTS com token de jogador: leitura ${read.status}/${readCode}, gravação ${write.status}/${writeCode} (esperado recusa por permissão, 42501)`,
     );
-    expect([401, 403], "leitura recusada").toContain(read.status);
-    expect([401, 403], "gravação recusada").toContain(write.status);
+    expect(readCode, "leitura recusada por permissão").toBe("42501");
+    expect(writeCode, "gravação recusada por permissão").toBe("42501");
   } finally {
     await admin(`/rest/v1/reports?reporter_user_id=eq.${uid}`, {
       method: "DELETE",
@@ -305,6 +312,11 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
         defs.filter((d) => d.is_truth).length,
         "a verdadeira estava entre as cédulas",
       ).toBe(1);
+      // corpo lido em TODAS (sem isso, falha de leitura = "" igual em todas)
+      expect(
+        first.every((c) => c.body.length > 0),
+        "corpo de cada resposta lido",
+      ).toBe(true);
       expect(
         new Set(first.map((c) => c.body)).size,
         "resposta idêntica em todas",
