@@ -11,6 +11,7 @@ import {
   type Achievement,
 } from "@/lib/daily";
 import { deleteAccount, resetMyStats } from "@/lib/account.functions";
+import { expectOk } from "@/lib/server-fn-transport";
 import { AVATARS, COLORS } from "@/lib/avatars";
 import { setStored } from "@/lib/player-id";
 
@@ -164,7 +165,12 @@ function ProfilePage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      await runDelete();
+      // logout SÓ depois de o servidor confirmar a exclusão (no app nativo a
+      // resposta já chegou a ser o index.html do WebView — falso sucesso)
+      expectOk(
+        await runDelete(),
+        "Não foi possível excluir a conta — nada foi apagado. Tente novamente.",
+      );
       await supabase.auth.signOut();
       nav({ to: "/" });
     } catch (e) {
@@ -566,7 +572,10 @@ function ProfilePage() {
                   setResetting(true);
                   setResetError(null);
                   try {
-                    await runReset();
+                    expectOk(
+                      await runReset(),
+                      "Não foi possível zerar as estatísticas.",
+                    );
                     setStats({
                       games_played: 0,
                       games_won: 0,

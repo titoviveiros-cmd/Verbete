@@ -2,55 +2,17 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { fileReport, ReportInput } from "@/lib/report-definition";
 
 // ============================================================
-// Reportar uma definição inadequada
+// Reportar uma definição inadequada (lógica em report-definition.ts)
 // ============================================================
-const ReportInput = z.object({
-  definitionId: z.string().uuid(),
-  definitionText: z.string().trim().min(1).max(500),
-  roomId: z.string().uuid().nullable().optional(),
-  roomCode: z.string().trim().min(1).max(16).nullable().optional(),
-  round: z.number().int().min(0).max(999).nullable().optional(),
-  offenderPlayerId: z.string().trim().min(1).max(64),
-  offenderNickname: z.string().trim().min(1).max(64).nullable().optional(),
-  reason: z
-    .enum(["inappropriate", "spam", "harassment", "other"])
-    .default("inappropriate"),
-});
-
 export const reportDefinition = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input) => ReportInput.parse(input))
-  .handler(async ({ data, context }) => {
-    const { userId } = context;
-
-    // Anti-spam: 1 report por usuário+definição
-    const { data: existing } = await supabaseAdmin
-      .from("reports")
-      .select("id")
-      .eq("reporter_user_id", userId)
-      .eq("definition_id", data.definitionId)
-      .maybeSingle();
-    if (existing) return { ok: true as const, already: true };
-
-    const { error } = await supabaseAdmin.from("reports").insert({
-      definition_id: data.definitionId,
-      definition_text: data.definitionText,
-      room_id: data.roomId ?? null,
-      room_code: data.roomCode ?? null,
-      round: data.round ?? null,
-      offender_player_id: data.offenderPlayerId,
-      offender_nickname: data.offenderNickname ?? null,
-      reporter_user_id: userId,
-      reason: data.reason,
-    });
-    if (error) {
-      console.error("[reportDefinition] insert failed", error);
-      throw new Error("Não foi possível enviar a denúncia.");
-    }
-    return { ok: true as const, already: false };
-  });
+  .handler(({ data, context }) =>
+    fileReport(supabaseAdmin, context.userId, data),
+  );
 
 // ============================================================
 // Admin: listar reports pendentes

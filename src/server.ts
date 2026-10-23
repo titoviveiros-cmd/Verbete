@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { nativeCorsFor, withCors } from "./lib/native-cors";
 
 type ServerEntry = {
   fetch: (
@@ -81,13 +82,19 @@ async function normalizeCatastrophicSsrResponse(
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // App nativo (https://localhost) chamando as funções de servidor:
+    // pré-voo respondido aqui; nas respostas, só a permissão de leitura.
+    const cors = nativeCorsFor(request);
+    if (cors.kind === "preflight") return cors.response;
+    const finish = (response: Response) =>
+      cors.kind === "headers" ? withCors(response, cors.headers) : response;
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return finish(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
       console.error(error);
-      return brandedErrorResponse();
+      return finish(brandedErrorResponse());
     }
   },
 };

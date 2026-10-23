@@ -2,6 +2,11 @@ import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 import { renderErrorPage } from "./lib/error-page";
+import { serverFnFetch } from "./lib/server-fn-transport";
+
+// Todas as funções de servidor passam por aqui: no app nativo vão para a URL
+// pública do Worker e nenhuma resposta vale só por ser HTTP 200.
+export const serverFnsConfig = { fetch: serverFnFetch };
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -21,4 +26,5 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 export const startInstance = createStart(() => ({
   requestMiddleware: [errorMiddleware],
   functionMiddleware: [attachSupabaseAuth],
+  serverFns: serverFnsConfig,
 }));
