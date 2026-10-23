@@ -2,7 +2,7 @@ import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AVATARS, COLORS, randomAvatar, randomColor } from "@/lib/avatars";
+import { AVATARS, randomAvatar, randomColor } from "@/lib/avatars";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { createRoom, joinRoom } from "@/lib/room";
@@ -72,9 +72,9 @@ function HomePage() {
   const [avatar, setAvatar] = useState<string>(() =>
     getStored("avatar", randomAvatar()),
   );
-  const [color, setColor] = useState<string>(() =>
-    getStored("color", randomColor()),
-  );
+  // Cor sem seletor na tela (playtest 2026-10-22): a salva é preservada e o
+  // jogador novo ganha uma aleatória — segue usada no anel do avatar etc.
+  const [color] = useState<string>(() => getStored("color", randomColor()));
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -469,12 +469,7 @@ function HomePage() {
                 {mode === "host" ? "Nova sala" : "Entrar numa sala"}
               </p>
               <NicknameField value={nick} onChange={setNick} />
-              <AvatarPicker
-                avatar={avatar}
-                color={color}
-                onAvatar={setAvatar}
-                onColor={setColor}
-              />
+              <AvatarPicker avatar={avatar} onAvatar={setAvatar} />
 
               {mode === "join" && (
                 <div>
@@ -575,20 +570,16 @@ function NicknameField({
 
 function AvatarPicker({
   avatar,
-  color,
   onAvatar,
-  onColor,
 }: {
   avatar: string;
-  color: string;
   onAvatar: (s: string) => void;
-  onColor: (s: string) => void;
 }) {
   return (
     <div>
       <p className="eyebrow mb-1.5 px-1">Avatar</p>
       <div className="sticker !p-2.5">
-        <div className="grid grid-cols-8 gap-1 mb-2">
+        <div className="grid grid-cols-8 gap-1">
           {AVATARS.map((a) => (
             <button
               key={a}
@@ -603,25 +594,6 @@ function AvatarPicker({
               }
             >
               {a}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1 justify-center">
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => onColor(c)}
-              aria-label={`Escolher cor ${c}`}
-              aria-pressed={color === c}
-              className="p-2 rounded-full transition active:scale-95"
-            >
-              <span
-                className={
-                  "block w-6 h-6 rounded-full border-2 " +
-                  (color === c ? "border-white scale-110" : "border-black/40")
-                }
-                style={{ background: c }}
-              />
             </button>
           ))}
         </div>

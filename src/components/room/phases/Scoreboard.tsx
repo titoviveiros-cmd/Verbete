@@ -7,7 +7,6 @@ import { motion } from "framer-motion";
 import {
   nextRound,
   computeTeamScores,
-  type Definition,
   type Player,
   type Room,
   type Vote,
@@ -15,6 +14,7 @@ import {
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import { NARRATIVE_MIN_VISIBLE_MS } from "@/lib/transition-floor";
 import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
+import { useScoreHistory } from "@/hooks/use-score-history";
 
 // Contador rolante (Fase 4, aprovado): o número "sobe" do placar anterior
 // para o novo com easing — dá a sensação de pontos sendo somados ao vivo.
@@ -63,13 +63,27 @@ function ScoreboardImpl({
     () => [...players].sort((a, b) => b.score - a.score),
     [players],
   );
-  const [history, setHistory] = useState<{
-    defs: Definition[];
-    votes: Vote[];
-    rounds: { round: number; coordinator_id: string; scored_at: string }[];
-    nearTruthIds: Set<string>;
-    extensions: { player_id: string; round: number; attempt: number }[];
-  } | null>(null);
+  // Bônus 🧠 que chega DEPOIS da tela montar (juiz demorou, host pulou a
+  // revelação): o total em players.score muda pelo realtime — relê o
+  // histórico para o detalhamento ganhar a linha 🧠 junto (antes o total
+  // tinha +3 e o detalhamento não, auditoria 2026-10-21).
+  const scoreSig = useMemo(
+    () =>
+      players
+        .map((p) => `${p.id}:${p.score}`)
+        .sort()
+        .join("|"),
+    [players],
+  );
+  // Histórico como unidade consistente, com nova tentativa curta (playtest
+  // 2026-10-22: um aparelho mostrou o placar sem nenhuma linha de "como
+  // pontuou"). Enquanto não chega inteiro: "carregando os detalhes…".
+  const { history, failed: detailsFailed } = useScoreHistory({
+    roomId: room.id,
+    round: room.current_round,
+    requireRound: room.status !== "finished",
+    scoreSig,
+  });
 
   // Hold escala com o nº de jogadores (7-12): mais fileiras para ler.
   const SCORE_HOLD = scalePhaseSecs(8, players.length);
@@ -116,62 +130,6 @@ function ScoreboardImpl({
     const t = setTimeout(() => setReordered(true), 900);
     return () => clearTimeout(t);
   }, [scoreTransitionDone, history, room.current_round]);
-
-  // Bônus 🧠 que chega DEPOIS da tela montar (juiz demorou, host pulou a
-  // revelação): o total em players.score muda pelo realtime — relê o
-  // histórico para o detalhamento ganhar a linha 🧠 junto (antes o total
-  // tinha +3 e o detalhamento não, auditoria 2026-10-21).
-  const scoreSig = useMemo(
-    () =>
-      players
-        .map((p) => `${p.id}:${p.score}`)
-        .sort()
-        .join("|"),
-    [players],
-  );
-  useEffect(() => {
-    (async () => {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const [
-        { data: defs },
-        { data: votes },
-        { data: rounds },
-        { data: reveal },
-        { data: exts },
-      ] = await Promise.all([
-        // S1: leitura direta de definitions foi revogada — RPC devolve as
-        // rodadas já reveladas (a corrente só a partir do reveal).
-        supabase.rpc("get_room_definitions", { p_room_id: room.id }),
-        supabase.from("votes").select("*").eq("room_id", room.id),
-        supabase
-          .from("rounds")
-          .select("round,coordinator_id,scored_at")
-          .eq("room_id", room.id),
-        supabase.rpc("get_room_reveal", { p_room_id: room.id }),
-        supabase
-          .from("round_extensions")
-          .select("player_id,round,attempt")
-          .eq("room_id", room.id),
-      ]);
-      const nearIds: string[] =
-        (reveal as { near_truth_ids?: string[] } | null)?.near_truth_ids ?? [];
-      setHistory({
-        defs: (defs ?? []) as unknown as Definition[],
-        votes: (votes ?? []) as Vote[],
-        rounds: (rounds ?? []) as {
-          round: number;
-          coordinator_id: string;
-          scored_at: string;
-        }[],
-        nearTruthIds: new Set(nearIds),
-        extensions: (exts ?? []) as {
-          player_id: string;
-          round: number;
-          attempt: number;
-        }[],
-      });
-    })();
-  }, [room.id, room.current_round, scoreSig]);
 
   // Alinhado com o servidor: o score persistido em `players.score` é calculado
   // a partir de TODOS os votos da rodada (sem filtro de tolerância). Para que
@@ -382,6 +340,16 @@ function ScoreboardImpl({
               ? "Pontuação por equipe e por jogador:"
               : "Como cada um pontuou:"}
           </p>
+          {/* Histórico ainda não chegou inteiro (ou a releitura falhou):
+              nunca linhas falsas — o ranking fica e os detalhes vêm depois. */}
+          {(!history || detailsFailed) && (
+            <p
+              className="text-center text-xs text-muted-foreground/80 mt-0.5"
+              data-score-details="loading"
+            >
+              ⏳ {history ? "atualizando" : "carregando"} os detalhes…
+            </p>
+          )}
         </div>
         {sortedTeams.length > 0 && (
           <div className="sticker py-3">

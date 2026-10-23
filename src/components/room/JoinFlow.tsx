@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { joinRoom } from "@/lib/room";
 import { friendlyEntryError } from "@/lib/entry-errors";
-import { AVATARS, COLORS, randomAvatar, randomColor } from "@/lib/avatars";
+import { AVATARS, randomAvatar, randomColor } from "@/lib/avatars";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
 import { primeAudio, playUITap } from "@/lib/sound";
@@ -24,9 +24,9 @@ export function JoinFlow({
   const [avatar, setAvatar] = useState<string>(() =>
     getStored("avatar", randomAvatar()),
   );
-  const [color, setColor] = useState<string>(() =>
-    getStored("color", randomColor()),
-  );
+  // Cor sem seletor na tela (playtest 2026-10-22): a salva é preservada e o
+  // jogador novo ganha uma aleatória — segue usada no anel do avatar etc.
+  const [color] = useState<string>(() => getStored("color", randomColor()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,7 +147,7 @@ export function JoinFlow({
                 {avatar}
               </motion.div>
             </div>
-            <div className="grid grid-cols-8 gap-1 mb-2">
+            <div className="grid grid-cols-8 gap-1">
               {AVATARS.map((a) => (
                 <button
                   key={a}
@@ -163,21 +163,6 @@ export function JoinFlow({
                 >
                   {a}
                 </button>
-              ))}
-            </div>
-            <div className="flex gap-2 justify-center">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setColor(c)}
-                  aria-label={`Escolher cor ${c}`}
-                  aria-pressed={color === c}
-                  className={
-                    "w-7 h-7 rounded-full border-2 " +
-                    (color === c ? "border-white scale-110" : "border-black/40")
-                  }
-                  style={{ background: c }}
-                />
               ))}
             </div>
           </div>
