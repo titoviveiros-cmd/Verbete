@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 
 // Mínimo oficial de 4 participantes (migration 20261020220000) num deploy —
@@ -12,16 +12,28 @@ test.skip(
 );
 test.setTimeout(180_000);
 
-// URL e chave PÚBLICA (publishable) do Supabase, as mesmas do bundle.
-const env = Object.fromEntries(
-  readFileSync(".env", "utf8")
-    .split(/\r?\n/)
-    .filter((l) => /^VITE_SUPABASE_(URL|PUBLISHABLE_KEY)=/.test(l))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i), l.slice(i + 1).replace(/^"|"$/g, "")];
-    }),
-);
+// URL e chave PÚBLICA (publishable) do Supabase, as mesmas do bundle: do
+// ambiente primeiro (o CI já exporta); o .env só na máquina local e só se
+// existir — o Playwright carrega este arquivo mesmo com o teste pulado, então
+// nada aqui pode falhar sem .env (CI do PR #10, 2026-10-23).
+const fromFile: Record<string, string> = existsSync(".env")
+  ? Object.fromEntries(
+      readFileSync(".env", "utf8")
+        .split(/\r?\n/)
+        .filter((l) => /^VITE_SUPABASE_(URL|PUBLISHABLE_KEY)=/.test(l))
+        .map((l) => {
+          const i = l.indexOf("=");
+          return [l.slice(0, i), l.slice(i + 1).replace(/^"|"$/g, "")];
+        }),
+    )
+  : {};
+const env = {
+  VITE_SUPABASE_URL:
+    process.env.VITE_SUPABASE_URL ?? fromFile.VITE_SUPABASE_URL,
+  VITE_SUPABASE_PUBLISHABLE_KEY:
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+    fromFile.VITE_SUPABASE_PUBLISHABLE_KEY,
+};
 const NICK = "Ex: Bia, Zé, Dudu...";
 
 test("mínimo de 4: com 2 e 3 o servidor recusa; com 4 o botão libera", async ({
