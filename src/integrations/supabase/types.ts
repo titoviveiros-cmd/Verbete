@@ -560,6 +560,28 @@ export type Database = {
           },
         ];
       };
+      room_presence: {
+        Row: {
+          active_at: string;
+          away_at: string | null;
+          player_id: string;
+          room_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          active_at?: string;
+          away_at?: string | null;
+          player_id: string;
+          room_id: string;
+        };
+        Update: {
+          active_at?: string;
+          away_at?: string | null;
+          player_id?: string;
+          room_id?: string;
+        };
+        Relationships: [];
+      };
       room_words: {
         Row: {
           category: string;
@@ -600,11 +622,11 @@ export type Database = {
           current_round: number;
           current_word_id: string | null;
           finish_reason: string | null;
-          paused_at: string | null;
           host_id: string;
           id: string;
           mode: string;
           nivel: string;
+          paused_at: string | null;
           phase_started_at: string | null;
           round_phase_ends_at: string | null;
           status: string;
@@ -623,11 +645,11 @@ export type Database = {
           current_round?: number;
           current_word_id?: string | null;
           finish_reason?: string | null;
-          paused_at?: string | null;
           host_id: string;
           id?: string;
           mode?: string;
           nivel?: string;
+          paused_at?: string | null;
           phase_started_at?: string | null;
           round_phase_ends_at?: string | null;
           status?: string;
@@ -645,11 +667,11 @@ export type Database = {
           current_round?: number;
           current_word_id?: string | null;
           finish_reason?: string | null;
-          paused_at?: string | null;
           host_id?: string;
           id?: string;
           mode?: string;
           nivel?: string;
+          paused_at?: string | null;
           phase_started_at?: string | null;
           round_phase_ends_at?: string | null;
           status?: string;
@@ -704,6 +726,10 @@ export type Database = {
         Row: {
           coordinator_id: string;
           id: string;
+          judge_attempts: number;
+          judge_fired_at: string | null;
+          judge_request_id: number | null;
+          judged_at: string | null;
           room_id: string;
           round: number;
           scored_at: string;
@@ -713,6 +739,10 @@ export type Database = {
         Insert: {
           coordinator_id: string;
           id?: string;
+          judge_attempts?: number;
+          judge_fired_at?: string | null;
+          judge_request_id?: number | null;
+          judged_at?: string | null;
           room_id: string;
           round: number;
           scored_at?: string;
@@ -721,6 +751,10 @@ export type Database = {
         Update: {
           coordinator_id?: string;
           id?: string;
+          judge_attempts?: number;
+          judge_fired_at?: string | null;
+          judge_request_id?: number | null;
+          judged_at?: string | null;
           room_id?: string;
           round?: number;
           scored_at?: string;
@@ -1030,16 +1064,26 @@ export type Database = {
         };
         Returns: Json;
       };
+      bot_vote_pick: {
+        Args: {
+          p_bluff_ids: string[];
+          p_r1: number;
+          p_r2: number;
+          p_truth_id: string;
+          p_truth_rate?: number;
+        };
+        Returns: string;
+      };
+      cast_bot_votes: {
+        Args: { p_actor_id: string; p_room_id: string; p_round: number };
+        Returns: Json;
+      };
       cast_vote: {
         Args: {
           p_definition_id: string;
           p_room_id: string;
           p_voter_id: string;
         };
-        Returns: Json;
-      };
-      cast_bot_votes: {
-        Args: { p_actor_id: string; p_room_id: string; p_round: number };
         Returns: Json;
       };
       cast_votes_bulk: {
@@ -1071,6 +1115,7 @@ export type Database = {
           id: string;
           mode: string;
           nivel: string;
+          paused_at: string | null;
           phase_started_at: string | null;
           round_phase_ends_at: string | null;
           status: string;
@@ -1090,6 +1135,10 @@ export type Database = {
       extend_voting_or_advance: { Args: { p_room_id: string }; Returns: Json };
       extend_writing_or_advance: { Args: { p_room_id: string }; Returns: Json };
       finish_reveal: { Args: { p_room_id: string }; Returns: Json };
+      fire_round_judge: {
+        Args: { p_room_id: string; p_round: number };
+        Returns: number;
+      };
       get_app_config: { Args: { p_key: string }; Returns: string };
       get_ballot: { Args: { p_room_id: string }; Returns: Json };
       get_client_config: { Args: Record<PropertyKey, never>; Returns: Json };
@@ -1221,6 +1270,7 @@ export type Database = {
           id: string;
           mode: string;
           nivel: string;
+          paused_at: string | null;
           phase_started_at: string | null;
           round_phase_ends_at: string | null;
           status: string;
@@ -1275,18 +1325,21 @@ export type Database = {
       };
       reset_room: { Args: { p_room_id: string }; Returns: undefined };
       reset_user_stats: { Args: { p_user_id: string }; Returns: undefined };
+      resume_paused_room: { Args: { p_room_id: string }; Returns: boolean };
       resume_room: {
         Args: { p_player_id: string; p_room_id: string };
         Returns: Json;
       };
-      touch_presence: {
-        Args: { p_player_id: string; p_room_id: string; p_state?: string };
+      retry_round_judgments: {
+        Args: Record<PropertyKey, never>;
         Returns: Json;
       };
+      room_humans_present: { Args: { p_room_id: string }; Returns: boolean };
       room_last_human_activity: {
         Args: { p_room_id: string };
         Returns: string;
       };
+      room_pause_due: { Args: { p_room_id: string }; Returns: boolean };
       send_reaction: {
         Args: { p_emoji: string; p_player_id: string; p_room_id: string };
         Returns: Json;
@@ -1319,6 +1372,10 @@ export type Database = {
         Returns: Json;
       };
       tick_stalled_rooms: { Args: Record<PropertyKey, never>; Returns: Json };
+      touch_presence: {
+        Args: { p_player_id: string; p_room_id: string; p_state?: string };
+        Returns: Json;
+      };
       xp_to_level: { Args: { p_xp: number }; Returns: number };
     };
     Enums: {
