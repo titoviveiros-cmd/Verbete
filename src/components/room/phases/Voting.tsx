@@ -586,12 +586,7 @@ function VotingImpl({
                     (hasVoted && !isPicked ? "opacity-45" : "")
                   }
                 >
-                  <ReportButton
-                    definition={d}
-                    room={room}
-                    players={players}
-                    meId={me.id}
-                  />
+                  <ReportButton definition={d} meId={me.id} />
                 </div>
               )}
             </div>

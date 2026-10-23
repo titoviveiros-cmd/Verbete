@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { reportDefinition } from "@/lib/moderation.functions";
 import { expectOk } from "@/lib/server-fn-transport";
 import { useAuth } from "@/hooks/use-auth";
-import type { Definition, Player, Room } from "@/lib/room";
+import type { Definition } from "@/lib/room";
 
 /**
  * Botão pequeno (🚩) que abre um mini-modal para denunciar uma definição.
@@ -12,13 +12,9 @@ import type { Definition, Player, Room } from "@/lib/room";
  */
 export function ReportButton({
   definition,
-  room,
-  players,
   meId,
 }: {
   definition: Definition;
-  room: Room;
-  players: Player[];
   meId: string;
 }) {
   const { user } = useAuth();
@@ -36,14 +32,10 @@ export function ReportButton({
     return null;
   }
 
-  // Definição verdadeira do dicionário: não pode ser reportada de verdade,
-  // mas precisamos manter o comportamento visual idêntico ao das outras
-  // (mesmo modal, mesmo fluxo, mesma confirmação) para não entregar qual é
-  // a resposta correta.
-  const isTruth = definition.is_truth || definition.player_id === "__truth__";
-
-  const offender = players.find((p) => p.id === definition.player_id);
-
+  // Na votação a cédula chega SEM autor (player_id ""): só o id e o motivo
+  // vão ao servidor, que acha autor, texto e sala no banco. A definição
+  // verdadeira recebe a mesma resposta (sem registro) — mesmo modal, mesmo
+  // fluxo, mesma confirmação, para não entregar a resposta correta.
   const submit = async () => {
     if (!user) {
       setError("Faça login para reportar.");
@@ -52,25 +44,10 @@ export function ReportButton({
     setSending(true);
     setError(null);
     try {
-      if (isTruth) {
-        // Simula o envio (sem chamar o servidor) para não revelar que
-        // esta é a definição verdadeira.
-        await new Promise((r) => setTimeout(r, 600));
-      } else {
-        const sent = await runReport({
-          data: {
-            definitionId: definition.id,
-            definitionText: definition.text,
-            roomId: room.id,
-            roomCode: room.code,
-            round: room.current_round,
-            offenderPlayerId: definition.player_id,
-            offenderNickname: offender?.nickname ?? null,
-            reason,
-          },
-        });
-        expectOk(sent, "Não foi possível enviar a denúncia.");
-      }
+      const sent = await runReport({
+        data: { definitionId: definition.id, reason },
+      });
+      expectOk(sent, "Não foi possível enviar a denúncia.");
 
       setDone(true);
       setTimeout(() => setOpen(false), 1200);

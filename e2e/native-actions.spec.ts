@@ -118,12 +118,20 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
     `CONTA DESCARTÁVEL criada (id ${uid.slice(0, 8)}…) — origem ${host}`,
   );
   const calls: string[] = [];
+  let reportCalls = 0;
   page.on("response", (r) => {
     if (!r.url().includes("/_serverFn/")) return;
+    if ((r.request().postData() ?? "").includes("definitionId")) reportCalls++;
     const u = new URL(r.url());
     calls.push(
       `${r.request().method()} ${u.origin} → ${r.status()} ${(r.headers()["content-type"] ?? "").split(";")[0]}`,
     );
+  });
+  page.on("requestfailed", (r) => {
+    if (r.url().includes("/_serverFn/"))
+      calls.push(
+        `FALHOU ${r.method()} ${new URL(r.url()).origin} — ${r.failure()?.errorText ?? "?"}`,
+      );
   });
   let deleted = false;
   try {
@@ -174,14 +182,14 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
       .click();
     await page.getByRole("button", { name: /Zerar tudo/ }).click();
     await expect
-      .poll(async () => (await stats()).games_played, { timeout: 30_000 })
+      .poll(async () => (await stats()).games_played ?? 0, { timeout: 30_000 })
       .toBe(0);
     await page.reload();
     await page.waitForTimeout(3_000);
-    expect((await stats()).games_played).toBe(0);
-    expect((await stats()).total_score).toBe(0);
+    expect((await stats()).games_played ?? 0).toBe(0);
+    expect((await stats()).total_score ?? 0).toBe(0);
     console.log(
-      "A) ZERAR ESTATÍSTICAS: servidor 3 → 0, continua 0 depois de recarregar — PASS",
+      "A) ZERAR ESTATÍSTICAS: servidor 3 → zerado (reset_user_stats apaga o registro), continua zerado depois de recarregar — PASS",
     );
 
     // ---------- B) Desafio diário: tentativa registrada exatamente uma vez
@@ -203,23 +211,36 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
     // ---------- C) Denúncia: registrada no servidor e sem duplicar no retry
     const code = await untilVoting(page);
     const reports = async () =>
-      (await rows(`reports?reporter_user_id=eq.${uid}&select=id,definition_id`))
-        .length;
-    const flag = page
-      .getByRole("button", { name: "Reportar definição" })
-      .first();
-    for (let i = 0; i < 2; i++) {
-      await flag.click({ force: true });
-      await page.locator('input[value="spam"]').check({ force: true });
+      (await rows(`reports?reporter_user_id=eq.${uid}&select=id`)).length;
+    const flags = page.getByRole("button", { name: "Reportar definição" });
+    // A cédula da definição verdadeira só simula o envio (não chama o
+    // servidor, para não entregar a resposta): vale a 1ª que gera chamada.
+    const send = async (i: number) => {
+      const before = reportCalls;
+      await flags.nth(i).click({ force: true });
+      await page
+        .locator("select")
+        .filter({ has: page.locator('option[value="spam"]') })
+        .selectOption("spam");
       await page.getByRole("button", { name: /^Enviar$/ }).click();
-      await expect(page.getByText(/Denúncia registrada/)).toBeVisible({
-        timeout: 30_000,
-      });
-      await page.waitForTimeout(1_500);
-    }
+      const thanks = page.getByText(/Denúncia registrada/);
+      await expect(thanks).toBeVisible({ timeout: 30_000 });
+      await expect(thanks).toBeHidden({ timeout: 10_000 });
+      return reportCalls > before;
+    };
+    let target = -1;
+    const ballots = await flags.count();
+    for (let i = 0; i < ballots && target < 0; i++)
+      if (await send(i)) target = i;
+    expect(target, "cédula de um jogador (não a verdadeira)").toBeGreaterThan(
+      -1,
+    );
     await expect.poll(reports, { timeout: 20_000 }).toBe(1);
+    expect(await send(target), "2º envio chega ao servidor").toBe(true);
+    await page.waitForTimeout(2_000);
+    expect(await reports()).toBe(1);
     console.log(
-      `C) DENÚNCIA (sala ${code}): 1 registro no servidor depois de 2 envios — PASS`,
+      `C) DENÚNCIA (sala ${code}): 1 registro no servidor depois de 2 envios da mesma cédula — PASS`,
     );
     await admin(`/rest/v1/reports?reporter_user_id=eq.${uid}`, {
       method: "DELETE",
