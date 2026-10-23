@@ -124,14 +124,16 @@ const { rows: defs } = await db.query(
   `SELECT id, player_id FROM public.definitions WHERE room_id = $1 AND round = 1`, [rid]);
 const truth = defs.find((d) => d.player_id === "__truth__");
 const defB1 = defs.find((d) => d.player_id === "e2e_b1");
-await rpc("cast_votes_bulk", {
-  p_room_id: rid, p_round: 1,
-  p_votes: [
+// votos dos bots plantados pelo motor (SQL interno): cast_votes_bulk não é mais
+// chamável por cliente (revogado 2026-10-23) e cast_bot_votes sorteia
+await db.query(`SELECT public.cast_votes_bulk($1, 1, $2::jsonb)`, [
+  rid,
+  JSON.stringify([
     { voter_id: "e2e_b1", definition_id: truth.id },
     { voter_id: "e2e_b3", definition_id: truth.id },
     { voter_id: "e2e_b2", definition_id: defB1.id },
-  ],
-});
+  ]),
+]);
 
 // Quórum: com o humano ainda sem voto, o advance deve ser NO-OP
 await rpc("advance_voting_to_reveal", { p_room_id: rid });

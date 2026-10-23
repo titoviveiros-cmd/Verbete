@@ -337,6 +337,10 @@ const d = Object.fromEntries(defs.map((x) => [x.player_id, x.id]));
   const bobVote = await row(`SELECT definition_id FROM public.votes WHERE room_id = $1 AND voter_id = $2`, [rid, BOB]);
   check("voto de Bob intacto", bobVote?.definition_id === d.__truth__);
 
+  // cast_votes_bulk REVOGADO (2026-10-23): ninguém de fora escolhe a cédula de
+  // um bot — nem outro jogador, nem o host. Os votos dos bots vêm de
+  // cast_bot_votes (política no servidor); aqui o motor (SQL interno) os planta
+  // para a pontuação abaixo ser determinística.
   r = await E.c.rpc("cast_votes_bulk", {
     p_room_id: rid, p_round: 1,
     p_votes: [
@@ -344,15 +348,23 @@ const d = Object.fromEntries(defs.map((x) => [x.player_id, x.id]));
       { voter_id: BOT2, definition_id: d[EVE] },
     ],
   });
-  check("fazer os bots votarem no próprio blefe sem ser o host recusado", r.data?.reason === "not_authorized", short(r.data));
+  check("cast_votes_bulk revogado: outro jogador recusado (sem permissão)", r.error?.code === "42501", short(r.error ?? r.data));
   r = await A.c.rpc("cast_votes_bulk", {
     p_room_id: rid, p_round: 1,
     p_votes: [
-      { voter_id: BOT1, definition_id: d.__truth__ },
-      { voter_id: BOT2, definition_id: d[BOB] },
+      { voter_id: BOT1, definition_id: d[EVE] },
+      { voter_id: BOT2, definition_id: d[EVE] },
     ],
   });
-  check("host registra os votos dos bots", r.data?.inserted === 2, short(r.data));
+  check("cast_votes_bulk revogado: nem o host escolhe os votos dos bots", r.error?.code === "42501", short(r.error ?? r.data));
+  const planted = await row(`SELECT public.cast_votes_bulk($1, 1, $2::jsonb) AS r`, [
+    rid,
+    JSON.stringify([
+      { voter_id: BOT1, definition_id: d.__truth__ },
+      { voter_id: BOT2, definition_id: d[BOB] },
+    ]),
+  ]);
+  check("motor (SQL interno) ainda registra os votos dos bots", planted?.r?.inserted === 2, short(planted?.r));
 }
 {
   await A.c.rpc("advance_voting_to_reveal", { p_room_id: rid });
@@ -488,11 +500,13 @@ const DENY = [
   "fire_round_judge", "retry_round_judgments",
   // voto dos bots no servidor (2026-10-22): a escolha pura é interna
   "bot_vote_pick",
+  // caminho legado em que o host escolhia os votos dos bots (revogado 2026-10-23)
+  "cast_votes_bulk",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
   "advance_scoreboard_to_next_round_or_finished", "advance_voting_to_reveal", "advance_writing_to_voting",
-  "assign_player_team", "cast_vote", "cast_votes_bulk", "choose_word", "claim_player_identity",
+  "assign_player_team", "cast_vote", "choose_word", "claim_player_identity",
   "create_room_with_host", "extend_voting_or_advance", "extend_writing_or_advance", "finish_reveal",
   "get_ballot", "get_client_config", "get_or_create_daily_challenge", "get_random_word_prompts",
   "get_ranking_top", "get_room_definitions", "get_room_reveal", "get_room_state", "get_round_reveal",
