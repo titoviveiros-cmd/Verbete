@@ -252,10 +252,26 @@ const VOTES: Array<[number, string, string]> = [
   [3, TIO, d(301)],
 ];
 const NEAR_TRUTH = [d(204), d(305)];
+// room_id como no banco (NOT NULL): o simulador aplica o filtro room_id=eq.
 const ROUNDS = [
-  { round: 1, coordinator_id: BIA, scored_at: "2026-10-18T15:04:00Z" },
-  { round: 2, coordinator_id: DUDU, scored_at: "2026-10-18T15:07:00Z" },
-  { round: 3, coordinator_id: ZE, scored_at: "2026-10-18T15:10:00Z" },
+  {
+    room_id: ROOM_ID,
+    round: 1,
+    coordinator_id: BIA,
+    scored_at: "2026-10-18T15:04:00Z",
+  },
+  {
+    room_id: ROOM_ID,
+    round: 2,
+    coordinator_id: DUDU,
+    scored_at: "2026-10-18T15:07:00Z",
+  },
+  {
+    room_id: ROOM_ID,
+    round: 3,
+    coordinator_id: ZE,
+    scored_at: "2026-10-18T15:10:00Z",
+  },
 ];
 
 function defRow(x: D, mode: "progress" | "ballot" | "revealed") {
@@ -397,7 +413,15 @@ export function roomBackend(
         word,
       } as unknown as Json,
       get_round_sync: { definitions: defs, votes } as unknown as Json,
-      get_room_reveal: { near_truth_ids: NEAR_TRUTH },
+      // mesmo formato do servidor (revelação/placar/fim): o placar só aceita
+      // o histórico com a revelação disponível (lib/score-history)
+      get_room_reveal: {
+        available: true,
+        truth_def_ids: DEFS.filter((x) => x.player_id === "__truth__").map(
+          (x) => x.id,
+        ),
+        near_truth_ids: NEAR_TRUTH,
+      },
       get_room_definitions: allDefs as unknown as Json,
       get_random_word_prompts: [
         {
