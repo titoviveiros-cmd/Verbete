@@ -41,6 +41,8 @@ export function useScoreHistory({
   const runRef = useRef<() => void>(() => {});
   const readyRef = useRef(false);
   readyRef.current = snap?.key === key;
+  const failedRef = useRef(false);
+  failedRef.current = failed;
 
   useEffect(() => {
     let gen = 0;
@@ -99,20 +101,29 @@ export function useScoreHistory({
     runRef.current = run;
     setFailed(false);
     run();
-    // aparelho voltou (foco, tela visível, rede): relê só se ainda falta
+    // aparelho voltou (foco, tela visível, rede): relê se ainda falta OU se a
+    // última releitura falhou (ex.: 🧠 tardio); os 3 eventos chegam juntos na
+    // volta da aba — agrupados, viram UMA carga (Red Team 2026-10-22)
+    let backTimer: ReturnType<typeof setTimeout> | null = null;
     const onBack = () => {
       if (
         typeof document !== "undefined" &&
         document.visibilityState !== "visible"
       )
         return;
-      if (!readyRef.current) run();
+      if (readyRef.current && !failedRef.current) return;
+      if (backTimer) return;
+      backTimer = setTimeout(() => {
+        backTimer = null;
+        run();
+      }, SCORE_CHANGE_COALESCE_MS);
     };
     window.addEventListener("focus", onBack);
     window.addEventListener("online", onBack);
     document.addEventListener("visibilitychange", onBack);
     return () => {
       stop();
+      if (backTimer) clearTimeout(backTimer);
       runRef.current = () => {};
       window.removeEventListener("focus", onBack);
       window.removeEventListener("online", onBack);

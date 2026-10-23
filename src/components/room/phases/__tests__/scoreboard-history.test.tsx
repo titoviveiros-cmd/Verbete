@@ -348,4 +348,44 @@ describe("Placar — histórico consistente com nova tentativa", () => {
     expect(order(b.container)).toEqual(order(a.container));
     expect(lines(a.container, "Ana")).toEqual(ANA_R1);
   });
+
+  it('releitura do 🧠 que falhou: "atualizando" e, na volta do foco, relê e completa (Red Team)', async () => {
+    const { container, rerender } = render(
+      <Scoreboard room={room(1)} players={players1()} isHost={false} />,
+    );
+    await flush();
+    for (let i = 0; i < 3; i++)
+      h.faults.push({ name: "rpc:get_room_reveal", kind: "fail" });
+    h.state.near = ["b1"];
+    const late = players1().map((p) =>
+      p.id === "beto" ? { ...p, score: 3 } : p,
+    );
+    rerender(<Scoreboard room={room(1)} players={late} isHost={false} />);
+    await wait(3000);
+    expect(container.textContent).toContain("atualizando os detalhes");
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await wait(500);
+    expect(lines(container, "Beto")).toEqual([
+      "🧠 Chegou perto da verdade 1× → +3 pts",
+    ]);
+    expect(loading(container)).toBe(false);
+  });
+
+  it("volta da aba (tela + foco + rede juntos) = UMA carga, não três (Red Team)", async () => {
+    for (let i = 0; i < 6; i++)
+      h.faults.push({ name: "rpc:get_room_reveal", kind: "fail" });
+    render(<Scoreboard room={room(1)} players={players1()} isHost={false} />);
+    await flush();
+    await wait(5000);
+    expect(calls("rpc:get_room_reveal")).toBe(3);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(new Event("online"));
+    });
+    await wait(300);
+    expect(calls("rpc:get_room_reveal")).toBe(4);
+  });
 });
