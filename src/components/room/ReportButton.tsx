@@ -34,8 +34,9 @@ export function ReportButton({
 
   // Na votação a cédula chega SEM autor (player_id ""): só o id e o motivo
   // vão ao servidor, que acha autor, texto e sala no banco. A definição
-  // verdadeira recebe a mesma resposta (sem registro) — mesmo modal, mesmo
-  // fluxo, mesma confirmação, para não entregar a resposta correta.
+  // verdadeira recebe a mesma resposta (o servidor a descarta sozinho) —
+  // mesmo modal, mesmo fluxo, mesma confirmação, para não entregar a
+  // resposta correta.
   const submit = async () => {
     if (!user) {
       setError("Faça login para reportar.");
