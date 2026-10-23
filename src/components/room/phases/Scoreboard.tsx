@@ -7,13 +7,14 @@ import { motion } from "framer-motion";
 import {
   nextRound,
   computeTeamScores,
-  type Definition,
   type Player,
   type Room,
   type Vote,
 } from "@/lib/room";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
-import { scrollbarClip } from "@/lib/utils";
+import { NARRATIVE_MIN_VISIBLE_MS } from "@/lib/transition-floor";
+import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
+import { useScoreHistory } from "@/hooks/use-score-history";
 
 // Contador rolante (Fase 4, aprovado): o número "sobe" do placar anterior
 // para o novo com easing — dá a sensação de pontos sendo somados ao vivo.
@@ -50,22 +51,39 @@ function ScoreboardImpl({
   room,
   players,
   isHost,
+  embedded = false,
 }: {
   room: Room;
   players: Player[];
   isHost: boolean;
+  /** Dentro do fim de jogo ("📊 Placar"): sem o rodapé de próxima rodada. */
+  embedded?: boolean;
 }) {
   const sorted = useMemo(
     () => [...players].sort((a, b) => b.score - a.score),
     [players],
   );
-  const [history, setHistory] = useState<{
-    defs: Definition[];
-    votes: Vote[];
-    rounds: { round: number; coordinator_id: string; scored_at: string }[];
-    nearTruthIds: Set<string>;
-    extensions: { player_id: string; round: number; attempt: number }[];
-  } | null>(null);
+  // Bônus 🧠 que chega DEPOIS da tela montar (juiz demorou, host pulou a
+  // revelação): o total em players.score muda pelo realtime — relê o
+  // histórico para o detalhamento ganhar a linha 🧠 junto (antes o total
+  // tinha +3 e o detalhamento não, auditoria 2026-10-21).
+  const scoreSig = useMemo(
+    () =>
+      players
+        .map((p) => `${p.id}:${p.score}`)
+        .sort()
+        .join("|"),
+    [players],
+  );
+  // Histórico como unidade consistente, com nova tentativa curta (playtest
+  // 2026-10-22: um aparelho mostrou o placar sem nenhuma linha de "como
+  // pontuou"). Enquanto não chega inteiro: "carregando os detalhes…".
+  const { history, failed: detailsFailed } = useScoreHistory({
+    roomId: room.id,
+    round: room.current_round,
+    requireRound: room.status !== "finished",
+    scoreSig,
+  });
 
   // Hold escala com o nº de jogadores (7-12): mais fileiras para ler.
   const SCORE_HOLD = scalePhaseSecs(8, players.length);
@@ -78,6 +96,16 @@ function ScoreboardImpl({
     );
     return () => clearTimeout(t);
   }, [room.current_round]);
+  // Piso (playtest 2026-10-22): logo que a cortina saía o host já podia
+  // tocar "Próxima rodada" e o placar aparecia por meio segundo, com as
+  // fileiras ainda entrando. O botão destrava NARRATIVE_MIN_VISIBLE_MS depois.
+  const [advanceReady, setAdvanceReady] = useState(false);
+  useEffect(() => {
+    setAdvanceReady(false);
+    if (!scoreTransitionDone) return;
+    const t = setTimeout(() => setAdvanceReady(true), NARRATIVE_MIN_VISIBLE_MS);
+    return () => clearTimeout(t);
+  }, [scoreTransitionDone, room.current_round]);
   const [holdLeft, setHoldLeft] = useState(SCORE_HOLD);
   useEffect(() => {
     if (!scoreTransitionDone) return;
@@ -102,50 +130,6 @@ function ScoreboardImpl({
     const t = setTimeout(() => setReordered(true), 900);
     return () => clearTimeout(t);
   }, [scoreTransitionDone, history, room.current_round]);
-
-  useEffect(() => {
-    (async () => {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const [
-        { data: defs },
-        { data: votes },
-        { data: rounds },
-        { data: reveal },
-        { data: exts },
-      ] = await Promise.all([
-        // S1: leitura direta de definitions foi revogada — RPC devolve as
-        // rodadas já reveladas (a corrente só a partir do reveal).
-        supabase.rpc("get_room_definitions", { p_room_id: room.id }),
-        supabase.from("votes").select("*").eq("room_id", room.id),
-        supabase
-          .from("rounds")
-          .select("round,coordinator_id,scored_at")
-          .eq("room_id", room.id),
-        supabase.rpc("get_room_reveal", { p_room_id: room.id }),
-        supabase
-          .from("round_extensions")
-          .select("player_id,round,attempt")
-          .eq("room_id", room.id),
-      ]);
-      const nearIds: string[] =
-        (reveal as { near_truth_ids?: string[] } | null)?.near_truth_ids ?? [];
-      setHistory({
-        defs: (defs ?? []) as unknown as Definition[],
-        votes: (votes ?? []) as Vote[],
-        rounds: (rounds ?? []) as {
-          round: number;
-          coordinator_id: string;
-          scored_at: string;
-        }[],
-        nearTruthIds: new Set(nearIds),
-        extensions: (exts ?? []) as {
-          player_id: string;
-          round: number;
-          attempt: number;
-        }[],
-      });
-    })();
-  }, [room.id, room.current_round]);
 
   // Alinhado com o servidor: o score persistido em `players.score` é calculado
   // a partir de TODOS os votos da rodada (sem filtro de tolerância). Para que
@@ -332,28 +316,41 @@ function ScoreboardImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 min-h-0 flex flex-col gap-3 pt-2 overflow-x-hidden w-full max-w-full"
+      className="flex-1 min-h-0 flex flex-col gap-1.5 overflow-x-hidden ring-room"
     >
-      <div className="shrink-0">
-        <p className="eyebrow text-center">Rodada {room.current_round}</p>
-        <h2 className="font-display text-[40px] lg:text-[48px] text-center leading-tight flex items-center justify-center gap-2.5">
-          <span className="text-gold-grad">Placar</span>{" "}
-          <TrophyIcon size={38} />
-        </h2>
-        <p className="text-center text-base text-muted-foreground">
-          {sortedTeams.length > 0
-            ? "Pontuação por equipe e por jogador:"
-            : "Como cada um pontuou:"}
-        </p>
-      </div>
       <div
         // Região rolável alcançável pelo teclado (axe: scrollable-region-focusable).
         tabIndex={0}
         role="region"
         aria-label="Placar da rodada"
-        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pb-3 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:content-start lg:[mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
-        style={scrollbarClip()}
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto overflow-x-hidden no-scrollbar pt-1 pb-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:content-start lg:[mask-image:linear-gradient(to_bottom,#000_88%,transparent)]"
+        // respiro do anel dourado do 1º lugar (saía aparado nas laterais)
+        style={scrollbarClip(undefined, RING_GUTTER)}
       >
+        {/* Cabeçalho DENTRO da rolagem (playtest 2026-10-20): congelado no
+            topo ele tomava ~120px da leitura do placar no celular. */}
+        <div className="lg:col-span-2 pb-1">
+          <p className="eyebrow text-center">Rodada {room.current_round}</p>
+          <h2 className="font-display text-[40px] lg:text-[48px] text-center leading-tight flex items-center justify-center gap-2.5">
+            <span className="text-gold-grad">Placar</span>{" "}
+            <TrophyIcon size={38} />
+          </h2>
+          <p className="text-center text-base text-muted-foreground">
+            {sortedTeams.length > 0
+              ? "Pontuação por equipe e por jogador:"
+              : "Como cada um pontuou:"}
+          </p>
+          {/* Histórico ainda não chegou inteiro (ou a releitura falhou):
+              nunca linhas falsas — o ranking fica e os detalhes vêm depois. */}
+          {(!history || detailsFailed) && (
+            <p
+              className="text-center text-xs text-muted-foreground/80 mt-0.5"
+              data-score-details="loading"
+            >
+              ⏳ {history ? "atualizando" : "carregando"} os detalhes…
+            </p>
+          )}
+        </div>
         {sortedTeams.length > 0 && (
           <div className="sticker py-3">
             <p className="font-display text-sm uppercase tracking-widest text-center opacity-80 mb-2">
@@ -576,19 +573,30 @@ function ScoreboardImpl({
           );
         })}
       </div>
-      {isHost ? (
-        <button
-          onClick={() => nextRound(room, players)}
-          className="btn-pop btn-gold text-2xl py-3.5 shrink-0 lg:self-center lg:min-w-[360px] max-lg:mr-12"
-        >
-          ▶ Próxima rodada
-        </button>
-      ) : (
-        <p className="text-center text-muted-foreground font-display shrink-0">
-          {holdLeft > 0
-            ? `Lendo o placar… ${holdLeft}s`
-            : "Aguardando o host continuar…"}
-        </p>
+      {/* Rodapé fino: "Próxima rodada" importante, mas do tamanho de um
+          botão — a área de leitura do placar vem primeiro (playtest
+          2026-10-20, 2ª rodada de ajustes). */}
+      {!embedded && (
+        // pb-2: a raiz do placar corta o que passa da caixa (overflow) — o
+        // relevo de 5px do botão candy sumia embaixo ("cortado", 2º playtest).
+        <div className="shrink-0 flex items-center justify-center pt-1 pb-2">
+          {isHost ? (
+            <button
+              onClick={() => nextRound(room, players)}
+              disabled={!advanceReady}
+              data-advance-ready={advanceReady ? "1" : "0"}
+              className="btn-pop btn-gold w-full max-w-[15rem] lg:w-auto lg:max-w-none lg:min-w-[320px] text-base lg:text-xl !px-5 !py-2.5 lg:!py-3 whitespace-nowrap"
+            >
+              ▶ Próxima rodada
+            </button>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground font-display">
+              {holdLeft > 0
+                ? `Lendo o placar… ${holdLeft}s`
+                : "Aguardando o host continuar…"}
+            </p>
+          )}
+        </div>
       )}
     </motion.div>
   );

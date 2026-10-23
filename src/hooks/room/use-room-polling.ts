@@ -10,6 +10,8 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Room, Player, Definition, Vote } from "@/lib/room";
 import type { RoundExtension } from "@/hooks/use-room";
+import { mergeSamePhasePoll } from "@/lib/transition-floor";
+import { createCoalescer, createLatestGate } from "@/lib/sync-nudge";
 import type { RoomCtx } from "./ctx";
 
 export function useRoomPolling(ctx: RoomCtx) {
@@ -23,6 +25,7 @@ export function useRoomPolling(ctx: RoomCtx) {
     setRoundExtensions,
     setDegraded,
     reloadRef,
+    roundSyncRef,
     optimisticPlayerIdsRef,
     lastEventAtRef,
     lastRoomSigRef,
@@ -60,15 +63,24 @@ export function useRoomPolling(ctx: RoomCtx) {
     if (!["writing", "shuffling", "voting", "reveal"].includes(roomStatus))
       return;
     let cancelled = false;
+    // poll e aviso podem se cruzar: vale só a resposta mais nova
+    const gate = createLatestGate();
     const refreshRound = async () => {
+      const seq = gate.next();
       const { data: sync, error: syncErr } = await supabase.rpc(
         "get_round_sync",
         { p_room_id: roomId },
       );
       if (cancelled) return;
       // Fase 3 (ConnectionState): o poll é o batimento com o servidor —
-      // falha liga o indicador de reconexão; sucesso desliga.
-      setDegraded(!!syncErr);
+      // falha liga o indicador de reconexão; sucesso desliga. A falha não
+      // passa pelo gate: uma resposta boa mais antiga ainda vale.
+      if (syncErr) {
+        if (!gate.stale(seq)) setDegraded(true);
+        return;
+      }
+      if (!gate.accept(seq)) return;
+      setDegraded(false);
       const payload = sync as {
         definitions?: Definition[];
         votes?: Vote[];
@@ -78,10 +90,15 @@ export function useRoomPolling(ctx: RoomCtx) {
       setVotes(payload.votes ?? []);
     };
     refreshRound();
+    // aviso da sala (lib/sync-nudge): relê na hora, vários juntos (50 ms) = 1 leitura
+    const nudged = createCoalescer(() => void refreshRound(), 50);
+    roundSyncRef.current = nudged;
     const interval = roomStatus === "writing" ? 1200 : 700;
     const t = window.setInterval(refreshRound, interval);
     return () => {
       cancelled = true;
+      nudged.cancel();
+      if (roundSyncRef.current === nudged) roundSyncRef.current = null;
       window.clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,7 +148,7 @@ export function useRoomPolling(ctx: RoomCtx) {
         supabase
           .from("rooms")
           .select(
-            "status,current_round,current_word_id,round_phase_ends_at,current_coordinator,host_id",
+            "status,current_round,current_word_id,round_phase_ends_at,current_coordinator,host_id,paused_at",
           )
           .eq("id", roomId)
           .maybeSingle(),
@@ -206,14 +223,10 @@ export function useRoomPolling(ctx: RoomCtx) {
         // o reload pesado de 25s e patches campos secundários (timer,
         // coordenador) sem refazer toda a árvore.
         lastEventAtRef.current = Date.now();
-        setRoom((cur) =>
-          cur &&
-          (cur.round_phase_ends_at !== data.round_phase_ends_at ||
-            cur.current_coordinator !== data.current_coordinator ||
-            cur.host_id !== data.host_id)
-            ? ({ ...cur, ...data } as Room)
-            : cur,
-        );
+        // Antes, o timer diferente (o otimista calcula o seu) bastava para
+        // regravar a sala com a fase ANTIGA: no host, "Hora de Inventar" →
+        // "Escolha da Palavra" → "Hora de Inventar" (2026-10-22).
+        setRoom((cur) => (cur ? mergeSamePhasePoll(cur, data as Room) : cur));
         return;
       }
       // Divergência real — atualizamos a assinatura ANTES de recarregar

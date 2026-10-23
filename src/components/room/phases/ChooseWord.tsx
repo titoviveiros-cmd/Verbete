@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   fetchThreeWords,
@@ -9,6 +9,13 @@ import {
 } from "@/lib/room";
 import { Mascot } from "@/components/Mascot";
 import { playUITap } from "@/lib/sound";
+
+// O sorteio continua sendo o momento do coordenador: o dicionário folheia por
+// FLIP_MIN_MS depois do toque. Mas as palavras já vêm buscadas desde que a
+// fase abriu (durante a transição "Escolha da Palavra"), então o folhear não
+// espera a rede. Antes: 3 s de cortina + toque + 1,8 s fixos, com a busca
+// (≈0,5 s) começando só no toque (playtest 2026-10-20).
+export const FLIP_MIN_MS = 650;
 
 export function ChooseWord({
   room,
@@ -24,20 +31,49 @@ export function ChooseWord({
   const [picking, setPicking] = useState<string | null>(null);
   const coord = players.find((p) => p.id === room.current_coordinator);
 
+  // Mesmas regras de sempre (fetchThreeWords: sem as já usadas, categorias e
+  // nível da sala) — a busca só começa mais cedo, uma vez por rodada.
+  const roomRef = useRef(room);
+  roomRef.current = room;
+  const drawKey = `${room.id}:${room.current_round}`;
+  const prefetch = useRef<{
+    key: string;
+    words: Promise<Word[] | null>;
+  } | null>(null);
+  const draw = () => {
+    const r = roomRef.current;
+    return fetchThreeWords(
+      r.used_word_ids ?? [],
+      r.categories ?? [],
+      r.id,
+      r.nivel ?? "aleatorio",
+    );
+  };
+  useEffect(() => {
+    if (!isCoordinator || prefetch.current?.key === drawKey) return;
+    prefetch.current = { key: drawKey, words: draw().catch(() => null) };
+  }, [isCoordinator, drawKey]);
+
   const handleDraw = async () => {
     if (phase !== "idle") return;
     setPhase("flipping");
-    const [drawn] = await Promise.all([
-      fetchThreeWords(
-        room.used_word_ids ?? [],
-        room.categories ?? [],
-        room.id,
-        room.nivel ?? "aleatorio",
-      ),
-      new Promise((r) => setTimeout(r, 1800)),
-    ]);
-    setWords(drawn);
-    setPhase("ready");
+    const startedAt = Date.now();
+    try {
+      const pre =
+        prefetch.current?.key === drawKey ? prefetch.current.words : null;
+      let drawn = pre ? await pre : null;
+      // pré-busca falhou (rede): busca de novo agora
+      if (!drawn || drawn.length === 0) drawn = await draw();
+      const left = FLIP_MIN_MS - (Date.now() - startedAt);
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      setWords(drawn);
+      setPhase("ready");
+    } catch (e) {
+      // sem palavras: o botão volta para o coordenador tentar de novo
+      console.error("fetchThreeWords failed", e);
+      prefetch.current = null;
+      setPhase("idle");
+    }
   };
 
   const handlePick = async (wordId: string) => {
@@ -198,6 +234,7 @@ export function ChooseWord({
       ) : (
         <div className="panel px-5 py-4 text-center flex flex-col items-center gap-2">
           <p className="font-display text-lg">
+            {coord?.is_bot ? "🤖 " : ""}
             {coord?.nickname ?? "O coordenador"} está escolhendo a palavra…
           </p>
           <div className="flex items-center gap-1.5" aria-hidden>

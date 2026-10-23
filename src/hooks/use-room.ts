@@ -43,6 +43,7 @@ export function useRoom(code: string | undefined, playerId?: string) {
   }, [code]);
 
   const reloadRef = useRef<() => Promise<void>>(async () => {});
+  const roundSyncRef = useRef<(() => void) | null>(null);
   const optimisticPlayerIdsRef = useRef<Record<string, number>>({});
   // Última vez que recebemos QUALQUER evento realtime (postgres_changes ou
   // broadcast). Usado pelo poll adaptativo abaixo para só recarregar quando
@@ -86,6 +87,7 @@ export function useRoom(code: string | undefined, playerId?: string) {
     presenceMap,
     setPresenceMap,
     reloadRef,
+    roundSyncRef,
     optimisticPlayerIdsRef,
     lastEventAtRef,
     lastRoomSigRef,

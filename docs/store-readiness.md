@@ -6,7 +6,7 @@
 | Claim da ficha | Veredito | Evidência |
 |---|---|---|
 | Mais de 1.000 palavras raras | ✅ COMPROVADO | 1.078 publicadas (SELECT 02/10) |
-| 2 a 12 jogadores | ✅ COMPROVADO | canStart>=2; 12 slots (Lobby.tsx:85-86) |
+| 4 a 12 jogadores (regra de 21/10; antes "2 a 12") | ⚠️ FICHA DESATUALIZADA | app: mínimo 4 (`src/lib/game-rules.ts`, `start_game` recusa < 4 — migration 20261020220000, aplicar no merge); 12 vagas. A ficha da Play Store ainda diz "2 a 12": trocar para "4 a 12" no Play Console |
 | Sem anúncios | ✅ COMPROVADO | zero SDK/código de ads |
 | Grátis | ✅ COMPROVADO | sem billing |
 | Multiplayer | ✅ COMPROVADO | E2E 2 navegadores verde |

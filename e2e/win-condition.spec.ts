@@ -103,6 +103,14 @@ async function recordRoundsLabel(page: Page) {
 }
 
 async function startAndExpectTotal(host: Page, guest: Page, total: number) {
+  // mínimo de 4 participantes (2º playtest 2026-10-20): completa com bots
+  const encher = host.getByRole("button", { name: /Encher até 4/ });
+  if (await encher.isVisible().catch(() => false)) {
+    await encher.click();
+    await expect(host.getByText("Jogadores (4/12)")).toBeVisible({
+      timeout: 25_000,
+    });
+  }
   await host.getByRole("button", { name: /Começar/ }).click();
   for (const p of [host, guest]) {
     await expect(p.getByText(`/${total}`, { exact: true })).toBeVisible({

@@ -40,6 +40,9 @@ await guest.getByPlaceholder(NICK).waitFor({ timeout: 20000 });
 await guest.getByPlaceholder(NICK).fill("E2E Guest");
 await guest.getByRole("button", { name: /Entrar na sala/ }).click();
 await host.getByText("E2E Guest").first().waitFor({ timeout: 25000 });
+// Mínimo de 4 participantes (playtest 2026-10-20): completa com bots.
+await host.getByRole("button", { name: /Encher até 4/ }).click();
+await host.getByText("Jogadores (4/12)").waitFor({ timeout: 25000 });
 await host.getByRole("button", { name: /Começar/ }).click();
 
 // Força o cenário das falhas: coordenador = CONVIDADO, escritor = HOST.

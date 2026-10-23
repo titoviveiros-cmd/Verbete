@@ -3,8 +3,10 @@
 // carregamento da palavra corrente (colunas seguras apenas — S1/S2).
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { hedged } from "@/lib/hedge";
 import type { Room, Player, Definition, Vote, Word } from "@/lib/room";
 import { withPendingConfig } from "@/lib/room-config-writer";
+import { isStaleServerPhase } from "@/lib/transition-floor";
 import type { RoundExtension } from "@/hooks/use-room";
 import type { RoomCtx } from "./ctx";
 
@@ -50,13 +52,16 @@ export function useRoomData(ctx: RoomCtx) {
           setLoading(false);
           return;
         }
-        setRoom(withPendingConfig(payload.room));
+        // Resposta que saiu antes do commit de uma virada otimista deste
+        // aparelho (Red Team 2026-10-22): fica a fase local (sala e palavra).
+        const stale = isStaleServerPhase(payload.room);
+        if (!stale) setRoom(withPendingConfig(payload.room));
         lastRoomSigRef.current = `${payload.room.status}|${payload.room.current_round}|${payload.room.current_word_id ?? ""}`;
         lastEventAtRef.current = Date.now();
         setPlayers((payload.players ?? []).filter((p) => !p.kicked_at));
         setDefinitions(payload.definitions ?? []);
         setVotes(payload.votes ?? []);
-        setWord(payload.word ?? null);
+        if (!stale) setWord(payload.word ?? null);
         // round_extensions é carregado separadamente — não vem no RPC.
         supabase
           .from("round_extensions")
@@ -142,12 +147,17 @@ export function useRoomData(ctx: RoomCtx) {
     }
     (async () => {
       // Colunas seguras apenas — meaning/curiosidade são bloqueadas por grants
-      // e chegam via get_word_reveal() somente após a revelação.
-      const { data } = await supabase
-        .from("words")
-        .select("id,word,category,rarity,nivel,classe,pronuncia")
-        .eq("id", currentWordId)
-        .maybeSingle();
+      // e chegam via get_word_reveal() somente após a revelação. Com "segunda
+      // via": sem a palavra a fase de escrita não abre, e na medição de
+      // 2026-10-20 esta leitura travou 12,4 s só no host (a escrita dele
+      // abriu 11 s depois da do convidado).
+      const { data } = await hedged(() =>
+        supabase
+          .from("words")
+          .select("id,word,category,rarity,nivel,classe,pronuncia")
+          .eq("id", currentWordId)
+          .maybeSingle(),
+      );
       if (data) {
         setWord(data as unknown as Word);
         return;

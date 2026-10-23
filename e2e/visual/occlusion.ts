@@ -141,3 +141,344 @@ export async function floatingConflicts(
     [selector, gap] as const,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Playtest 2026-10-20 (aparelho real): "Chame a ga…" com reticências, o
+// "Avançar agora" e o "Próxima rodada" cortados na lateral, a borda rosa da
+// cédula escolhida aparada e o 💬 em cima das cartas da Revelação. Nenhum dos
+// instrumentos acima via isso: o corte vinha de um ANCESTRAL com overflow
+// escondido (não da borda da tela) e o chat cobria conteúdo que não era botão.
+
+/** Texto com reticências do CSS ou maior que a própria caixa (overflow escondido). */
+export async function truncatedTexts(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const all = Array.from(
+      document.body.querySelectorAll("*"),
+    ) as HTMLElement[];
+    for (const el of all) {
+      if (el.closest('[aria-hidden="true"], [inert], .sr-only')) continue;
+      const own = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent ?? "")
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!own) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const text = (el.innerText || own)
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 40);
+      const clipsX =
+        cs.overflowX !== "visible" || cs.textOverflow === "ellipsis";
+      if (clipsX && el.scrollWidth > el.clientWidth + 1) {
+        out.push(`TRUNCADO «${text}» [${el.scrollWidth}>${el.clientWidth}]`);
+        continue;
+      }
+      const clamp = cs.getPropertyValue("-webkit-line-clamp").trim();
+      if (clamp && clamp !== "none" && el.scrollHeight > el.clientHeight + 1)
+        out.push(`TRUNCADO (linhas) «${text}»`);
+    }
+    return out;
+  });
+}
+
+/**
+ * Alvo (botão, cédula, carta, anel rosa) cortado por um ANCESTRAL que esconde
+ * o excesso. O anel `box-shadow: 0 0 0 Npx` conta como parte do alvo. Na
+ * vertical, contêiner que rola é permitido (o alvo rola até aparecer).
+ */
+export async function clippedByAncestors(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const label = (el: Element) =>
+      (
+        (el.getAttribute("aria-label") ||
+          (el as HTMLElement).innerText ||
+          el.tagName) + ""
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 40);
+    // Sombras DURAS (sem desfoque) fazem parte do desenho do alvo: o anel
+    // ("0 0 0 3px") e o relevo das peças candy ("0 5px 0 0", embaixo). No
+    // 2º playtest o "Próxima rodada" saía sem o relevo — aparado embaixo.
+    const shadowExtents = (shadow: string) => {
+      const e = { left: 0, right: 0, top: 0, bottom: 0 };
+      const re =
+        /(-?\d+(?:\.\d+)?)px (-?\d+(?:\.\d+)?)px (-?\d+(?:\.\d+)?)px (-?\d+(?:\.\d+)?)px( inset)?/g;
+      for (const m of shadow.matchAll(re)) {
+        if (m[5] || Number(m[3]) > 1) continue; // interna ou desfocada
+        const x = Number(m[1]);
+        const y = Number(m[2]);
+        const s = Number(m[4]);
+        e.left = Math.max(e.left, s - x);
+        e.right = Math.max(e.right, s + x);
+        e.top = Math.max(e.top, s - y);
+        e.bottom = Math.max(e.bottom, s + y);
+      }
+      return e;
+    };
+    const targets = Array.from(
+      document.querySelectorAll(
+        'button, a[href], [role="button"], .ring-neon, .sticker',
+      ),
+    ) as HTMLElement[];
+    for (const el of targets) {
+      if (el.closest('[aria-hidden="true"], [inert]')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") continue;
+      const r0 = el.getBoundingClientRect();
+      if (r0.width < 4 || r0.height < 4) continue;
+      const ext = shadowExtents(cs.boxShadow);
+      const r = {
+        left: r0.left - ext.left,
+        right: r0.right + ext.right,
+        top: r0.top - ext.top,
+        bottom: r0.bottom + ext.bottom,
+      };
+      // Dentro de uma lista que rola, o alvo fora da área visível não está
+      // cortado — basta rolar. A partir do 1º ancestral que rola num eixo,
+      // os ancestrais de fora não contam mais naquele eixo.
+      let checkX = true;
+      let checkY = true;
+      for (
+        let a = el.parentElement;
+        a && a !== document.body && a !== document.documentElement;
+        a = a.parentElement
+      ) {
+        const acs = getComputedStyle(a);
+        const ox = acs.overflowX;
+        const oy = acs.overflowY;
+        if (ox === "visible" && oy === "visible") continue;
+        const ar = a.getBoundingClientRect();
+        const left = ar.left + (parseFloat(acs.borderLeftWidth) || 0);
+        const right = ar.right - (parseFloat(acs.borderRightWidth) || 0);
+        const top = ar.top + (parseFloat(acs.borderTopWidth) || 0);
+        const bottom = ar.bottom - (parseFloat(acs.borderBottomWidth) || 0);
+        const scrollerX =
+          (ox === "auto" || ox === "scroll") &&
+          a.scrollWidth > a.clientWidth + 1;
+        const scrollerY =
+          (oy === "auto" || oy === "scroll") &&
+          a.scrollHeight > a.clientHeight + 1;
+        const where = `${a.tagName.toLowerCase()}.${String(a.className).split(" ").slice(0, 3).join(".")}`;
+        if (
+          checkX &&
+          !scrollerX &&
+          (r.left < left - 0.5 || r.right > right + 0.5)
+        ) {
+          out.push(
+            `CORTADO NA LATERAL «${label(el)}» [${Math.round(r.left)}→${Math.round(r.right)}] por ${where} [${Math.round(left)}→${Math.round(right)}]`,
+          );
+          break;
+        }
+        // Sombra/anel aparado: a CAIXA do alvo está inteira à vista dentro do
+        // contêiner, mas o desenho (relevo, anel) passa da borda — sombra não
+        // gera rolagem, então nem um contêiner "auto" a mostra: ela some.
+        const boxInside =
+          r0.left >= left - 0.5 &&
+          r0.right <= right + 0.5 &&
+          r0.top >= top - 0.5 &&
+          r0.bottom <= bottom + 0.5;
+        // (num eixo em que uma lista de dentro já rola e recorta, o que
+        // passa dela não conta — o item está só fora da área visível)
+        const shadowOutY =
+          checkY && (r.top < top - 0.5 || r.bottom > bottom + 0.5);
+        const shadowOutX =
+          checkX && (r.left < left - 0.5 || r.right > right + 0.5);
+        if (boxInside && (shadowOutX || shadowOutY)) {
+          out.push(
+            `RELEVO/ANEL APARADO «${label(el)}» [${Math.round(r.left)},${Math.round(r.top)}→${Math.round(r.right)},${Math.round(r.bottom)}] por ${where} [${Math.round(left)},${Math.round(top)}→${Math.round(right)},${Math.round(bottom)}]`,
+          );
+          break;
+        }
+        if (scrollerX) checkX = false;
+        if (scrollerY) checkY = false;
+        if (
+          checkY &&
+          (oy === "hidden" || oy === "clip") &&
+          (r.top < top - 0.5 || r.bottom > bottom + 0.5)
+        ) {
+          out.push(
+            `CORTADO NA VERTICAL «${label(el)}» [${Math.round(r.top)}→${Math.round(r.bottom)}] por ${where} [${Math.round(top)}→${Math.round(bottom)}]`,
+          );
+          break;
+        }
+      }
+    }
+    return out;
+  });
+}
+
+/**
+ * Peças fixas sobre o jogo: a barra de reações (e, se voltarem a existir,
+ * o 💬 do chat e o ▾ das reações — removidos em 2026-10-20). Nenhum texto,
+ * botão, carta ou ficha visível sob elas (com `gap` px de folga), e nenhuma
+ * lista rolável cujo conteúdo passe por baixo delas ao rolar.
+ */
+export async function floatingZoneIntrusions(
+  page: Page,
+  gap = 4,
+): Promise<string[]> {
+  return page.evaluate((gap) => {
+    const out: string[] = [];
+    const floats = (
+      [
+        [
+          "💬 chat",
+          document.querySelector(
+            '[aria-label="Abrir chat"], [aria-label="Fechar chat"]',
+          ),
+        ],
+        [
+          "▾ das reações",
+          document.querySelector(
+            '[aria-label="Esconder reações"], [aria-label="Mostrar reações"]',
+          ),
+        ],
+        [
+          "barra de reações",
+          document.querySelector('[aria-label="Enviar 😂"]')?.parentElement ??
+            null,
+        ],
+      ] as Array<[string, Element | null]>
+    ).filter((f): f is [string, Element] => !!f[1]);
+    if (floats.length === 0) return out;
+    const zone = floats.map(([name, el]) => {
+      const f = el.getBoundingClientRect();
+      return {
+        name,
+        left: f.left - gap,
+        right: f.right + gap,
+        top: f.top - gap,
+        bottom: f.bottom + gap,
+      };
+    });
+    type Box = { left: number; right: number; top: number; bottom: number };
+    const hit = (a: Box, b: Box) =>
+      a.left < b.right &&
+      a.right > b.left &&
+      a.top < b.bottom &&
+      a.bottom > b.top;
+    const skip = (n: Element) =>
+      !!n.closest('[aria-hidden="true"], [inert], .sr-only') ||
+      floats.some(([, f]) => f.contains(n));
+    const shown = (n: Element) => {
+      for (let a: Element | null = n; a; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        if (cs.display === "none" || cs.visibility === "hidden") return false;
+        if (Number(cs.opacity) < 0.05) return false;
+      }
+      return true;
+    };
+    const seen = new Set<string>();
+    const report = (msg: string) => {
+      if (!seen.has(msg)) {
+        seen.add(msg);
+        out.push(msg);
+      }
+    };
+    // Só a parte VISÍVEL conta: o que a lista que rola esconde (abaixo da
+    // área visível dela) não está sob o botão — a geometria crua do item
+    // diria que sim.
+    const visible = (n: Element, r: Box): Box | null => {
+      let v = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      for (let a = n.parentElement; a; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        const clipX = cs.overflowX !== "visible";
+        const clipY = cs.overflowY !== "visible";
+        if (!clipX && !clipY) continue;
+        const ar = a.getBoundingClientRect();
+        if (clipX)
+          v = {
+            ...v,
+            left: Math.max(v.left, ar.left),
+            right: Math.min(v.right, ar.right),
+          };
+        if (clipY)
+          v = {
+            ...v,
+            top: Math.max(v.top, ar.top),
+            bottom: Math.min(v.bottom, ar.bottom),
+          };
+        if (v.right - v.left < 1 || v.bottom - v.top < 1) return null;
+      }
+      return v;
+    };
+    // 1) Texto visível agora sob um controle.
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+    );
+    const range = document.createRange();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const text = (n.textContent ?? "").replace(/\s+/g, " ").trim();
+      const parent = n.parentElement;
+      if (!text || !parent || skip(parent) || !shown(parent)) continue;
+      range.selectNodeContents(n);
+      for (const raw of Array.from(range.getClientRects())) {
+        const rect = visible(parent, raw);
+        if (!rect) continue;
+        for (const z of zone)
+          if (hit(rect, z))
+            report(`TEXTO SOB ${z.name}: «${text.slice(0, 40)}»`);
+      }
+    }
+    // 2) Alvos e peças (botão, campo, cédula, ficha) sob um controle.
+    const pieces = Array.from(
+      document.querySelectorAll(
+        'button, a[href], [role="button"], input, textarea, .sticker, .panel, .chip, .token',
+      ),
+    );
+    for (const p of pieces) {
+      if (skip(p) || !shown(p)) continue;
+      const raw = p.getBoundingClientRect();
+      if (raw.width < 4 || raw.height < 4) continue;
+      const r = visible(p, raw);
+      if (!r) continue;
+      const name = (
+        (p as HTMLElement).innerText ||
+        p.getAttribute("aria-label") ||
+        p.tagName
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 40);
+      for (const z of zone)
+        if (hit(r, z))
+          report(`PEÇA SOB ${z.name}: ${p.tagName.toLowerCase()} «${name}»`);
+    }
+    // 3) Lista rolável cuja área visível alcança um controle e cujo conteúdo
+    //    ocupa a coluna dele: ao rolar, algo passa por baixo.
+    for (const el of Array.from(
+      document.querySelectorAll("*"),
+    ) as HTMLElement[]) {
+      const cs = getComputedStyle(el);
+      if (cs.overflowY !== "auto" && cs.overflowY !== "scroll") continue;
+      if (el.scrollHeight <= el.clientHeight + 1 || skip(el) || !shown(el))
+        continue;
+      const box = el.getBoundingClientRect();
+      for (const z of zone) {
+        if (!hit(box, z)) continue;
+        let right = -Infinity;
+        let left = Infinity;
+        for (const c of Array.from(el.querySelectorAll("*"))) {
+          const r = c.getBoundingClientRect();
+          if (r.width < 1 || r.height < 1 || skip(c)) continue;
+          right = Math.max(right, r.right);
+          left = Math.min(left, r.left);
+        }
+        if (right > z.left && left < z.right)
+          report(
+            `LISTA ROLA SOB ${z.name}: ${el.tagName.toLowerCase()}.${String(el.className).split(" ").slice(0, 3).join(".")}`,
+          );
+      }
+    }
+    return out;
+  }, gap);
+}

@@ -37,11 +37,12 @@ const [host, p2, p3] = [await session(), await session(), await session()];
 const H = `shf_h_${tag}`;
 const P2 = `shf_2_${tag}`;
 const P3 = `shf_3_${tag}`;
+const BOT4 = `shf_b4_${tag}`;
 const { id: wordId } = await row(`SELECT id FROM public.words WHERE meaning IS NOT NULL LIMIT 1`);
 // Os cenários reaproveitam os mesmos ids (e sessões): limpa sala E jogadores.
 const dropRoom = async (rid) => {
   await db.query(`DELETE FROM public.rooms WHERE id = $1`, [rid]);
-  await db.query(`DELETE FROM public.players WHERE id = ANY($1)`, [[H, P2, P3]]);
+  await db.query(`DELETE FROM public.players WHERE id = ANY($1)`, [[H, P2, P3, BOT4]]);
 };
 
 // Sala em 'writing', coordenador = host, prazo longe (o cron não interfere).
@@ -56,7 +57,13 @@ async function roomInWriting() {
     });
     if (e) throw e;
   }
-  await host.rpc("start_game", { p_room_id: room.id });
+  // mínimo de 4 participantes (2º playtest 2026-10-20): + 1 bot na mesa
+  await db.query(
+    "INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot) VALUES ($2, $1, 'Bot4', '🐙', '#444', true)",
+    [room.id, BOT4],
+  );
+  const sg = await host.rpc("start_game", { p_room_id: room.id });
+  if (sg.data?.ok !== true) throw new Error(`start_game falhou: ${JSON.stringify(sg.data ?? sg.error)}`);
   await db.query(`UPDATE public.rooms SET current_coordinator = $2 WHERE id = $1`, [room.id, H]);
   await host.rpc("choose_word", { p_room_id: room.id, p_word_id: wordId, p_duration_sec: 60 });
   // Fase de escrita "em andamento há 1 min" (fora da tolerância de 3 s do

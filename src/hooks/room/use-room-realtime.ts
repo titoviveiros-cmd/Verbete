@@ -8,6 +8,13 @@ import type { Room, Player, Vote } from "@/lib/room";
 import type { RoundExtension } from "@/hooks/use-room";
 import { reportOpsEvent } from "@/lib/ops";
 import { withPendingConfig } from "@/lib/room-config-writer";
+import {
+  NUDGE_BROADCAST,
+  NUDGE_EVENT,
+  nudgePayload,
+  type NudgeKind,
+} from "@/lib/sync-nudge";
+import { keepsLocalPhase } from "@/lib/transition-floor";
 import type { RoomCtx } from "./ctx";
 
 export function useRoomRealtime(ctx: RoomCtx) {
@@ -22,6 +29,7 @@ export function useRoomRealtime(ctx: RoomCtx) {
     lastEventAtRef,
     lastRoomSigRef,
     reloadRef,
+    roundSyncRef,
     playersRef,
     roomRef,
   } = ctx;
@@ -51,7 +59,10 @@ export function useRoomRealtime(ctx: RoomCtx) {
             const nr = p.new as unknown as Room;
             // Eco atrasado de uma configuração antiga do host não desfaz o
             // último toque (room-config-writer); para os demais, no-op.
-            setRoom(withPendingConfig(nr, "realtime"));
+            const next = withPendingConfig(nr, "realtime");
+            // Nem eco de uma escrita de antes do commit de uma virada
+            // otimista deste aparelho (Red Team 2026-10-22).
+            setRoom((cur) => (cur && keepsLocalPhase(cur, next) ? cur : next));
             // Relay: anuncia para os outros clientes a nova assinatura
             // (status, round). Quem não recebeu o postgres_changes via DB
             // ainda assim escuta esse broadcast e se cura sozinho.
@@ -67,6 +78,14 @@ export function useRoomRealtime(ctx: RoomCtx) {
           }
         },
       )
+      // Aviso de outro aparelho: há estado novo nesta rodada — relê na
+      // hora (agrupado). O aviso não traz dado nenhum além de sala/rodada.
+      .on("broadcast", { event: NUDGE_BROADCAST }, ({ payload }) => {
+        const p = payload as { room_id?: string } | null;
+        if (p?.room_id !== roomId) return;
+        lastEventAtRef.current = Date.now();
+        roundSyncRef.current?.();
+      })
       .on("broadcast", { event: "room-sync" }, ({ payload }) => {
         lastEventAtRef.current = Date.now();
         const sig = (payload as { sig?: string })?.sig;
@@ -228,7 +247,22 @@ export function useRoomRealtime(ctx: RoomCtx) {
           reportOpsEvent("reconnect", { channel_status: status });
         }
       });
+    const onNudge = (e: Event) => {
+      const d = (e as CustomEvent).detail as
+        { roomId?: string; round?: number; kind?: NudgeKind } | undefined;
+      if (!d?.roomId || d.roomId !== roomId || !d.kind) return;
+      roundSyncRef.current?.();
+      void ch
+        .send({
+          type: "broadcast",
+          event: NUDGE_BROADCAST,
+          payload: nudgePayload(roomId, d.round ?? 0, d.kind),
+        })
+        .catch(() => {});
+    };
+    window.addEventListener(NUDGE_EVENT, onNudge);
     return () => {
+      window.removeEventListener(NUDGE_EVENT, onNudge);
       supabase.removeChannel(ch);
     };
     // setters/refs são estáveis; deps idênticas ao monólito original

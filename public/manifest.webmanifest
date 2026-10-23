@@ -1,11 +1,11 @@
 {
   "name": "Verbete",
   "short_name": "Verbete",
-  "description": "O jogo de blefe com palavras raras: invente, engane e descubra a verdade. Multiplayer de 2 a 12 jogadores.",
+  "description": "O jogo de blefe com palavras raras: invente, engane e descubra a verdade. Multiplayer de 4 a 12 jogadores.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#150a2c",
-  "theme_color": "#150a2c",
+  "background_color": "#fbf3e3",
+  "theme_color": "#fbf3e3",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

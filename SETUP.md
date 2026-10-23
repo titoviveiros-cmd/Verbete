@@ -129,7 +129,8 @@ configurado em `capacitor.config.ts`.
 ## 6. Verificação pós-setup (roteiro de teste)
 
 1. `npm run dev`, abra duas abas anônimas → criar sala numa, entrar com o
-   código na outra (mín. 2 jogadores).
+   código na outra e complete a mesa com "Encher até 4" (mín. 4
+   participantes, humanos + bots).
 2. Jogue uma rodada completa: escolher palavra → escrever → votar →
    revelação (deve mostrar o card "📖 Sobre a palavra") → placar com
    +100/+50 → próxima rodada automática após 8s.

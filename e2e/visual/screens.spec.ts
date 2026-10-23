@@ -10,9 +10,16 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { installSupabaseMock, type MockBackend } from "./supabase-mock";
-import { blockedButtons, floatingConflicts } from "./occlusion";
+import {
+  blockedButtons,
+  clippedByAncestors,
+  floatingConflicts,
+  floatingZoneIntrusions,
+  truncatedTexts,
+} from "./occlusion";
 import {
   ROOM_CODE,
+  ROOM_ID,
   dailyBackend,
   homeBackend,
   roomBackend,
@@ -21,6 +28,7 @@ import {
 } from "./fixtures";
 
 const ALL_VIEWPORTS = [
+  [360, 800],
   [375, 812],
   [390, 844],
   [430, 932],
@@ -58,11 +66,12 @@ const room = (
   phase: Phase,
   ready: Screen["ready"],
   loggedIn = false,
+  opts: { guest?: boolean; voted?: boolean } = {},
 ): Screen => ({
   name: phase,
   path: `/room/${ROOM_CODE}`,
-  backend: () => roomBackend(phase, { loggedIn }),
-  storage: roomStorage(phase),
+  backend: () => roomBackend(phase, { loggedIn, ...opts }),
+  storage: roomStorage(phase, opts),
   ready,
 });
 
@@ -154,12 +163,15 @@ const SCREENS: Screen[] = [
     await page.waitForTimeout(1200);
   }),
   room("reveal", async (page) => {
+    // Verdade primeiro (~0,5 s); a captura espera o estado FINAL — todos os
+    // blefes revelados e a contagem para o placar — para checar o layout cheio.
     await expect(
       page.getByText("A definição verdadeira", { exact: false }).first(),
-    ).toBeVisible({
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("📊 Placar em").first()).toBeVisible({
       timeout: 25_000,
     });
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(1200);
   }),
   room("scoreboard", async (page) => {
     await expect(
@@ -168,6 +180,13 @@ const SCREENS: Screen[] = [
       timeout: 10_000,
     });
     await page.waitForTimeout(5500);
+    // "Próxima rodada" destrava ~2,5 s depois da cortina (2026-10-22): a
+    // captura confere o botão já ativo
+    await page.waitForFunction(
+      () => !document.querySelector('[data-advance-ready="0"]'),
+      undefined,
+      { timeout: 10_000 },
+    );
   }),
   room(
     "finished",
@@ -181,9 +200,35 @@ const SCREENS: Screen[] = [
   ),
 ];
 
+// Variações do playtest 2026-10-20: a cédula escolhida (anel rosa) e as
+// fases vistas por quem NÃO é o host (sem "Avançar agora"/"Próxima rodada").
+const variant = (
+  name: string,
+  base: string,
+  opts: { guest?: boolean; voted?: boolean },
+  ready?: Screen["ready"],
+) => {
+  const b = SCREENS.find((s) => s.name === base)!;
+  const phase = base as Phase;
+  SCREENS.push({
+    ...room(phase, ready ?? b.ready, base === "finished", opts),
+    name,
+  });
+};
+variant("voting-votado", "voting", { voted: true }, async (page) => {
+  await expect(page.getByLabel("Voto registrado")).toBeVisible();
+  await page.waitForTimeout(1200);
+});
+variant("lobby-convidado", "lobby", { guest: true });
+variant("reveal-convidado", "reveal", { guest: true });
+variant("scoreboard-convidado", "scoreboard", { guest: true });
+
 // Tema claro (creme): mesmas telas-chave com a preferência salva, para
-// conferir contraste e as peças fora da noite roxa.
-const LIGHT = ["home-logada", "voting", "reveal", "diario-resultado"];
+// conferir contraste e as peças fora da noite roxa. VISUAL_LIGHT=all: todas.
+const LIGHT =
+  process.env.VISUAL_LIGHT === "all"
+    ? SCREENS.map((s) => s.name)
+    : ["home-logada", "voting", "reveal", "diario-resultado"];
 for (const name of LIGHT) {
   const base = SCREENS.find((s) => s.name === name)!;
   SCREENS.push({
@@ -193,97 +238,158 @@ for (const name of LIGHT) {
   });
 }
 
+async function checkScreen(page: Page, screen: Screen, w: number, h: number) {
+  await page.setViewportSize({ width: w, height: h });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (e) => pageErrors.push(String(e)));
+  const log = await installSupabaseMock(page, screen.backend());
+  // Padrão do app virou CLARO (2026-10-21): as telas-base seguem conferindo
+  // a noite roxa com o escuro SALVO; as "-claro" sobrescrevem com "light".
+  await page.addInitScript(
+    (entries) => {
+      for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
+    },
+    { "verbete:theme": "dark", ...(screen.storage ?? {}) },
+  );
+  // O dev server às vezes recarrega a página logo após a 1ª carga
+  // (otimização de dependências do Vite / auto-update de bundle): se
+  // houve recarga durante a espera, espera de novo na página nova.
+  let navigations = 0;
+  page.on("framenavigated", (f) => {
+    if (f === page.mainFrame()) navigations++;
+  });
+  await page.goto(screen.path);
+  await screen.ready(page);
+  if (navigations > 1) await screen.ready(page);
+
+  // Nada pode empurrar a página para os lados.
+  const overflow = await page.evaluate(() => {
+    const el = document.scrollingElement ?? document.documentElement;
+    return el.scrollWidth - window.innerWidth;
+  });
+  expect(overflow, "rolagem horizontal na página").toBeLessThanOrEqual(1);
+  expect(pageErrors, "erros de página").toEqual([]);
+  // O mock aborta qualquer rota desconhecida do Supabase: se algo
+  // escapou, a fixture está incompleta (e a tela pode estar mentindo).
+  expect(log.aborted, "chamadas ao Supabase sem resposta simulada").toEqual([]);
+
+  if (AXE) {
+    await page.addScriptTag({ content: AXE });
+    const violations = await page.evaluate(async () => {
+      const w = window as unknown as {
+        axe: {
+          run: (
+            ctx: Document,
+            opts: object,
+          ) => Promise<{
+            violations: Array<{
+              id: string;
+              nodes: Array<{
+                target: string[];
+                any: Array<{ data?: { fgColor?: string } }>;
+              }>;
+            }>;
+          }>;
+        };
+      };
+      const r = await w.axe.run(document, {
+        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+      });
+      return r.violations
+        .map((v) => ({
+          id: v.id,
+          // Falso positivo conhecido (scripts/audit-a11y.mjs): o axe lê o
+          // contorno roxo do wordmark como cor do texto.
+          nodes: v.nodes
+            .filter(
+              (n) =>
+                !(
+                  v.id === "color-contrast" &&
+                  n.any[0]?.data?.fgColor?.toLowerCase() === "#4c1a8f"
+                ),
+            )
+            .map((n) => n.target.join(" ")),
+        }))
+        .filter((v) => v.nodes.length > 0);
+    });
+    expect(violations, "violações WCAG (axe)").toEqual([]);
+  }
+
+  if (SHOTS_DIR) {
+    mkdirSync(SHOTS_DIR, { recursive: true });
+    await page.screenshot({
+      path: join(SHOTS_DIR, `${screen.name}-${w}x${h}.png`),
+    });
+  }
+
+  // "Compartilhar resultado" é da partida: só no fim de jogo. Na
+  // revelação, o card é "Compartilhar rodada" (playtest 2026-10-20).
+  if (screen.path.startsWith("/room/")) {
+    await expect(
+      page.getByText("Compartilhar resultado"),
+      "Compartilhar resultado fora do fim de jogo",
+    ).toHaveCount(screen.name.startsWith("finished") ? 1 : 0);
+  }
+
+  // Nenhum compartilhamento DURANTE a partida (playtest 2026-10-20, 2ª
+  // rodada): só o convite no lobby e o resultado no fim de jogo.
+  if (
+    /^(choosing|writing|shuffling|voting|reveal|scoreboard)/.test(screen.name)
+  ) {
+    await expect(
+      page.getByRole("button", { name: /Compartilhar/ }),
+      "compartilhar durante a partida",
+    ).toHaveCount(0);
+  }
+
+  // Playtest 2026-10-20: corte por contêiner, reticências e peças fixas
+  // (barra de reações) sobre o conteúdo. Antes do blockedButtons, que rola.
+  expect
+    .soft(await clippedByAncestors(page), "cortado por contêiner")
+    .toEqual([]);
+  expect.soft(await truncatedTexts(page), "texto truncado").toEqual([]);
+  expect
+    .soft(
+      await floatingZoneIntrusions(page),
+      "conteúdo sob peça fixa (barra de reações)",
+    )
+    .toEqual([]);
+
+  // Nenhum botão cortado na lateral nem coberto por algo flutuante
+  // (barra de reações, chat, rodapé fixo). Depois da captura: rola a página.
+  expect(await blockedButtons(page), "botão cortado/coberto").toEqual([]);
+}
+
 for (const screen of SCREENS) {
   if (ONLY && !ONLY.includes(screen.name)) continue;
   for (const [w, h] of VIEWPORTS) {
     test(`${screen.name} @ ${w}x${h}`, async ({ page }) => {
       test.setTimeout(90_000);
-      await page.setViewportSize({ width: w, height: h });
-      const pageErrors: string[] = [];
-      page.on("pageerror", (e) => pageErrors.push(String(e)));
-      const log = await installSupabaseMock(page, screen.backend());
-      if (screen.storage) {
-        await page.addInitScript((entries) => {
-          for (const [k, v] of Object.entries(entries))
-            localStorage.setItem(k, v);
-        }, screen.storage);
-      }
-      // O dev server às vezes recarrega a página logo após a 1ª carga
-      // (otimização de dependências do Vite / auto-update de bundle): se
-      // houve recarga durante a espera, espera de novo na página nova.
-      let navigations = 0;
-      page.on("framenavigated", (f) => {
-        if (f === page.mainFrame()) navigations++;
-      });
-      await page.goto(screen.path);
-      await screen.ready(page);
-      if (navigations > 1) await screen.ready(page);
+      await checkScreen(page, screen, w, h);
+    });
+  }
+}
 
-      // Nada pode empurrar a página para os lados.
-      const overflow = await page.evaluate(() => {
-        const el = document.scrollingElement ?? document.documentElement;
-        return el.scrollWidth - window.innerWidth;
-      });
-      expect(overflow, "rolagem horizontal na página").toBeLessThanOrEqual(1);
-      expect(pageErrors, "erros de página").toEqual([]);
-      // O mock aborta qualquer rota desconhecida do Supabase: se algo
-      // escapou, a fixture está incompleta (e a tela pode estar mentindo).
-      expect(log.aborted, "chamadas ao Supabase sem resposta simulada").toEqual(
-        [],
-      );
-
-      if (AXE) {
-        await page.addScriptTag({ content: AXE });
-        const violations = await page.evaluate(async () => {
-          const w = window as unknown as {
-            axe: {
-              run: (
-                ctx: Document,
-                opts: object,
-              ) => Promise<{
-                violations: Array<{
-                  id: string;
-                  nodes: Array<{
-                    target: string[];
-                    any: Array<{ data?: { fgColor?: string } }>;
-                  }>;
-                }>;
-              }>;
-            };
-          };
-          const r = await w.axe.run(document, {
-            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
-          });
-          return r.violations
-            .map((v) => ({
-              id: v.id,
-              // Falso positivo conhecido (scripts/audit-a11y.mjs): o axe lê o
-              // contorno roxo do wordmark como cor do texto.
-              nodes: v.nodes
-                .filter(
-                  (n) =>
-                    !(
-                      v.id === "color-contrast" &&
-                      n.any[0]?.data?.fgColor?.toLowerCase() === "#4c1a8f"
-                    ),
-                )
-                .map((n) => n.target.join(" ")),
-            }))
-            .filter((v) => v.nodes.length > 0);
-        });
-        expect(violations, "violações WCAG (axe)").toEqual([]);
-      }
-
-      if (SHOTS_DIR) {
-        mkdirSync(SHOTS_DIR, { recursive: true });
-        await page.screenshot({
-          path: join(SHOTS_DIR, `${screen.name}-${w}x${h}.png`),
-        });
-      }
-
-      // Nenhum botão cortado na lateral nem coberto por algo flutuante
-      // (barra de reações, chat, rodapé fixo). Depois da captura: rola a página.
-      expect(await blockedButtons(page), "botão cortado/coberto").toEqual([]);
+// O celular mais estreito do playtest (Android 360×800) roda SEMPRE, também
+// no CI: "Chame a galera!" inteiro, "Avançar agora" e "Próxima rodada"
+// inteiros, anel rosa da cédula sem corte e nada sob o 💬/▾.
+const NARROW = [
+  "lobby",
+  "lobby-convidado",
+  "writing",
+  "voting-votado",
+  "reveal",
+  "reveal-convidado",
+  "scoreboard",
+  "finished",
+];
+if (!VIEWPORTS.some(([w, h]) => w === 360 && h === 800)) {
+  for (const name of NARROW) {
+    const screen = SCREENS.find((s) => s.name === name)!;
+    if (ONLY && !ONLY.includes(screen.name)) continue;
+    test(`${screen.name} @ 360x800 (celular estreito)`, async ({ page }) => {
+      test.setTimeout(90_000);
+      await checkScreen(page, screen, 360, 800);
     });
   }
 }
@@ -396,4 +502,65 @@ for (const [w, h] of [
     expect(votes(), "um toque na cédula = um voto").toBe(1);
     await expect(cancel).toBeHidden(); // votar não abre a denúncia
   });
+}
+
+// Transição de fase nova (playtest 2026-10-20): mascote + rodada + título em
+// ouro + fio dourado. No celular mais estreito, claro e escuro: título e dica
+// inteiros, nada cortado, nada fora da tela. A virada é a mesma que o app faz
+// ao receber a fase nova (evento de atualização otimista da sala).
+const TRANSITIONS = [
+  { status: "choosing", title: "Escolha da Palavra", round: 4 },
+  { status: "writing", title: "Hora de Inventar", round: 4 },
+  { status: "scoreboard", title: "Placar da Rodada", round: 3 },
+  { status: "finished", title: "Fim de Jogo", round: 3 },
+] as const;
+for (const tr of TRANSITIONS) {
+  for (const theme of ["escuro", "claro"] as const) {
+    test(`transição ${tr.status} (${theme}) @ 360x800: título inteiro, nada cortado`, async ({
+      page,
+    }) => {
+      test.setTimeout(60_000);
+      await page.setViewportSize({ width: 360, height: 800 });
+      await installSupabaseMock(page, roomBackend("lobby"));
+      await page.addInitScript(
+        (entries) => {
+          for (const [k, v] of Object.entries(entries))
+            localStorage.setItem(k, v);
+        },
+        {
+          ...roomStorage("lobby"),
+          "verbete:theme": theme === "claro" ? "light" : "dark",
+        },
+      );
+      await page.goto(`/room/${ROOM_CODE}`);
+      await expect(page.getByText("Jogadores (4/12)")).toBeVisible();
+      await page.waitForTimeout(600);
+      await page.evaluate(
+        ([roomId, status, round]) =>
+          window.dispatchEvent(
+            new CustomEvent("room:optimistic-update", {
+              detail: { roomId, patch: { status, current_round: round } },
+            }),
+          ),
+        [ROOM_ID, tr.status, tr.round] as const,
+      );
+      const overlay = page.locator(`[data-phase-announcer="${tr.status}"]`);
+      await expect(overlay.locator("h2")).toHaveText(tr.title);
+      await page.waitForTimeout(1000); // entrada completa (≈0,9 s)
+      if (SHOTS_DIR) {
+        mkdirSync(SHOTS_DIR, { recursive: true });
+        await page.screenshot({
+          path: join(SHOTS_DIR, `transicao-${tr.status}-${theme}-360x800.png`),
+        });
+      }
+      for (const el of await overlay.locator("h2, p").all()) {
+        const b = (await el.boundingBox())!;
+        expect(b.x, "fora da tela à esquerda").toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width, "fora da tela à direita").toBeLessThanOrEqual(
+          360,
+        );
+      }
+      expect(await truncatedTexts(page), "texto truncado").toEqual([]);
+    });
+  }
 }

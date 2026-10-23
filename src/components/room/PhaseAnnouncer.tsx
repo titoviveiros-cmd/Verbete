@@ -1,217 +1,282 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { memo, useEffect, useRef, useState } from "react";
+import { Mascot } from "@/components/Mascot";
 import { hapticTick } from "@/lib/sound";
+import { NARRATIVE_MIN_VISIBLE_MS } from "@/lib/transition-floor";
 
-// Tempo total real da transição, incluindo o fade-out do overlay + buffer.
-// Componentes de fases (Reveal/Scoreboard) usam essa constante para só iniciar
-// contagens regressivas APÓS a cortina sair completamente da tela e o overlay
-// estar totalmente invisível, garantindo leitura limpa do conteúdo.
-export const PHASE_ANNOUNCER_TOTAL_MS = 3800;
-const CURTAIN_VISIBLE_MS = 3000;
-// A etiqueta de incentivo aparece por menos tempo que a cortina:
-const LABEL_VISIBLE_MS = 1800;
+// Tempo total real da transição, incluindo a saída do overlay + folga. O
+// Placar usa essa constante para só iniciar a contagem regressiva DEPOIS que
+// a transição sai da tela, e o alerta de "sua vez" toca depois dela.
+export const PHASE_ANNOUNCER_TOTAL_MS = 3500;
+// Playtest 2026-10-20: a cortina antiga (3 s de varredura com faíscas,
+// granulado e um emoji gigante) parecia genérica e lenta. A nova é um
+// verbete da marca — o mascote-livro, a rodada, o título em ouro com aresta e
+// um fio dourado que se desenha. Só transform e opacidade: nada de
+// backdrop-blur em tela cheia (caro no Android). Tempo de tela: 2,8 s (2º
+// playtest de 2026-10-20: 2,2 s era rápido para ler rodada + título + dica;
+// a dica entra em ~0,3 s e fica ~2,5 s legível).
+const CURTAIN_VISIBLE_MS = 2800;
+const EXIT_S = 0.45;
 
-const LABELS: Record<string, { title: string; emoji: string; tint: string }> = {
-  lobby: {
-    title: "Sala de Espera",
-    emoji: "🛋️",
-    tint: "from-sun/30 via-transparent to-transparent",
-  },
+type Mood = "idle" | "excited" | "thinking" | "wow" | "sad";
+type Cfg = {
+  title: string;
+  hint: string;
+  mood: Mood;
+  /** Halo atrás do mascote: a cor da fase no resto do jogo. */
+  halo: string;
+  eyebrow: (round: number) => string;
+};
+
+const LABELS: Record<string, Cfg> = {
   choosing: {
     title: "Escolha da Palavra",
-    emoji: "📖",
-    tint: "from-coral/30 via-transparent to-transparent",
+    hint: "Uma palavra rara vai sair do dicionário",
+    mood: "thinking",
+    halo: "rgb(244 197 66 / 0.32)",
+    eyebrow: (r) => `Rodada ${r}`,
   },
   writing: {
     title: "Hora de Inventar",
-    emoji: "✍️",
-    tint: "from-mint/30 via-transparent to-transparent",
+    hint: "Escreva um significado que engane a mesa",
+    mood: "excited",
+    halo: "rgb(255 63 174 / 0.3)",
+    eyebrow: (r) => `Rodada ${r}`,
   },
-  // shuffling: intencionalmente sem cortina — a própria fase Shuffling já mostra
-  // uma tela cheia animada "Embaralhando as cédulas…", evitando duplicidade.
-  // voting: intencionalmente sem cortina — a fase Shuffling imediatamente
-  // anterior já é uma tela cheia de transição ("Embaralhando as cédulas"),
-  // então mostrar outra cortina logo depois soa duplicado.
-  reveal: {
-    title: "Revelação!",
-    emoji: "✨",
-    tint: "from-sun/40 via-transparent to-transparent",
-  },
+  // shuffling: intencionalmente sem cortina — a própria fase Shuffling já é
+  // uma tela cheia animada ("Embaralhando as cédulas"), evitando duplicidade.
+  // voting: intencionalmente sem cortina — o embaralhamento imediatamente
+  // anterior já é a transição; outra cortina logo depois soa duplicada.
+  // reveal: intencionalmente sem cortina (2026-10-20, "verdade primeiro") — a
+  // própria Revelação abre com uma preparação de ~0,5 s e mostra a verdade em
+  // seguida; uma cortina atrasaria justamente o momento principal.
   scoreboard: {
     title: "Placar da Rodada",
-    emoji: "🏆",
-    tint: "from-mint/30 via-transparent to-transparent",
+    hint: "Quem enganou quem — e quanto valeu",
+    mood: "wow",
+    halo: "rgb(45 212 191 / 0.28)",
+    eyebrow: (r) => `Fim da rodada ${r}`,
   },
   finished: {
     title: "Fim de Jogo",
-    emoji: "🎉",
-    tint: "from-sun/40 via-transparent to-transparent",
+    hint: "E o grande verbetista da noite é…",
+    mood: "excited",
+    halo: "rgb(244 197 66 / 0.38)",
+    eyebrow: () => "Partida encerrada",
   },
 };
 
+type Curtain = { status: string; round: number; at: number };
+
 export const PhaseAnnouncer = memo(function PhaseAnnouncer({
   status,
+  round = 0,
 }: {
   status: string;
+  round?: number;
 }) {
-  const [show, setShow] = useState(false);
-  const [labelOn, setLabelOn] = useState(false);
+  // A cortina vive à parte da fase (playtest 2026-10-22, coordenador bot):
+  // antes, qualquer virada cortava a da tela de um quadro para o outro e uma
+  // fase nova trocava a cortina na hora — "Escolha da Palavra" piscava por
+  // ~0,5 s antes de "Hora de Inventar". Agora: virada SEM cortina própria
+  // (embaralhamento, votação…) deixa a da tela terminar o seu tempo, com a
+  // saída animada; cortina nova espera a atual ficar NARRATIVE_MIN_VISIBLE_MS
+  // à vista; e uma cortina na fila que a fase já deixou para trás não entra.
+  const [active, setActive] = useState<Curtain | null>(null);
+  const activeRef = useRef<Curtain | null>(null);
   const prev = useRef(status);
+  const roundRef = useRef(round);
+  roundRef.current = round;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reduce = useReducedMotion();
+
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (queueTimer.current) clearTimeout(queueTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (prev.current === status) return;
     prev.current = status;
-    if (status === "lobby") return;
-    setShow(true);
-    setLabelOn(true);
-    hapticTick(); // Fase 5: tique tátil na virada de fase
-    const tLabel = setTimeout(() => setLabelOn(false), LABEL_VISIBLE_MS);
-    const tShow = setTimeout(() => setShow(false), CURTAIN_VISIBLE_MS);
-    return () => {
-      clearTimeout(tLabel);
-      clearTimeout(tShow);
+    if (queueTimer.current) clearTimeout(queueTimer.current);
+    queueTimer.current = null;
+    if (!LABELS[status]) return;
+    const cur = activeRef.current;
+    // a fase voltou à que já está anunciada: nada a trocar
+    if (cur && cur.status === status && cur.round === roundRef.current) return;
+    const start = () => {
+      queueTimer.current = null;
+      const next = { status, round: roundRef.current, at: Date.now() };
+      activeRef.current = next;
+      setActive(next);
+      hapticTick(); // Fase 5: tique tátil na virada de fase
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => {
+        hideTimer.current = null;
+        activeRef.current = null;
+        setActive(null);
+      }, CURTAIN_VISIBLE_MS);
     };
+    const wait = cur ? cur.at + NARRATIVE_MIN_VISIBLE_MS - Date.now() : 0;
+    if (wait > 0) queueTimer.current = setTimeout(start, wait);
+    else start();
   }, [status]);
 
-  const cfg = LABELS[status];
-  if (!cfg) return null;
+  const cfg = active ? LABELS[active.status] : undefined;
+
+  // Entrada em cascata curta (≈0,7 s até o último elemento); com movimento
+  // reduzido, só opacidade.
+  const rise = (delay: number, y = 10) =>
+    reduce
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { duration: 0.2 },
+        }
+      : {
+          initial: { opacity: 0, y },
+          animate: { opacity: 1, y: 0 },
+          transition: {
+            delay,
+            type: "spring" as const,
+            stiffness: 260,
+            damping: 22,
+          },
+        };
 
   return (
     <>
-      {/* Fase 7: leitor de tela anuncia a fase (a cortina é só visual) */}
-      <span className="sr-only" role="status" aria-live="polite">
-        {show ? cfg.title : ""}
-      </span>
+      {/* Fase 7: leitor de tela anuncia a fase (a transição é só visual) */}
+      {(cfg || LABELS[status]) && (
+        <span className="sr-only" role="status" aria-live="polite">
+          {cfg ? cfg.title : ""}
+        </span>
+      )}
+      {/* O toque não atravessa a cortina (Red Team 2026-10-20): ela é opaca,
+          então um toque "para pular" acertava às cegas o botão da fase por
+          baixo (Sortear palavra, Próxima rodada, Sair). A barreira some junto
+          com o tempo de tela — no fade de saída (0,45 s) já dá para tocar. */}
+      {active && (
+        <div
+          aria-hidden
+          data-phase-announcer-shield
+          className="fixed inset-0 z-50"
+        />
+      )}
       <AnimatePresence>
-        {show && (
+        {active && cfg && (
           <motion.div
-            key={status}
+            key={`${active.status}:${active.round}`}
+            data-phase-announcer={active.status}
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.6 }}
+            animate={{ opacity: 1, transition: { duration: 0.22 } }}
+            exit={{ opacity: 0, transition: { duration: EXIT_S } }}
             className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center overflow-hidden"
           >
-            {/* underlay opaco — garante que NENHUMA informação da fase anterior/próxima
-              fique visível por trás do card de transição. Cobre a tela toda durante
-              quase toda a cortina e só some no finalzinho junto com o overlay. */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: [0, 1, 1, 1] }}
-              transition={{ duration: 0.5, times: [0, 0.4, 0.9, 1] }}
-              className="absolute inset-0 bg-background"
-            />
-            {/* deep shadow base — anchors the curtain */}
-            <motion.div
-              initial={{ x: "-115%", skewX: "-14deg" }}
-              animate={{ x: "115%", skewX: "-14deg" }}
-              transition={{ duration: 2.8, ease: [0.77, 0, 0.18, 1] }}
-              className="absolute -inset-y-10 -inset-x-20 bg-gradient-to-r from-transparent via-background/95 to-transparent backdrop-blur-md"
-            />
-            {/* tinted main curtain */}
-            <motion.div
-              initial={{ x: "-115%", skewX: "-12deg" }}
-              animate={{ x: "115%", skewX: "-12deg" }}
-              transition={{
-                duration: 2.8,
-                ease: [0.77, 0, 0.18, 1],
-                delay: 0.12,
-              }}
-              className={`absolute -inset-y-10 -inset-x-20 bg-gradient-to-r ${cfg.tint}`}
-            />
-            {/* bright leading edge — the "blade" */}
-            <motion.div
-              initial={{ x: "-115%", skewX: "-12deg" }}
-              animate={{ x: "115%", skewX: "-12deg" }}
-              transition={{
-                duration: 2.8,
-                ease: [0.77, 0, 0.18, 1],
-                delay: 0.06,
-              }}
-              className="absolute -inset-y-10 w-[18vw] bg-gradient-to-r from-transparent via-white/70 to-transparent mix-blend-overlay blur-md"
-            />
-            {/* trailing shimmer */}
-            <motion.div
-              initial={{ x: "-115%", skewX: "-12deg" }}
-              animate={{ x: "115%", skewX: "-12deg" }}
-              transition={{
-                duration: 3.0,
-                ease: [0.7, 0, 0.2, 1],
-                delay: 0.28,
-              }}
-              className="absolute -inset-y-10 w-[10vw] bg-gradient-to-r from-transparent via-white/30 to-transparent blur-2xl"
-            />
-            {/* film grain shimmer pass — fade out junto com a cortina */}
-            <motion.div
-              initial={{ x: "-110%", opacity: 0.4 }}
-              animate={{ x: "110%", opacity: [0.4, 0.4, 0] }}
-              transition={{
-                duration: 2.6,
-                ease: [0.65, 0, 0.35, 1],
-                delay: 0.4,
-                times: [0, 0.75, 1],
-              }}
+            {/* fundo opaco: nada da fase anterior/próxima aparece por trás */}
+            <div className="absolute inset-0 bg-background" />
+            <div
               className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  "repeating-linear-gradient(115deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 9px)",
-              }}
+              style={{ background: "var(--stage-glow)" }}
             />
-            {/* sparkle particles riding the curtain */}
-            {[...Array(7)].map((_, i) => (
-              <motion.span
-                key={i}
-                initial={{ x: "-20vw", opacity: 0, scale: 0.4 }}
-                animate={{
-                  x: "120vw",
-                  opacity: [0, 1, 1, 0],
-                  scale: [0.4, 1.1, 0.9, 0.4],
-                }}
-                transition={{
-                  duration: 2.8,
-                  ease: [0.77, 0, 0.18, 1],
-                  delay: 0.1 + i * 0.18,
-                }}
-                className="absolute w-2 h-2 rounded-full bg-white shadow-[0_0_18px_6px_rgba(255,255,255,0.8)]"
-                style={{ top: `${15 + i * 11}%` }}
-              />
-            ))}
-            {/* radial glow pulse — desaparece bem antes do fim da transição */}
+            {/* halo da fase — uma cor só, a mesma da fase no resto do jogo */}
             <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: [0, 1.4, 1.1], opacity: [0, 0.55, 0] }}
-              transition={{ duration: 2.0, ease: "easeOut", delay: 0.3 }}
-              className="absolute w-[120vmin] h-[120vmin] rounded-full bg-gradient-radial from-white/25 via-transparent to-transparent blur-3xl"
+              aria-hidden
+              className="absolute aspect-square w-[min(125vw,680px)] rounded-full"
+              style={{
+                background: `radial-gradient(closest-side, ${cfg.halo}, transparent 72%)`,
+              }}
+              initial={{ scale: 0.55, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             />
-            {/* label — desaparece bem antes da cortina */}
-            <AnimatePresence>
-              {labelOn && (
-                <motion.div
-                  initial={{ scale: 0.6, opacity: 0, y: 40, rotate: -4 }}
-                  animate={{ scale: 1, opacity: 1, y: 0, rotate: 0 }}
-                  exit={{ scale: 0.9, opacity: 0, y: -20, rotate: 2 }}
-                  transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative flex flex-col items-center gap-2 px-6 py-4 rounded-3xl bg-card/90 border-2 border-white/20 shadow-2xl backdrop-blur-md max-w-[88vw]"
-                >
-                  <motion.span
-                    initial={{ scale: 0.5, rotate: -20 }}
-                    animate={{ scale: [0.5, 1.3, 1], rotate: [-20, 10, 0] }}
-                    transition={{ duration: 0.7, ease: "easeOut" }}
-                    className="text-5xl drop-shadow-lg"
-                  >
-                    {cfg.emoji}
-                  </motion.span>
-                  <motion.span
-                    initial={{ opacity: 0, letterSpacing: "0.4em" }}
-                    animate={{ opacity: 1, letterSpacing: "0.05em" }}
-                    transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
-                    className="font-display text-xl tracking-wide text-center leading-tight text-balance"
-                  >
-                    {cfg.title}
-                  </motion.span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <motion.div
+              className="relative flex flex-col items-center text-center px-8 max-w-[24rem]"
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, y: -14, transition: { duration: EXIT_S } }
+              }
+            >
+              <motion.div
+                className="relative"
+                initial={
+                  reduce ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.8 }
+                }
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={
+                  reduce
+                    ? { duration: 0.2 }
+                    : { type: "spring", stiffness: 320, damping: 17 }
+                }
+              >
+                {/* sombra de chão: o livro "pousa" no palco */}
+                <div
+                  aria-hidden
+                  className="absolute left-1/2 -translate-x-1/2 -bottom-1 h-4 w-24 rounded-full bg-black/35 blur-md"
+                />
+                <Mascot mood={cfg.mood} size={104} className="relative" />
+              </motion.div>
+              <motion.p
+                className="eyebrow mt-3 !text-[var(--c-gold-low)] tabular-nums"
+                {...rise(0.08, 6)}
+              >
+                {cfg.eyebrow(active.round)}
+              </motion.p>
+              <motion.h2
+                className="font-display text-[34px] min-[400px]:text-[38px] leading-[1.05] mt-1.5 text-balance text-gold-grad"
+                style={{
+                  // aresta dourada (a mesma das peças candy) — dá corpo ao
+                  // ouro no escuro e leitura no tema creme
+                  filter:
+                    "drop-shadow(0 2px 0 var(--c-gold-edge)) drop-shadow(0 8px 22px rgb(244 197 66 / 0.28))",
+                }}
+                {...rise(0.12)}
+              >
+                {cfg.title}
+              </motion.h2>
+              {/* fio do verbete: desenha do centro para as pontas */}
+              <div
+                aria-hidden
+                className="relative mt-3 flex h-3 w-52 items-center justify-center"
+              >
+                <motion.span
+                  className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[var(--c-gold)] to-transparent"
+                  initial={{ scaleX: 0, opacity: reduce ? 0 : 1 }}
+                  animate={{ scaleX: 1, opacity: 1 }}
+                  transition={{
+                    delay: reduce ? 0 : 0.2,
+                    duration: reduce ? 0.2 : 0.6,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                />
+                <motion.span
+                  className="relative h-2 w-2 rotate-45 bg-[var(--c-gold)] shadow-[0_0_10px_rgb(244_197_66/0.8)]"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={
+                    reduce
+                      ? { duration: 0.2 }
+                      : {
+                          delay: 0.28,
+                          type: "spring",
+                          stiffness: 420,
+                          damping: 14,
+                        }
+                  }
+                />
+              </div>
+              <motion.p
+                className="mt-3 text-sm text-muted-foreground font-display text-balance"
+                {...rise(0.3, 6)}
+              >
+                {cfg.hint}
+              </motion.p>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

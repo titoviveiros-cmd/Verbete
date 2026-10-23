@@ -91,11 +91,25 @@ export function ReportButton({
         }}
         aria-label="Reportar definição"
         title="Reportar"
-        // Alvo de toque de 40px (o 🚩 continua pequeno e discreto); a cédula
-        // reserva 48px à direita para ele não cobrir o texto.
-        className="opacity-40 hover:opacity-100 transition text-base shrink-0 min-w-10 min-h-10 flex items-center justify-center rounded-full"
+        // Discreta (playtest 2026-10-20): o 🚩 vermelho no meio da cédula
+        // chamava atenção e ficava onde se toca para votar. Agora é uma
+        // bandeira monocromática pequena, de baixo contraste, no CANTO da
+        // cédula (irmã do botão de voto — tocar nela nunca vota). O alvo de
+        // toque (32px) é maior que o desenho.
+        className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground/55 hover:text-foreground focus-visible:text-foreground transition"
       >
-        🚩
+        <svg
+          aria-hidden
+          viewBox="0 0 16 16"
+          className="w-3.5 h-3.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 14.5V2.5M4 3h7.5l-1.8 2.75L11.5 8.5H4" />
+        </svg>
       </button>
 
       {open &&

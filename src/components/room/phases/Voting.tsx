@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   applyVotingTimeoutOrAdvance,
-  botsVote,
+  castBotVotes,
   castVote,
   revealAndScore,
   type Definition,
@@ -16,7 +16,7 @@ import { getStored } from "@/lib/player-id";
 import { scalePhaseSecs } from "@/lib/game-times";
 import { ReportButton } from "@/components/room/ReportButton";
 import type { RoundExtension } from "@/hooks/use-room";
-import { scrollbarClip } from "@/lib/utils";
+import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -102,23 +102,80 @@ function VotingImpl({
     [voters, roundVotes],
   );
 
-  const botsVotedRef = useRef(false);
+  // Bots votam POR ÚLTIMO (playtest 2026-10-22): o servidor escolhe o voto
+  // deles e só libera depois que todos os humanos votaram — um voto de bot
+  // visível enquanto humanos ainda votam seria uma pista da verdade.
+  // Qualquer aparelho pede (o host primeiro; os demais cobrem se ele saiu
+  // da tela) assim que vê os votos REAIS de todos os humanos; no fim do
+  // prazo, o handler do tempo pede e ESPERA antes de revelar.
+  const humansPending = pending.some((p) => !p.is_bot);
+  const pendingHumans = useMemo(
+    () => pending.filter((p) => !p.is_bot),
+    [pending],
+  );
+  const realHumansPending = voters.some(
+    (p) => !p.is_bot && !validVotes.some((v) => v.voter_id === p.id),
+  );
+  const botsPending = pending.some((p) => p.is_bot);
+  // Último estado em ref: o poll troca a identidade das listas a cada ~0,7 s,
+  // e voteBots precisa ser estável (senão o atraso dos convidados recomeça).
+  const latestRef = useRef({ players, definitions });
+  latestRef.current = { players, definitions };
+  const botsRef = useRef<{
+    round: number;
+    done: boolean;
+    tries: number;
+    inFlight: Promise<void> | null;
+  }>({ round: -1, done: false, tries: 0, inFlight: null });
+  const meId = me?.id;
+  const voteBots = useCallback(
+    (force = false): Promise<void> => {
+      const round = room.current_round;
+      const st = botsRef.current;
+      if (st.round !== round)
+        botsRef.current = { round, done: false, tries: 0, inFlight: null };
+      const cur = botsRef.current;
+      if (cur.done) return Promise.resolve();
+      if (cur.inFlight) return cur.inFlight;
+      // tentativas com recuo; o fim do prazo ainda tenta (force)
+      if (!force && cur.tries >= 4) return Promise.resolve();
+      const { players: ps, definitions: ds } = latestRef.current;
+      const bots = ps.filter((p) => p.is_bot && !p.kicked_at);
+      // Só com o BALLOT real (cédulas com letra): no mount a lista ainda
+      // pode ser o shape da fase de escrita (sem letras) ou estar vazia.
+      const ballot = ds.filter((d) => d.letter && d.round === round);
+      if (!meId || !bots.length || !ballot.length) return Promise.resolve();
+      cur.tries++;
+      const run = castBotVotes(room.id, round, meId, { isHost, bots, ballot })
+        .then((r) => {
+          if (r === "done") cur.done = true;
+        })
+        .catch((e) => {
+          console.error("castBotVotes failed", e);
+        })
+        .then(async () => {
+          await wait(force ? 0 : 600 * cur.tries);
+        })
+        .finally(() => {
+          cur.inFlight = null;
+        });
+      cur.inFlight = run;
+      return run;
+    },
+    [room.id, room.current_round, meId, isHost],
+  );
+  const [botsRetry, setBotsRetry] = useState(0);
   useEffect(() => {
-    if (!isHost) return;
-    if (botsVotedRef.current) return;
-    const bots = players.filter((p) => p.is_bot);
-    if (!bots.length) return;
-    // Só dispara quando o BALLOT real chegou (cédulas com letra) — no
-    // mount a lista ainda pode ser o shape da fase de escrita (sem
-    // letras) ou estar vazia; disparar cedo fazia bots "não votarem" e a
-    // rodada esperar o timer inteiro.
-    const ballot = definitions.filter(
-      (d) => d.letter && d.round === room.current_round,
-    );
-    if (!ballot.length) return;
-    botsVotedRef.current = true;
-    botsVote(room.id, room.current_round, bots, ballot);
-  }, [isHost, players, room.id, room.current_round, definitions]);
+    if (realHumansPending || !botsPending) return;
+    const delay = isHost ? 0 : isDeputy ? 900 : 1800;
+    const t = setTimeout(() => {
+      void voteBots().then(() => {
+        // ainda faltando (servidor viu humano pendente): tenta de novo
+        if (!botsRef.current.done) setBotsRetry((n) => n + 1);
+      });
+    }, delay);
+    return () => clearTimeout(t);
+  }, [realHumansPending, botsPending, isHost, isDeputy, voteBots, botsRetry]);
 
   const revealFiredRef = useRef<number | null>(null);
   const revealInFlightRef = useRef(false);
@@ -180,6 +237,7 @@ function VotingImpl({
   // (revealAndScore é idempotente) após delay maior.
   useEffect(() => {
     if (revealFiredRef.current === room.current_round) return;
+    if (room.paused_at) return; // pausada: o prazo não vale até retomar
     if (remaining > 0 || !room.round_phase_ends_at) return;
 
     if (isHost || isDeputy) {
@@ -200,6 +258,9 @@ function VotingImpl({
               await applyVotingTimeoutOrAdvance(room.id);
             if (extended) return; // sala recebeu +20s/+15s, timer reinicia
             if (advanced) {
+              // prazo acabou com humano sem votar: os bots votam agora — e
+              // a revelação ESPERA o pedido (inclusive um já em voo)
+              await voteBots(true);
               if (revealFiredRef.current === room.current_round) return;
               if (revealInFlightRef.current) return;
               revealInFlightRef.current = true;
@@ -239,6 +300,8 @@ function VotingImpl({
           return;
         }
       }
+      // host e deputy fora: os bots votam antes da revelação
+      await voteBots(true);
       if (revealInFlightRef.current) return;
       revealInFlightRef.current = true;
       const revealed = await revealAndScore(
@@ -260,6 +323,7 @@ function VotingImpl({
     room.id,
     room.current_round,
     room.round_phase_ends_at,
+    room.paused_at,
     pending.length,
   ]);
 
@@ -359,7 +423,7 @@ function VotingImpl({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden w-full max-w-full lg:justify-center lg:gap-3"
+      className="flex-1 flex flex-col gap-1.5 pt-1 min-h-0 relative overflow-x-hidden ring-room lg:justify-center lg:gap-3"
     >
       {/* Halo de urgência nos últimos 3s — vinheta vermelha pulsante */}
       {critical && (
@@ -441,8 +505,10 @@ function VotingImpl({
       )}
 
       <div
-        className="flex flex-col gap-2.5 flex-1 lg:flex-initial min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pt-1 pb-2 w-full max-w-full lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start"
-        style={scrollbarClip()}
+        className="flex flex-col gap-2.5 flex-1 lg:flex-initial min-h-0 overflow-y-auto overflow-x-hidden no-scrollbar no-copy pt-2 pb-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start"
+        // Respiro do anel rosa: a cédula escolhida (ring-neon + escala)
+        // passava da caixa da lista e saía aparada (playtest 2026-10-20).
+        style={scrollbarClip(undefined, RING_GUTTER)}
         onCopy={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -485,8 +551,7 @@ function VotingImpl({
                 disabled={hasVoted || isMine}
                 onClick={() => handleVote(d.id)}
                 className={
-                  "sticker relative w-full flex-1 !rounded-2xl !pl-3 !py-3 text-left flex gap-3 items-center transition " +
-                  (isMine ? "!pr-3 " : "!pr-12 ") +
+                  "sticker relative w-full flex-1 !rounded-2xl !pl-3 !py-3 !pr-3 text-left flex gap-3 items-center transition " +
                   (isPicked ? "ring-neon" : "")
                 }
               >
@@ -513,9 +578,11 @@ function VotingImpl({
                 )}
               </motion.button>
               {!isMine && (
+                // Canto superior direito, fora da área de escolha (a cédula
+                // inteira fica livre para o texto e a letra).
                 <div
                   className={
-                    "absolute right-2 top-1/2 -translate-y-1/2 z-10 " +
+                    "absolute -top-2 -right-1.5 z-10 " +
                     (hasVoted && !isPicked ? "opacity-45" : "")
                   }
                 >
@@ -532,28 +599,31 @@ function VotingImpl({
         })}
       </div>
 
-      {/* .float-lane: no celular em pé, este bloco ocupa a faixa do chat e do
-          ▾ — a lista termina acima deles e o 🚩 da última cédula fica livre. */}
-      <div className="float-lane shrink-0 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground font-display px-2">
+      {/* Status da votação numa linha fina (playtest 2026-10-20): a altura
+          fica com as cédulas. */}
+      <div className="shrink-0 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground font-display px-2 pt-0.5">
         <span className="eyebrow tabular-nums">
           {roundVotes.length}/{voters.length} votaram
         </span>
-        {pending.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-full">
-            {pending.slice(0, 6).map((p) => (
-              <span key={p.id} className="chip !px-2 !py-0.5">
-                <span className="text-sm leading-none">{p.avatar}</span>
-                <span className="text-[11px] text-foreground/85 max-w-[80px] truncate">
-                  {p.nickname}
-                </span>
+        {pendingHumans.length > 0 ? (
+          <>
+            <span aria-hidden>·</span>
+            <span>faltam:</span>
+            {pendingHumans.slice(0, 6).map((p, i) => (
+              <span key={p.id} className="whitespace-nowrap text-foreground/85">
+                {p.avatar} {p.nickname}
+                {i < Math.min(pendingHumans.length, 6) - 1 ? "," : ""}
               </span>
             ))}
-            {pending.length > 6 && (
-              <span className="opacity-70">+{pending.length - 6}</span>
+            {pendingHumans.length > 6 && (
+              <span className="opacity-70">+{pendingHumans.length - 6}</span>
             )}
-          </div>
+          </>
+        ) : pending.length > 0 ? (
+          // só bots faltando: eles votam por último, logo depois dos humanos
+          <span>· 🤖 bots votando…</span>
         ) : (
-          <span className="text-mint">✨ todos votaram!</span>
+          <span className="text-mint">· ✨ todos votaram!</span>
         )}
       </div>
     </motion.div>

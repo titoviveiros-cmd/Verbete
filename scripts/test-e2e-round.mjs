@@ -48,6 +48,22 @@ if (!room?.id) {
 }
 const rid = room.id;
 
+// 1b) mínimo de 4 NO SERVIDOR (2º playtest 2026-10-20): só o host na mesa
+//     (1 participante) e depois host + 2 bots (3) — start_game recusa; a
+//     sala segue no lobby. Chamada direta à RPC não burla a regra.
+const sg1 = await rpc("start_game", { p_room_id: rid });
+check("start_game com 1 participante recusado (min_players)", sg1?.ok === false && sg1?.reason === "min_players", JSON.stringify(sg1));
+await db.query(
+  "INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot) VALUES ($2, $1, 'Pre1', '🐙', '#444', true), ($3, $1, 'Pre2', '🐳', '#555', true)",
+  [rid, "e2e_pre1", "e2e_pre2"],
+);
+const sg3 = await rpc("start_game", { p_room_id: rid });
+check("start_game com 3 participantes recusado (min_players)", sg3?.ok === false && sg3?.reason === "min_players" && sg3?.players === 3, JSON.stringify(sg3));
+const lobbyStill = await db.query("SELECT status FROM public.rooms WHERE id = $1", [rid]);
+check("sala segue no lobby depois das recusas", lobbyStill.rows[0]?.status === "lobby", lobbyStill.rows[0]?.status);
+// tira os 2 bots extras: o resto do teste segue com a mesa original
+await db.query("DELETE FROM public.players WHERE id = ANY($1)", [["e2e_pre1", "e2e_pre2"]]);
+
 // 2) bots direto no DB (setup de teste; o client usa a RPC add_bot)
 await db.query(`
   INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot) VALUES

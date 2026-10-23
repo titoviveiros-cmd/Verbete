@@ -31,7 +31,6 @@ export const ReactionsLayer = memo(function ReactionsLayer({
 }) {
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const [bursting, setBursting] = useState<string | null>(null);
-  const [hidden, setHidden] = useState(false);
   const lastSent = useRef<number>(0);
   // Throttle de áudio quando vários emojis chegam em rajada.
   const lastAudioAt = useRef<number>(0);
@@ -146,63 +145,42 @@ export const ReactionsLayer = memo(function ReactionsLayer({
         </AnimatePresence>
       </div>
 
-      {/* Botão para esconder/mostrar a barra (caso atrapalhe a leitura) */}
-      <button
-        onClick={() => setHidden((h) => !h)}
-        aria-label={hidden ? "Mostrar reações" : "Esconder reações"}
-        className="glass-tile fixed z-[60] rounded-full w-9 h-9 flex items-center justify-center text-sm"
+      {/* Barra de reações COMPACTA (playtest 2026-10-20): acessório, não
+          peça principal. Mora na faixa que o .room-shell reserva no rodapé
+          (--dock-h), então nunca cobre conteúdo — o ▾ de esconder saiu (só
+          existia porque a barra antiga e o 💬 flutuavam sobre as cartas). */}
+      <div
+        className="fixed left-0 right-0 z-50 pointer-events-none"
         style={{
-          right: "max(1rem, env(safe-area-inset-right, 0px))",
-          bottom: hidden
-            ? "max(1rem, env(safe-area-inset-bottom, 0px))"
-            : "calc(env(safe-area-inset-bottom, 0px) + 76px)",
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 4px)",
+          paddingLeft: "max(1rem, env(safe-area-inset-left, 0px))",
+          paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
         }}
       >
-        {hidden ? "🎈" : "▾"}
-      </button>
-
-      {/* Barra fixa de reações no rodapé — sempre acessível, 1 toque envia */}
-      <AnimatePresence>
-        {!hidden && (
-          <motion.div
-            key="reactbar"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="fixed left-0 right-0 z-50"
-            style={{
-              bottom: "max(env(safe-area-inset-bottom, 0px) - 8px, -4px)",
-              paddingLeft: "max(1rem, env(safe-area-inset-left, 0px))",
-              paddingRight: "max(1rem, env(safe-area-inset-right, 0px))",
-            }}
-          >
-            <div className="glass-tile mx-auto max-w-[26rem] !bg-[var(--c-surface)]/90 rounded-full px-2 py-1.5 flex items-center justify-between gap-1">
-              {EMOJIS.map((e) => (
-                <motion.button
-                  key={e}
-                  whileTap={{ scale: 0.8 }}
-                  onClick={() => send(e)}
-                  className="flex-1 aspect-square min-w-10 min-h-10 max-h-12 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 flex items-center justify-center transition-colors"
-                  aria-label={`Enviar ${e}`}
-                >
-                  <motion.span
-                    className="text-2xl leading-none"
-                    animate={
-                      bursting === e
-                        ? { scale: [1, 1.7, 1], rotate: [0, -10, 10, 0] }
-                        : {}
-                    }
-                    transition={{ duration: 0.35 }}
-                  >
-                    {e}
-                  </motion.span>
-                </motion.button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <div className="pointer-events-auto glass-tile mx-auto max-w-[23rem] !bg-[var(--c-surface)]/80 rounded-full p-1 flex items-center justify-between gap-0.5">
+          {EMOJIS.map((e) => (
+            <motion.button
+              key={e}
+              whileTap={{ scale: 0.8 }}
+              onClick={() => send(e)}
+              className="flex-1 min-w-0 h-9 rounded-full hover:bg-white/10 active:bg-white/20 flex items-center justify-center transition-colors"
+              aria-label={`Enviar ${e}`}
+            >
+              <motion.span
+                className="text-xl leading-none"
+                animate={
+                  bursting === e
+                    ? { scale: [1, 1.7, 1], rotate: [0, -10, 10, 0] }
+                    : {}
+                }
+                transition={{ duration: 0.35 }}
+              >
+                {e}
+              </motion.span>
+            </motion.button>
+          ))}
+        </div>
+      </div>
     </>
   );
 });

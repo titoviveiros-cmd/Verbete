@@ -11,6 +11,8 @@
 //  - victory: arpejo maior brilhante (curto, ~6s)
 
 import {
+  getAudioContext,
+  registerAudioLifecycleHook,
   getAudioPrefs,
   registerMusicDuck,
   subscribeAudioPrefs,
@@ -18,19 +20,12 @@ import {
 
 export type Mood = "silent" | "lobby" | "tension" | "reveal" | "victory";
 
+// Contexto ÚNICO, o mesmo dos efeitos (lib/sound): antes a música tinha o
+// seu, com volta do background à parte — dois contextos para religar no
+// iPhone, e o da música só tentava fora do toque.
 let ctx: AudioContext | null = null;
 function getCtx(): AudioContext | null {
-  if (typeof window === "undefined") return null;
-  if (!ctx) {
-    const AC = (window.AudioContext || (window as any).webkitAudioContext) as
-      typeof AudioContext | undefined;
-    if (!AC) return null;
-    try {
-      ctx = new AC();
-    } catch {
-      return null;
-    }
-  }
+  ctx = getAudioContext();
   return ctx;
 }
 
@@ -41,16 +36,20 @@ let cleanupCurrent: (() => void) | null = null;
 let subscribed = false;
 let resumeHooked = false;
 
-// Playtest mobile: ao trocar de app, o iOS "interrompe" o AudioContext e mata
-// osciladores/schedulers — a música não voltava sozinha. Na retomada da aba,
-// religa o contexto e re-arma o loop do mood atual.
-function resumeMusicAfterSuspend() {
-  const c = ctx;
+// Playtest mobile: ao trocar de app, o iOS "interrompe" o contexto e mata
+// osciladores/schedulers. Quem religa (ou recria) o contexto é lib/sound; a
+// música só re-arma o loop do mood atual quando o contexto volta — uma vez,
+// e só se ele foi trocado ou o loop o viu parado (Android/desktop com o
+// contexto rodando não reinicia a cada troca de aba — Red Team 2026-10-22).
+let liveCtx: AudioContext | null = null;
+let sawNotRunning = false;
+function onAudioBack(c: AudioContext | null) {
   if (!c) return;
-  if (c.state === "running") return; // nada foi suspenso — não mexe
-  try {
-    void c.resume();
-  } catch {}
+  const changed = liveCtx !== null && liveCtx !== c;
+  const rearm = changed || sawNotRunning;
+  liveCtx = c;
+  sawNotRunning = false;
+  if (!rearm) return;
   if (currentMood === "lobby" || currentMood === "tension") {
     const prev = cleanupCurrent;
     cleanupCurrent = startMood(currentMood);
@@ -61,6 +60,8 @@ function resumeMusicAfterSuspend() {
 const MOOD_BASE_GAIN = 0.18; // baixo, para não competir com SFX
 
 function ensureMaster(c: AudioContext) {
+  // bus de um contexto antigo (recriado na volta do background) não serve
+  if (masterGain && masterGain.context !== c) masterGain = null;
   if (!masterGain) {
     masterGain = c.createGain();
     masterGain.gain.value = getAudioPrefs().muted ? 0 : MOOD_BASE_GAIN;
@@ -68,10 +69,8 @@ function ensureMaster(c: AudioContext) {
   }
   if (!resumeHooked && typeof document !== "undefined") {
     resumeHooked = true;
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") resumeMusicAfterSuspend();
-    });
-    window.addEventListener("pageshow", resumeMusicAfterSuspend);
+    liveCtx = c;
+    registerAudioLifecycleHook(onAudioBack);
   }
   if (!subscribed) {
     subscribed = true;
@@ -223,20 +222,33 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
   lfo.connect(lfoGain).connect(filter.frequency);
   lfo.start(now);
 
-  // Arpejo via scheduler em setInterval (suficiente para esses BPMs lentos)
+  // Nada é agendado com o contexto parado (Red Team 2026-10-22): o tempo do
+  // contexto não anda, e o que entrasse na fila tocaria junto na volta — um
+  // estouro de batidas no primeiro toque. Loop de um contexto já trocado
+  // também não agenda (o novo loop é armado por onAudioBack).
   let stopped = false;
+  const live = () => {
+    if (stopped || c !== ctx) return false;
+    if (c.state !== "running") {
+      sawNotRunning = true;
+      return false;
+    }
+    return true;
+  };
+
+  // Arpejo via scheduler em setInterval (suficiente para esses BPMs lentos)
   let arpIdx = 0;
   let intervalId: ReturnType<typeof setInterval> | null = null;
   if (pattern.arpeggio.length > 0) {
     intervalId = setInterval(() => {
-      if (stopped || !ctx) return;
-      const t = ctx.currentTime;
+      if (!live()) return;
+      const t = c.currentTime;
       const semis = pattern.arpeggio[arpIdx % pattern.arpeggio.length] ?? 0;
       arpIdx++;
-      const osc = ctx.createOscillator();
+      const osc = c.createOscillator();
       osc.type = pattern.arpType;
       osc.frequency.value = nf(semis);
-      const g = ctx.createGain();
+      const g = c.createGain();
       const peak = pattern.arpGain;
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(peak, t + 0.04);
@@ -253,10 +265,10 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
   if (pattern.kickBpm && pattern.kickGain) {
     const periodMs = 60_000 / pattern.kickBpm;
     const fireKick = () => {
-      if (stopped || !ctx) return;
-      const t = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
+      if (!live()) return;
+      const t = c.currentTime;
+      const osc = c.createOscillator();
+      const g = c.createGain();
       osc.type = "sine";
       osc.frequency.setValueAtTime(120, t);
       osc.frequency.exponentialRampToValueAtTime(48, t + 0.1);
@@ -277,8 +289,13 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
   if (pattern.heartbeat) {
     const hb = pattern.heartbeat;
     const scheduleHeartbeat = () => {
-      if (stopped || !ctx) return;
-      const t = ctx.currentTime;
+      if (stopped || c !== ctx) return;
+      if (!live()) {
+        // parado: só espera ele voltar (sem agendar batida)
+        heartbeatTimeoutId = setTimeout(scheduleHeartbeat, 500);
+        return;
+      }
+      const t = c.currentTime;
       const elapsed = t - heartbeatStartedAt;
       const progress = Math.max(0, Math.min(1, elapsed / hb.rampSec));
       const bpm = hb.bpmStart + (hb.bpmEnd - hb.bpmStart) * progress;
@@ -293,8 +310,8 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
         [0, 1],
         [0.14, 0.7],
       ] as const) {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
+        const osc = c.createOscillator();
+        const g = c.createGain();
         osc.type = "sine";
         osc.frequency.setValueAtTime(85 * detuneMul, t + offset);
         osc.frequency.exponentialRampToValueAtTime(
@@ -322,8 +339,7 @@ function startMood(mood: Exclude<Mood, "silent">): () => void {
     if (intervalId) clearInterval(intervalId);
     if (kickIntervalId) clearInterval(kickIntervalId);
     if (heartbeatTimeoutId) clearTimeout(heartbeatTimeoutId);
-    if (!ctx) return;
-    const t = ctx.currentTime;
+    const t = c.currentTime;
     // Fade-out suave
     try {
       moodGain.gain.cancelScheduledValues(t);

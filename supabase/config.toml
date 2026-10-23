@@ -12,5 +12,7 @@ additional_redirect_urls = ["https://127.0.0.1:3000", "app.verbete.game://auth/c
 verify_jwt = false
 [functions.score-similarity]
 verify_jwt = false
+[functions.bot-definitions-v2]
+verify_jwt = false
 
 

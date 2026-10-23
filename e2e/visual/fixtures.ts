@@ -252,10 +252,26 @@ const VOTES: Array<[number, string, string]> = [
   [3, TIO, d(301)],
 ];
 const NEAR_TRUTH = [d(204), d(305)];
+// room_id como no banco (NOT NULL): o simulador aplica o filtro room_id=eq.
 const ROUNDS = [
-  { round: 1, coordinator_id: BIA, scored_at: "2026-10-18T15:04:00Z" },
-  { round: 2, coordinator_id: DUDU, scored_at: "2026-10-18T15:07:00Z" },
-  { round: 3, coordinator_id: ZE, scored_at: "2026-10-18T15:10:00Z" },
+  {
+    room_id: ROOM_ID,
+    round: 1,
+    coordinator_id: BIA,
+    scored_at: "2026-10-18T15:04:00Z",
+  },
+  {
+    room_id: ROOM_ID,
+    round: 2,
+    coordinator_id: DUDU,
+    scored_at: "2026-10-18T15:07:00Z",
+  },
+  {
+    room_id: ROOM_ID,
+    round: 3,
+    coordinator_id: ZE,
+    scored_at: "2026-10-18T15:10:00Z",
+  },
 ];
 
 function defRow(x: D, mode: "progress" | "ballot" | "revealed") {
@@ -288,10 +304,14 @@ export type Phase =
   | "scoreboard"
   | "finished";
 
-/** Backend com a sala congelada na fase pedida, vista pela Bia (host). */
+/**
+ * Backend com a sala congelada na fase pedida, vista pela Bia (host).
+ * `guest`: a Bia vê como convidada (o Zé é o host). `voted`: na votação, o
+ * voto dela já está registrado (cédula escolhida com o anel rosa).
+ */
 export function roomBackend(
   phase: Phase,
-  opts: { loggedIn?: boolean } = {},
+  opts: { loggedIn?: boolean; guest?: boolean; voted?: boolean } = {},
 ): MockBackend {
   const now = Date.now();
   const inSecs = (s: number) => new Date(now + s * 1000).toISOString();
@@ -338,7 +358,11 @@ export function roomBackend(
         .sort((a, b) => a.letter!.localeCompare(b.letter!));
       votes = voteRows(
         ([r, voter]) =>
-          r === 3 && (voter === LARA || voter === DUDU || voter === TIO),
+          r === 3 &&
+          (voter === LARA ||
+            voter === DUDU ||
+            voter === TIO ||
+            (!!opts.voted && voter === BIA)),
       );
       break;
     case "reveal":
@@ -357,7 +381,7 @@ export function roomBackend(
   const room = {
     id: ROOM_ID,
     code: ROOM_CODE,
-    host_id: BIA,
+    host_id: opts.guest ? ZE : BIA,
     status: phase,
     win_condition: "rounds",
     win_target: 10,
@@ -389,7 +413,15 @@ export function roomBackend(
         word,
       } as unknown as Json,
       get_round_sync: { definitions: defs, votes } as unknown as Json,
-      get_room_reveal: { near_truth_ids: NEAR_TRUTH },
+      // mesmo formato do servidor (revelação/placar/fim): o placar só aceita
+      // o histórico com a revelação disponível (lib/score-history)
+      get_room_reveal: {
+        available: true,
+        truth_def_ids: DEFS.filter((x) => x.player_id === "__truth__").map(
+          (x) => x.id,
+        ),
+        near_truth_ids: NEAR_TRUTH,
+      },
       get_room_definitions: allDefs as unknown as Json,
       get_random_word_prompts: [
         {
@@ -437,14 +469,17 @@ export function roomBackend(
 }
 
 /** localStorage que o app espera ver para a Bia: id local, apelido e a própria cédula. */
-export function roomStorage(phase: Phase): Record<string, string> {
+export function roomStorage(
+  phase: Phase,
+  opts: { guest?: boolean } = {},
+): Record<string, string> {
   const s: Record<string, string> = {
     "verbete:player-id": ME,
     "verbete:nick": JSON.stringify("Bia"),
     "verbete:avatar": JSON.stringify("🦊"),
     "verbete:color": JSON.stringify("#FF5C8A"),
-    [`verbete:hosted:${ROOM_CODE}`]: JSON.stringify(ME),
   };
+  if (!opts.guest) s[`verbete:hosted:${ROOM_CODE}`] = JSON.stringify(ME);
   if (phase === "voting")
     s[`verbete:mydef:${ROOM_ID}:3`] = JSON.stringify(d(303));
   return s;

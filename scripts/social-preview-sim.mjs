@@ -24,7 +24,7 @@ mkdirSync(resolve(process.cwd(), "resources"), { recursive: true });
 
 const TITLE = "Verbete — blefe com palavras raras";
 const DESC =
-  "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.";
+  "Invente significados, engane os amigos e descubra a verdade. De 4 a 12 jogadores.";
 const HOST = "jogo.verbete.workers.dev";
 
 const dataUri = (p) =>

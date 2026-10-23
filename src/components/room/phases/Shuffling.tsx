@@ -1,31 +1,64 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { startVoting, type Definition, type Room, type Word } from "@/lib/room";
 import { playCardShuffle } from "@/lib/sound";
 import { VerbeteTile } from "@/components/VerbeteLogo";
+
+// Embaralhar é tempo dramático: as cédulas abrem em leque e são embaralhadas
+// por ~2 s antes de a votação abrir. Antes o host abria a votação em 0,4 s e
+// a tela passava rápido demais: 0,7–1,7 s medidos numa partida real, o
+// convidado às vezes só via 0,7 s (playtest 2026-10-20). Calibrado pela
+// medição: a tela fica o hold + ~0,4–1,0 s (RPC, tempo real e a saída
+// animada; o convidado recebe a fase um pouco depois do host) — com 1,8 s
+// ficava 2,4–3,2 s; com 1,2 s, host 2,0–2,2 s e convidado 1,6–1,7 s; com
+// 1,4 s, os dois na faixa pedida em 2026-10-20 (1,8–2,5 s). Regra de
+// 2026-10-22 (tela narrativa ≥ 2,5 s): com 1,4 s a prévia mediu host
+// 2,15–2,49 s e convidado 2,13–2,55 s (hold + 0,73–1,15 s), abaixo do
+// mínimo; com 2,0 s, 2,73–3,15 s nos dois. O prazo da
+// votação é do servidor e só começa quando ela abre (advance_writing_to_
+// voting), igual para todos; os convidados só cobrem a falta do host.
+export const SHUFFLE_HOLD_MS = 2000;
+export const SHUFFLE_GUEST_FALLBACK_MS = SHUFFLE_HOLD_MS + 1800;
+// Um ciclo completo da coreografia (leque → troca → monte) cabe no tempo
+// em que a tela fica visível (o hold + a ida e volta da votação ao banco).
+const SHUFFLE_CYCLE_S = 1.8;
 
 export function Shuffling({
   room,
   word,
   definitions,
   isHost,
+  onShown,
 }: {
   room: Room;
   word: Word;
   definitions: Definition[];
   isHost: boolean;
+  /** A tela montou (é daqui que conta o piso do embaralhamento). */
+  onShown?: () => void;
 }) {
+  const shownRef = useRef(onShown);
+  useEffect(() => {
+    shownRef.current?.();
+  }, []);
+  // Palavra e cédulas pelo ref: o poll de get_round_sync troca a identidade
+  // de `definitions` a cada ~0,7 s, e com elas nas dependências o efeito
+  // recomeçava o relógio a cada poll — com 1,8 s o host nunca abriria a
+  // votação; no código antigo (0,4 s) saíam startVoting e o som de
+  // embaralhar repetidos (medição de 2026-10-20). O relógio conta UMA vez.
+  const latest = useRef({ word, definitions });
+  latest.current = { word, definitions };
   useEffect(() => {
     void playCardShuffle();
-    // O host dispara rápido (400ms). Demais clientes têm fallback de segurança
-    // após 2s, caso o host não responda. `startVoting` é idempotente.
-    const delay = isHost ? 400 : 2000;
-    const t = setTimeout(
-      () => startVoting(room.id, room.current_round, word, definitions),
-      delay,
-    );
+    // Só o host abre a votação; os demais cobrem se ele cair. `startVoting`
+    // é idempotente (a RPC re-checa o estado sob lock de linha).
+    const delay = isHost ? SHUFFLE_HOLD_MS : SHUFFLE_GUEST_FALLBACK_MS;
+    const t = setTimeout(() => {
+      const { word: w, definitions: d } = latest.current;
+      void startVoting(room.id, room.current_round, w, d);
+    }, delay);
     return () => clearTimeout(t);
-  }, [room.id, room.current_round, word, definitions, isHost]);
+  }, [room.id, room.current_round, isHost]);
 
   // Pré-carrega o chunk de Voting durante a animação para entrar instantâneo
   useEffect(() => {
@@ -60,8 +93,8 @@ export function Shuffling({
         </p>
       </motion.div>
 
-      {/* Micro-evento: as cédulas abrem em leque e são embaralhadas em
-          laço enquanto a votação prepara (a fase dura ~1–2 s). */}
+      {/* Micro-evento: as cédulas abrem em leque e são embaralhadas
+          enquanto a votação prepara (a fase dura ~2 s). */}
       <div
         className="relative h-48 w-full max-w-[320px] mx-auto short:h-36 short:scale-[0.78]"
         aria-hidden
@@ -102,7 +135,7 @@ export function Shuffling({
                 opacity: [0, 1, 1, 1, 1],
               }}
               transition={{
-                duration: 2.2,
+                duration: SHUFFLE_CYCLE_S,
                 times: [0, 0.25, 0.5, 0.75, 1],
                 ease: [0.22, 1, 0.36, 1],
                 delay: i * 0.05,

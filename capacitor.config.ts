@@ -15,24 +15,26 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: "always",
     limitsNavigationsToAppBoundDomains: false,
-    backgroundColor: "#0f0a1f",
+    backgroundColor: "#fbf3e3",
   },
   android: {
-    backgroundColor: "#0f0a1f",
+    backgroundColor: "#fbf3e3",
     allowMixedContent: false,
   },
   plugins: {
     SplashScreen: {
       launchShowDuration: 1500,
-      backgroundColor: "#0f0a1f",
+      backgroundColor: "#fbf3e3",
       showSpinner: false,
       androidScaleType: "CENTER_CROP",
       splashFullScreen: true,
       splashImmersive: true,
     },
+    // Tema claro é o padrão (2026-10-21): ícones escuros na barra; o app
+    // troca em tempo real quando o jogador escolhe o escuro (use-theme.ts).
     StatusBar: {
-      style: "DARK",
-      backgroundColor: "#0f0a1f",
+      style: "LIGHT",
+      backgroundColor: "#fbf3e3",
       overlaysWebView: true,
     },
   },

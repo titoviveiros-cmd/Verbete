@@ -144,6 +144,10 @@ export async function judgeCandidates(opts: {
   word: string;
   truth: string;
   candidates: ReadonlyArray<{ id: string; text: string }>;
+  /** Orçamento opcional (o gate dos bots não pode segurar a mesa); sem
+   *  isso, os padrões de callChat — os mesmos do juiz do bônus 🧠. */
+  timeoutMs?: number;
+  retries?: number;
 }): Promise<{ ok: true; scores: Map<string, number>; matches: string[]; attempts: number } | Failure> {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
@@ -151,6 +155,8 @@ export async function judgeCandidates(opts: {
     url: opts.url,
     temperature: SEMANTIC_TEMPERATURE,
     messages: judgeMessages(opts.word, opts.truth, opts.candidates),
+    ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+    ...(opts.retries !== undefined ? { retries: opts.retries } : {}),
   });
   if (!chat.ok) return { ok: false, reason: chat.reason, status: chat.status, attempts: chat.attempts };
   const scores = parseJudgeScores(chat.content, new Set(opts.candidates.map((c) => c.id)));

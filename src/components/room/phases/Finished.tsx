@@ -16,7 +16,7 @@ import { Scoreboard } from "@/components/room/phases/Scoreboard";
 import { useAuth } from "@/hooks/use-auth";
 import { pushAchievement } from "@/components/AchievementToaster";
 import { hapticBigWin, hapticSuccess } from "@/lib/sound";
-import { scrollbarClip } from "@/lib/utils";
+import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 import { shareInvite } from "@/lib/share";
 import { APP_URL } from "@/lib/app-url";
 
@@ -197,18 +197,17 @@ export function Finished({
         exit={{ opacity: 0 }}
         className="flex-1 flex flex-col min-h-0 pt-2"
       >
-        <div
-          className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2"
-          style={scrollbarClip()}
-        >
+        {/* O placar rola sozinho; o "voltar" mora no rodapé, na faixa do
+            💬/▾ — antes a página inteira rolava por baixo deles. */}
+        <Scoreboard room={room} players={players} isHost={false} embedded />
+        <div className="shrink-0 flex items-center justify-center pt-1.5">
           <button
             type="button"
             onClick={() => setViewingScoreboard(false)}
-            className="glass-tile self-start flex items-center gap-1.5 text-sm font-display px-3 py-1.5 rounded-full transition"
+            className="glass-tile flex items-center gap-1.5 text-sm font-display px-4 py-2 rounded-full transition whitespace-nowrap"
           >
             ← Voltar ao resumo
           </button>
-          <Scoreboard room={room} players={players} isHost={false} />
         </div>
       </motion.div>
     );
@@ -253,7 +252,8 @@ export function Finished({
       <Confetti />
       <div
         className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-3 pb-2 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-3 lg:content-start"
-        style={scrollbarClip()}
+        // respiro do anel dourado do campeão (saía aparado nas laterais)
+        style={scrollbarClip(undefined, RING_GUTTER)}
       >
         {/* Coluna heroica: vencedor + pódio, fixa no desktop enquanto a
             direita rola. A pontuação final sobe para o topo da coluna
@@ -390,10 +390,14 @@ export function Finished({
             )}
           </div>
           <div className="flex flex-col items-center gap-1.5">
+            {/* Único compartilhamento do jogo (só no fim definitivo da
+                partida) e de propósito secundário: pílula discreta, sem
+                disputar com Nova partida / Sair / Placar (playtest
+                2026-10-20). */}
             <button
               type="button"
               onClick={handleShareResult}
-              className="btn-pop btn-violet text-sm px-4 py-2"
+              className="glass-tile rounded-full text-xs font-display px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition"
             >
               📲 Compartilhar resultado
             </button>
@@ -629,18 +633,19 @@ export function Finished({
         </div>
       </div>
 
-      {/* max-lg:pr-12: faixa livre para o ▾ das reações e o chat, que
-          flutuam no canto direito do celular. */}
-      <div className="flex gap-2.5 mt-2 pt-2.5 border-t border-[var(--c-line)] bg-background/80 backdrop-blur-sm sticky bottom-0 lg:justify-center max-lg:pr-12">
+      {/* Rodapé fino, uma fileira só (playtest 2026-10-20, 2ª rodada): sem o
+          💬/▾ a largura toda é dos botões — Sair, Placar e Nova partida
+          (host) compactos; no desktop, centrados como antes. */}
+      <div className="shrink-0 flex gap-2 mt-1.5 pt-2 border-t border-[var(--c-line)] lg:justify-center lg:gap-2.5">
         <button
           onClick={onLeave}
-          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[150px] text-sm sm:text-base !px-3 py-3 short:py-2 whitespace-nowrap"
+          className="btn-pop btn-plain flex-auto lg:flex-none lg:min-w-[150px] text-sm lg:text-base !px-3 !py-2.5 short:!py-2 whitespace-nowrap"
         >
           Sair
         </button>
         <button
           onClick={() => setViewingScoreboard(true)}
-          className="btn-pop btn-plain flex-1 lg:flex-none lg:min-w-[170px] text-sm sm:text-base !px-3 py-3 short:py-2 whitespace-nowrap"
+          className="btn-pop btn-plain flex-auto lg:flex-none lg:min-w-[170px] text-sm lg:text-base !px-3 !py-2.5 short:!py-2 whitespace-nowrap"
           title="Rever placar da última rodada"
         >
           📊 Placar
@@ -648,7 +653,7 @@ export function Finished({
         {isHost && (
           <button
             onClick={() => restartGame(roomId)}
-            className="btn-pop btn-gold flex-[1.7] lg:flex-none lg:min-w-[260px] text-base sm:text-lg !px-3 py-3 short:py-2 whitespace-nowrap"
+            className="btn-pop btn-gold flex-auto lg:flex-none lg:min-w-[260px] text-sm lg:text-lg !px-3 !py-2.5 short:!py-2 whitespace-nowrap"
           >
             🔄 Nova partida
           </button>

@@ -600,6 +600,7 @@ export type Database = {
           current_round: number;
           current_word_id: string | null;
           finish_reason: string | null;
+          paused_at: string | null;
           host_id: string;
           id: string;
           mode: string;
@@ -622,6 +623,7 @@ export type Database = {
           current_round?: number;
           current_word_id?: string | null;
           finish_reason?: string | null;
+          paused_at?: string | null;
           host_id: string;
           id?: string;
           mode?: string;
@@ -643,6 +645,7 @@ export type Database = {
           current_round?: number;
           current_word_id?: string | null;
           finish_reason?: string | null;
+          paused_at?: string | null;
           host_id?: string;
           id?: string;
           mode?: string;
@@ -1035,6 +1038,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      cast_bot_votes: {
+        Args: { p_actor_id: string; p_room_id: string; p_round: number };
+        Returns: Json;
+      };
       cast_votes_bulk: {
         Args: { p_room_id: string; p_round: number; p_votes: Json };
         Returns: Json;
@@ -1268,6 +1275,14 @@ export type Database = {
       };
       reset_room: { Args: { p_room_id: string }; Returns: undefined };
       reset_user_stats: { Args: { p_user_id: string }; Returns: undefined };
+      resume_room: {
+        Args: { p_player_id: string; p_room_id: string };
+        Returns: Json;
+      };
+      touch_presence: {
+        Args: { p_player_id: string; p_room_id: string; p_state?: string };
+        Returns: Json;
+      };
       room_last_human_activity: {
         Args: { p_room_id: string };
         Returns: string;

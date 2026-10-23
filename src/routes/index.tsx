@@ -2,10 +2,11 @@ import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AVATARS, COLORS, randomAvatar, randomColor } from "@/lib/avatars";
+import { AVATARS, randomAvatar, randomColor } from "@/lib/avatars";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { createRoom, joinRoom } from "@/lib/room";
+import { friendlyEntryError } from "@/lib/entry-errors";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SoundToggle } from "@/components/SoundToggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.",
+          "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 4 a 12 jogadores, direto no navegador.",
       },
       {
         property: "og:title",
@@ -39,7 +40,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
+          "Invente significados, engane os amigos e descubra a verdade. De 4 a 12 jogadores.",
       },
       { property: "og:url", content: `${APP_URL}/` },
     ],
@@ -71,9 +72,9 @@ function HomePage() {
   const [avatar, setAvatar] = useState<string>(() =>
     getStored("avatar", randomAvatar()),
   );
-  const [color, setColor] = useState<string>(() =>
-    getStored("color", randomColor()),
-  );
+  // Cor sem seletor na tela (playtest 2026-10-22): a salva é preservada e o
+  // jogador novo ganha uma aleatória — segue usada no anel do avatar etc.
+  const [color] = useState<string>(() => getStored("color", randomColor()));
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +119,8 @@ function HomePage() {
       setStored("hosted:" + room.code, room.host_id ?? playerId);
       nav({ to: "/room/$code", params: { code: room.code } });
     } catch (e) {
-      setError((e as Error).message);
+      console.error("create room failed", e);
+      setError(friendlyEntryError(e, "create"));
     } finally {
       setBusy(false);
     }
@@ -141,7 +143,8 @@ function HomePage() {
       const room = await joinRoom(code, playerId, cleanNick, avatar, color);
       nav({ to: "/room/$code", params: { code: room.code } });
     } catch (e) {
-      setError((e as Error).message);
+      console.error("join room failed", e);
+      setError(friendlyEntryError(e, "join"));
     } finally {
       setBusy(false);
     }
@@ -437,7 +440,7 @@ function HomePage() {
                 do HTML e no painel /admin/ops (área técnica). */}
             <div className="text-center mt-1">
               <p className="text-[12px] font-bold text-muted-foreground">
-                2 a 12 jogadores · Conta opcional
+                4 a 12 jogadores · Conta opcional
               </p>
             </div>
           </motion.div>
@@ -466,12 +469,7 @@ function HomePage() {
                 {mode === "host" ? "Nova sala" : "Entrar numa sala"}
               </p>
               <NicknameField value={nick} onChange={setNick} />
-              <AvatarPicker
-                avatar={avatar}
-                color={color}
-                onAvatar={setAvatar}
-                onColor={setColor}
-              />
+              <AvatarPicker avatar={avatar} onAvatar={setAvatar} />
 
               {mode === "join" && (
                 <div>
@@ -572,20 +570,16 @@ function NicknameField({
 
 function AvatarPicker({
   avatar,
-  color,
   onAvatar,
-  onColor,
 }: {
   avatar: string;
-  color: string;
   onAvatar: (s: string) => void;
-  onColor: (s: string) => void;
 }) {
   return (
     <div>
       <p className="eyebrow mb-1.5 px-1">Avatar</p>
       <div className="sticker !p-2.5">
-        <div className="grid grid-cols-8 gap-1 mb-2">
+        <div className="grid grid-cols-8 gap-1">
           {AVATARS.map((a) => (
             <button
               key={a}
@@ -600,25 +594,6 @@ function AvatarPicker({
               }
             >
               {a}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1 justify-center">
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => onColor(c)}
-              aria-label={`Escolher cor ${c}`}
-              aria-pressed={color === c}
-              className="p-2 rounded-full transition active:scale-95"
-            >
-              <span
-                className={
-                  "block w-6 h-6 rounded-full border-2 " +
-                  (color === c ? "border-white scale-110" : "border-black/40")
-                }
-                style={{ background: c }}
-              />
             </button>
           ))}
         </div>

@@ -1,14 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
+import { BOT_FAKE_DEFINITIONS_TEMPLATES } from "../src/lib/bot-names";
+import { normalizeForGame, sanitizeDefinition } from "../src/lib/text-filter";
 
 // Partida multiplayer REAL: dois navegadores independentes (host + convidado)
 // jogam uma rodada completa — criar sala, entrar pelo código, iniciar,
 // coordenador sorteia e escolhe a palavra, escritor blefa, ambos votam,
-// revelação e placar. Sem bots e sem tocar no banco: o teste se adapta a
-// qualquer um dos dois ser sorteado coordenador.
+// revelação e placar. Mesa mínima de 4: o host completa com 2 bots (sem
+// tocar no banco); o teste se adapta a qualquer participante — humano ou
+// bot — ser sorteado coordenador.
 //
-// Determinismo da pontuação: com 2 jogadores a cédula tem 2 opções (verdade +
-// blefe do escritor); o escritor não pode votar na própria → vota na verdade
-// → o placar dele SEMPRE mostra "Acertou a verdade".
+// Determinismo da pontuação: o escritor acha a VERDADE por eliminação (não é
+// blefe de humano nem reserva de bot) → o placar dele SEMPRE mostra
+// "Acertou a verdade".
 test.setTimeout(240_000);
 
 const NICK_PLACEHOLDER = "Ex: Bia, Zé, Dudu...";
@@ -59,13 +62,23 @@ test("host + convidado jogam uma rodada completa", async ({ browser }) => {
     timeout: 25_000,
   });
 
-  // 4) Host inicia a partida
+  // 4) Mínimo de 4 participantes (2º playtest 2026-10-20): o host completa a
+  //    mesa com bots e só então inicia.
+  await expect(
+    host.getByRole("button", { name: /Mín\. 4 jogadores/ }),
+  ).toBeDisabled();
+  await host.getByRole("button", { name: /Encher até 4/ }).click();
+  await expect(host.getByText("Jogadores (4/12)")).toBeVisible({
+    timeout: 25_000,
+  });
   await host.getByRole("button", { name: /Começar/ }).click();
 
-  // 5) Fase de escolha: descobre quem foi sorteado coordenador
+  // 5) Fase de escolha: coordenador humano (vê "Sortear palavra") ou bot (a
+  //    escrita abre sozinha para os dois humanos).
   const pages: Page[] = [host, guest];
   let coord: Page | undefined;
   await expect(async () => {
+    coord = undefined;
     for (const p of pages) {
       const visible = await p
         .getByRole("button", { name: /Sortear palavra/ })
@@ -73,40 +86,71 @@ test("host + convidado jogam uma rodada completa", async ({ browser }) => {
         .catch(() => false);
       if (visible) coord = p;
     }
-    expect(coord).toBeTruthy();
+    const writingOpen = await host
+      .getByPlaceholder("escreva sua definicao mirabolante...")
+      .isVisible()
+      .catch(() => false);
+    expect(!!coord || writingOpen).toBeTruthy();
   }).toPass({ timeout: 40_000 });
-  const writer = pages.find((p) => p !== coord)!;
+  if (coord) {
+    await coord.getByRole("button", { name: /Sortear palavra/ }).click();
+    // 3 cartas de palavra (classe sticker) — escolhe a primeira
+    await coord.locator("button.sticker").first().click({ timeout: 20_000 });
+  }
+  const writers = pages.filter((p) => p !== coord);
+  const writer = writers[0]!;
 
-  await coord!.getByRole("button", { name: /Sortear palavra/ }).click();
-  // 3 cartas de palavra (classe sticker) — escolhe a primeira
-  await coord!.locator("button.sticker").first().click({ timeout: 20_000 });
+  // 6) Escritores blefam e enviam — com retry e CONFIRMAÇÃO: o clique só conta
+  //    quando a UI reage (enviada/embaralhando/votação).
+  const BLUFFS = [
+    "definicao mirabolante do teste multiplayer",
+    "outra definicao inventada pelo convidado",
+  ];
+  for (const [i, w] of writers.entries()) {
+    const ta = w.getByPlaceholder("escreva sua definicao mirabolante...");
+    await expect(ta).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      await ta.fill(BLUFFS[i]!, { timeout: 3_000 });
+      await w
+        .getByRole("button", { name: /Enviar definição/ })
+        .click({ timeout: 3_000 });
+      await expect(
+        w
+          .getByText(/Definição enviada|Embaralhando as cédulas|A palavra é/)
+          .first(),
+      ).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 45_000 });
+  }
 
-  // 6) Escritor blefa e envia — com retry e CONFIRMAÇÃO: o clique só conta
-  //    quando a UI reage (enviada/embaralhando/votação). Sem isso, um fill
-  //    preso em actionability deixava o jogo expulsar o escritor parado.
-  const ta = writer.getByPlaceholder("escreva sua definicao mirabolante...");
-  await expect(ta).toBeVisible({ timeout: 30_000 });
-  await expect(async () => {
-    await ta.fill("definicao mirabolante do teste multiplayer", {
-      timeout: 3_000,
-    });
-    await writer
-      .getByRole("button", { name: /Enviar definição/ })
-      .click({ timeout: 3_000 });
-    await expect(
-      writer
-        .getByText(/Definição enviada|Embaralhando as cédulas|A palavra é/)
-        .first(),
-    ).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 45_000 });
-
-  // 7) Votação (após o embaralhamento): cada um vota na primeira cédula
-  //    habilitada — a do escritor está bloqueada para ele, então ele vota
-  //    na verdade obrigatoriamente.
+  // 7) Votação: o escritor acha a VERDADE por eliminação — não é blefe de
+  //    humano nem reserva de bot (no CI os bots usam as reservas locais);
+  //    os demais votam na primeira cédula habilitada.
+  const norm = (s: string) =>
+    normalizeForGame(s)
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const known = new Set([
+    ...BLUFFS.map(norm),
+    ...BOT_FAKE_DEFINITIONS_TEMPLATES.map((t) =>
+      norm(sanitizeDefinition(t, 140)),
+    ),
+  ]);
   for (const p of pages) {
-    const cedula = p.locator("button:has(.token):not([disabled])");
-    await expect(cedula.first()).toBeVisible({ timeout: 60_000 });
-    await cedula.first().click();
+    const cedulas = p.locator("button:has(.token):not([disabled])");
+    await expect(cedulas.first()).toBeVisible({ timeout: 60_000 });
+    let alvo = cedulas.first();
+    if (p === writer) {
+      const n = await cedulas.count();
+      for (let i = 0; i < n; i++) {
+        const txt = norm(await cedulas.nth(i).innerText());
+        const texto = txt.replace(/^[a-z] /, ""); // tira a letra da ficha
+        if (![...known].some((k) => k && texto.includes(k))) {
+          alvo = cedulas.nth(i);
+          break;
+        }
+      }
+    }
+    await alvo.click();
   }
 
   // 8) Revelação (coreografia automática ~25s) → Placar de verdade.

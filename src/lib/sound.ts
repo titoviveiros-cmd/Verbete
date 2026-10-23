@@ -102,14 +102,51 @@ const FALLBACK_NOTES: Record<FallbackKind, ToneNote[]> = {
   tick: [{ freq: 1046.5, start: 0, dur: 0.08, gain: 0.5 }],
 };
 
+// Ciclo de vida (playtest 2026-10-22): no iPhone, voltar de outro app deixa
+// o contexto em "interrupted" (estado do WebKit) — antes só "suspended" era
+// retomado e o som morria até recarregar a página. Agora: QUALQUER estado
+// diferente de "running" é retomado (no toque, que o iOS exige); contexto
+// "closed" — ou que não volta nem dentro de um toque — é fechado e RECRIADO,
+// e o bus master, o reverb e os buffers do contexto antigo são refeitos. Um
+// contexto só (a música usa o mesmo, via getAudioContext).
+let ctxGeneration = 0;
+const lifecycleHooks = new Set<(c: AudioContext | null) => void>();
+const lifecycleLog: string[] = [];
+function logLifecycle(event: string) {
+  const c = ctx;
+  lifecycleLog.push(
+    `${Math.round(performance.now())} ${event} ctx#${ctxGeneration}=${c?.state ?? "none"} unlocked=${unlocked}`,
+  );
+  if (lifecycleLog.length > 30) lifecycleLog.shift();
+}
+/** Diário curto do ciclo de vida do áudio (diagnóstico, sem console). */
+export function getAudioLifecycleLog(): readonly string[] {
+  return lifecycleLog;
+}
+/** A música (e quem mais precisar) é avisada quando o contexto volta. */
+export function registerAudioLifecycleHook(
+  fn: (c: AudioContext | null) => void,
+): () => void {
+  lifecycleHooks.add(fn);
+  return () => {
+    lifecycleHooks.delete(fn);
+  };
+}
+
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
+  if (ctx && ctx.state === "closed") ctx = null;
   if (!ctx) {
     const AC = (window.AudioContext || (window as any).webkitAudioContext) as
       typeof AudioContext | undefined;
     if (!AC) return null;
     try {
       ctx = new AC();
+      ctxGeneration++;
+      unlocked = false;
+      masterNode = null;
+      reverbSend = null;
+      noiseBufferCache = null;
     } catch {
       return null;
     }
@@ -117,14 +154,46 @@ function getCtx(): AudioContext | null {
   return ctx;
 }
 
+/** O contexto compartilhado (efeitos + música). */
+export function getAudioContext(): AudioContext | null {
+  return getCtx();
+}
+
+/** Tenta voltar a "running" (suspended OU interrupted). resume() fora de um
+ *  toque pode ficar pendurado no iOS — não espera mais que `timeoutMs`. */
+async function revive(c: AudioContext, timeoutMs = 400): Promise<boolean> {
+  if (c.state === "running") return true;
+  if (c.state === "closed") return false;
+  try {
+    await Promise.race([
+      c.resume(),
+      new Promise((r) => setTimeout(r, timeoutMs)),
+    ]);
+  } catch {}
+  return (c.state as string) === "running";
+}
+
+/** Fecha o contexto inválido e esquece tudo que era dele. */
+function dropContext() {
+  const old = ctx;
+  ctx = null;
+  masterNode = null;
+  reverbSend = null;
+  noiseBufferCache = null;
+  unlocked = false;
+  if (old && old.state !== "closed") {
+    try {
+      void old.close().catch(() => {});
+    } catch {}
+  }
+}
+
 async function ensureRunning(): Promise<AudioContext | null> {
   const c = getCtx();
   if (!c) return null;
-  if (c.state === "suspended") {
-    try {
-      await c.resume();
-    } catch {}
-  }
+  // Fora de "running" o som NÃO é agendado: senão ele ficaria na fila e
+  // tocaria tudo junto na volta (som antigo repetido).
+  if (c.state !== "running") await revive(c);
   return c.state === "running" ? c : null;
 }
 
@@ -239,39 +308,125 @@ async function playFallback(kind: FallbackKind) {
   } catch {}
 }
 
+// UMA infraestrutura só cuida da volta do áudio (os listeners são instalados
+// uma vez; a música se pendura em registerAudioLifecycleHook).
 export function installAudioUnlock() {
   if (typeof window === "undefined" || installed) return;
   installed = true;
-  const unlock = () => {
-    void primeAudio();
+  const gesture = () => {
+    void primeAudio(true);
   };
-  window.addEventListener("pointerdown", unlock, { passive: true });
-  window.addEventListener("keydown", unlock);
-  window.addEventListener("touchstart", unlock, { passive: true });
-  window.addEventListener("click", unlock);
-  const onVisible = () => {
-    if (document.visibilityState === "visible") void primeAudio();
+  const opts = { passive: true, capture: true } as const;
+  for (const ev of [
+    "pointerdown",
+    "pointerup",
+    "touchstart",
+    "touchend",
+    "click",
+    "keydown",
+  ])
+    window.addEventListener(ev, gesture, opts);
+  const onBack = () => {
+    if (document.visibilityState === "visible") void primeAudio(false);
   };
-  document.addEventListener("visibilitychange", onVisible);
-  window.addEventListener("focus", onVisible);
+  document.addEventListener("visibilitychange", () => {
+    logLifecycle(`visibility:${document.visibilityState}`);
+    recreatedThisVisit = false;
+    onBack();
+  });
+  window.addEventListener("focus", onBack);
+  window.addEventListener("pageshow", () => {
+    recreatedThisVisit = false;
+    onBack();
+  });
+  // App Android (Capacitor): a volta do app nem sempre dispara
+  // visibilitychange no WebView.
+  void import("@capacitor/core")
+    .then(({ Capacitor }) => {
+      if (!Capacitor.isNativePlatform()) return;
+      return import("@capacitor/app").then(({ App }) =>
+        App.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) void primeAudio(false);
+        }),
+      );
+    })
+    .catch(() => {});
 }
 
-export async function primeAudio() {
-  const c = getCtx();
-  const fb = unlockFallbackAudio();
-  if (c) {
-    if (c.state === "suspended") {
-      try {
-        await c.resume();
-      } catch {}
+/** Parte SÍNCRONA, dentro do próprio toque (é o que o iOS aceita): se o
+ *  contexto já tocou e parou (background) ou ficou inválido, troca por um
+ *  novo criado aqui mesmo; retoma e toca um buffer mudo para destravar. */
+function kickInGesture() {
+  const c = ctx;
+  if (c && c.state === "running") return;
+  // Recria no máximo uma vez por volta à tela (Red Team 2026-10-22): numa
+  // ligação o iOS segura o áudio e cada toque trocaria de contexto. Contexto
+  // "closed" não tem volta — esse é sempre trocado.
+  if (
+    c &&
+    (c.state === "closed" ||
+      (!recreatedThisVisit &&
+        (unlocked || (c.state as string) === "interrupted")))
+  ) {
+    recreatedThisVisit = true;
+    logLifecycle("recreate");
+    dropContext();
+  }
+  const n = getCtx();
+  if (!n) return;
+  try {
+    void n.resume().catch(() => {});
+  } catch {}
+  try {
+    const src = n.createBufferSource();
+    src.buffer = n.createBuffer(1, 1, 22050);
+    src.connect(n.destination);
+    src.start(0);
+    kickedGeneration = ctxGeneration;
+  } catch {}
+}
+let kickedGeneration = 0;
+let recreatedThisVisit = false;
+
+let priming: Promise<void> | null = null;
+
+/** Religa o áudio. `fromGesture`: chamado dentro de um toque/tecla — só
+ *  então o iOS deixa retomar, e só então vale recriar um contexto que não
+ *  volta. Vários eventos do mesmo toque compartilham a mesma tentativa. */
+export function primeAudio(fromGesture = false): Promise<void> {
+  if (fromGesture) kickInGesture();
+  if (priming) return priming;
+  priming = (async () => {
+    const fb = unlockFallbackAudio();
+    let c = getCtx();
+    const before = c?.state;
+    let ok = c ? await revive(c) : false;
+    // um toque no meio desta tentativa recriou o contexto: vale o novo
+    // (senão a música só voltava no toque seguinte — Red Team 2026-10-22)
+    if (ctx && c !== ctx) {
+      c = ctx;
+      ok = await revive(c);
     }
-    if (c.state === "running") {
-      if (!unlocked) playSilentBuffer(c);
+    if (ok && c) {
+      recreatedThisVisit = false;
+      // o buffer mudo do toque já destravou este contexto: não repete
+      if (!unlocked && kickedGeneration !== ctxGeneration) playSilentBuffer(c);
       unlocked = true;
     }
-  }
-  await fb;
-  warmVibrate();
+    if (before !== c?.state || fromGesture)
+      logLifecycle(fromGesture ? "gesture" : "resume");
+    for (const h of lifecycleHooks) {
+      try {
+        h(ok ? c : null);
+      } catch {}
+    }
+    // play() do fallback que nunca responde não prende as próximas voltas
+    await Promise.race([fb, new Promise((r) => setTimeout(r, 1000))]);
+    warmVibrate();
+  })().finally(() => {
+    priming = null;
+  });
+  return priming;
 }
 
 export function vibrate(pattern: number | number[] = [120, 60, 120]) {
@@ -339,7 +494,10 @@ function makeSaturationCurve(amount = 0.35): Float32Array {
 }
 
 function getMaster(c: AudioContext): GainNode {
-  if (masterNode) return masterNode;
+  // nó de um contexto antigo (recriado na volta do background) não serve
+  if (masterNode && masterNode.context === c) return masterNode;
+  masterNode = null;
+  reverbSend = null;
   const m = c.createGain();
   m.gain.value = 1;
   // Cadeia de masterização: input → highpass (limpa subgraves) → saturação

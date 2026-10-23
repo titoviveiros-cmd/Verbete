@@ -17,6 +17,8 @@ import { ensureAnonSession } from "@/lib/auth-session";
 import { installNativeHandlers } from "@/lib/native";
 import { MotionConfig } from "framer-motion";
 import { installOpsCapture } from "@/lib/ops";
+import { blockIosPinchZoom, VIEWPORT_CONTENT } from "@/lib/viewport";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -93,18 +95,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { charSet: "utf-8" },
         {
           name: "viewport",
-          content:
-            // Fase 7 (WCAG 1.4.4): zoom liberado até 5x — maximum-scale=1
-            // bloqueava pinch-zoom de quem precisa ampliar para ler.
-            "width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, interactive-widget=resizes-content",
+          // Escala fixa de jogo (decisão de produto 2026-10-20) — ver viewport.ts
+          content: VIEWPORT_CONTENT,
         },
-        {
-          name: "theme-color",
-          content: "#fbf3e3",
-          media: "(prefers-color-scheme: light)",
-        },
-        { name: "theme-color", content: "#150a2c" },
-        { name: "color-scheme", content: "dark" },
+        // Tema claro é o padrão (2026-10-21); THEME_BOOT_SCRIPT troca para o
+        // escuro antes da primeira pintura se ele estiver salvo.
+        { name: "theme-color", content: "#fbf3e3" },
+        { name: "color-scheme", content: "light" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         { name: "mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-status-bar-style", content: "default" },
@@ -119,7 +116,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           name: "description",
           content:
-            "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 2 a 12 jogadores, direto no navegador.",
+            "Invente significados para palavras raras, engane seus amigos e descubra a verdade. Multiplayer em tempo real, de 4 a 12 jogadores, direto no navegador.",
         },
         { name: "author", content: "Verbete" },
         {
@@ -129,7 +126,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           property: "og:description",
           content:
-            "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
+            "Invente significados, engane os amigos e descubra a verdade. De 4 a 12 jogadores.",
         },
         { property: "og:type", content: "website" },
 
@@ -140,7 +137,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           name: "twitter:description",
           content:
-            "Invente significados, engane os amigos e descubra a verdade. De 2 a 12 jogadores.",
+            "Invente significados, engane os amigos e descubra a verdade. De 4 a 12 jogadores.",
         },
         // Prévia de link (WhatsApp/Telegram/iMessage): nome com VERSÃO — o
         // WhatsApp guarda a prévia por endereço; trocar a arte = arquivo novo
@@ -198,6 +195,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { rel: "manifest", href: "/manifest.webmanifest" },
       ],
       scripts: [
+        // Primeiro script do <head>, síncrono: aplica o tema salvo antes da
+        // primeira pintura (sem flash escuro → claro nem claro → escuro).
+        { children: THEME_BOOT_SCRIPT },
         {
           type: "application/ld+json",
           children: JSON.stringify({
@@ -233,7 +233,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" style={{ colorScheme: "dark" }}>
+    // className/colorScheme: padrão claro; o THEME_BOOT_SCRIPT ajusta antes
+    // da hidratação (por isso suppressHydrationWarning).
+    <html
+      lang="pt-BR"
+      className="light"
+      style={{ colorScheme: "light" }}
+      suppressHydrationWarning
+    >
       <head>
         <HeadContent />
       </head>
@@ -256,6 +263,8 @@ function RootComponent() {
   useEffect(() => {
     installAudioUnlock();
   }, []);
+  // Escala fixa: o Safari iOS ignora user-scalable=no (ver viewport.ts).
+  useEffect(() => blockIosPinchZoom(), []);
   // S4: abre a sessão anônima já no boot para que o primeiro join/create
   // saia com auth.uid() e a identidade seja reivindicada de imediato.
   useEffect(() => {

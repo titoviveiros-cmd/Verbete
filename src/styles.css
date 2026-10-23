@@ -1140,17 +1140,35 @@ button:disabled,
   }
 }
 
-/* Faixa dos controles flutuantes da sala no celular em pé. O chat (bottom
-   120px, 40px de altura) e o ▾ das reações (bottom 76px) flutuam na borda
-   direita, sobre os 100px finais da área útil (o .room-shell já reserva 60px
-   para a barra de reações). O bloco com .float-lane no fim de uma fase ocupa
-   essa altura com folga, e nada da lista acima — ex.: o 🚩 da última cédula —
-   fica embaixo do chat; o padding lateral tira o conteúdo da faixa da borda.
-   Deitado ou no tablet a coluna do jogo é estreita e os botões flutuam fora
-   dela, então a regra não vale. */
-@media (max-width: 639.98px) and (min-height: 521px) {
-  .float-lane {
-    min-height: 104px;
-    padding-inline: 3rem;
-  }
+/* Escala fixa de jogo (decisão de produto 2026-10-20, ver lib/viewport.ts):
+   sem pinça e sem duplo toque para ampliar; a rolagem (pan) continua. */
+html {
+  touch-action: pan-x pan-y;
+}
+
+/* ===== Rodapé da sala: só a barra de reações =====
+   Com o chat removido e a barra compacta (playtest 2026-10-20), a única peça
+   fixa no rodapé é a barra de reações (ReactionsLayer): pílula de 44px a 4px
+   da borda segura. O .room-shell reserva --dock-h para ela, com 8px de folga
+   (o relevo de 5px dos botões cabe) — nada rola por baixo e nenhuma fase
+   precisa mais de faixa extra (a "zona de exclusão" do 💬/▾, de 104px +
+   recuo lateral, saiu inteira). */
+:root {
+  --dock-h: 56px;
+}
+
+/* Respiro para anel e brilho de cartas (seleção rosa da cédula, ouro do 1º
+   lugar, "seu blefe") nas listas que rolam. A lista recorta o que passa da
+   própria caixa e a fase recorta o que passa da dela — o anel rosa saía
+   aparado nas laterais (playtest 2026-10-20). .ring-room alarga a FASE
+   sobre o padding do shell e a lista (scrollbarClip com respiro) alarga-se
+   sobre esse espaço, devolvendo tudo como padding: as cartas ficam
+   exatamente onde estavam, mas anel e brilho cabem antes do corte. A fase
+   precisa ser item esticado de uma coluna flex (sem w-full/max-w-full). */
+:root {
+  --ring-gutter: 0.75rem;
+}
+.ring-room {
+  margin-inline: calc(-1 * var(--ring-gutter));
+  padding-inline: var(--ring-gutter);
 }

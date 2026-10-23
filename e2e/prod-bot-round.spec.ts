@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
-// Validação pós-deploy (só com E2E_BASE_URL): 2 jogadores reais (com e sem
-// 1 bot) jogam uma rodada completa no ambiente publicado — add_bot por RPC,
+// Validação pós-deploy (só com E2E_BASE_URL): 2 humanos (com e sem 1 bot
+// adicionado à mão; a mesa sempre completa até 4) jogam uma rodada completa no ambiente publicado — add_bot por RPC,
 // bot escrevendo pela IA (lote do host), sugestões da IA, votação, revelação
 // (pg_net → bônus 🧠) e placar. Se a tela de um jogador ficar presa na fase
 // anterior enquanto a sala já avançou, o teste REGISTRA o travamento e
@@ -58,7 +58,7 @@ async function visibleOrReload(
 }
 
 for (const withBot of [false, true]) {
-  test(`2 jogadores${withBot ? " + 1 bot" : ""} jogam uma rodada no deploy`, async ({
+  test(`2 humanos${withBot ? " + 1 bot" : ""} (mesa completa até 4) jogam uma rodada no deploy`, async ({
     browser,
   }) => {
     const tag = withBot ? "BOT" : "HUMANOS";
@@ -116,8 +116,18 @@ for (const withBot of [false, true]) {
         console.log(`[${tag}] BOT ADICIONADO`);
       }
 
-      // 4) começa
-      await host.getByRole("button", { name: /Começar/ }).click();
+      // 4) mínimo de 4 participantes: completa com bots e começa. "Encher
+      //    até 4" só aparece quando faltam 2+; faltando 1, é o "+1 Bot".
+      const encher = host.getByRole("button", { name: /Encher até 4/ });
+      if (await encher.isVisible().catch(() => false)) await encher.click();
+      else if (withBot)
+        await host.getByRole("button", { name: /\+1 Bot/ }).click();
+      await expect(host.getByText("Jogadores (4/12)")).toBeVisible({
+        timeout: 30_000,
+      });
+      await host
+        .getByRole("button", { name: /Começar/ })
+        .click({ timeout: 30_000 });
 
       // 5) coordenador: quem vê "Sortear palavra"; ninguém = o bot
       const pages: Page[] = [host, guest];
@@ -132,7 +142,8 @@ for (const withBot of [false, true]) {
           )
             coord = p;
         }
-        // sem humano com "Sortear palavra" e a escrita já aberta = o bot escolheu
+        // sem humano com "Sortear palavra" e a escrita já aberta = um bot
+        // escolheu (com o mínimo de 4, as duas variantes têm bots)
         const writingOpen =
           (await host
             .getByPlaceholder(WRITE)
@@ -142,11 +153,17 @@ for (const withBot of [false, true]) {
             .getByPlaceholder(WRITE)
             .isVisible()
             .catch(() => false));
-        expect(coord !== null || (withBot && writingOpen)).toBeTruthy();
+        expect(coord !== null || writingOpen).toBeTruthy();
       }).toPass({ timeout: 150_000 });
       console.log(`[${tag}] COORDENADOR ${coord ? names.get(coord) : "bot"}`);
       if (coord) {
         const c = coord as Page;
+        // a cortina da fase segura o toque enquanto está na tela (o clique
+        // forçado abaixo seria engolido por ela)
+        await expect(c.locator("[data-phase-announcer-shield]")).toHaveCount(
+          0,
+          { timeout: 10_000 },
+        );
         // botões animados sem parar nunca ficam "estáveis" para o Playwright
         await c
           .getByRole("button", { name: /Sortear palavra/ })
@@ -219,7 +236,7 @@ for (const withBot of [false, true]) {
             .getByRole("button", { name: /Sim, resetar/ })
             .click({ timeout: 10_000 });
           await expect(
-            host.getByRole("button", { name: /Começar|Mín\. 2/ }),
+            host.getByRole("button", { name: /Começar|Mín\. 4/ }),
           ).toBeVisible({
             timeout: 30_000,
           });

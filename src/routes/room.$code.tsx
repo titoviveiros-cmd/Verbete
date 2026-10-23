@@ -8,6 +8,10 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRoom } from "@/hooks/use-room";
 import { getPlayerId, getStored, setPlayerId } from "@/lib/player-id";
+import { botPickDelayMs } from "@/lib/game-times";
+import { shuffleScreenHoldUntil } from "@/lib/transition-floor";
+import { usePausePresence } from "@/hooks/room/use-pause-presence";
+import { PausedBanner } from "@/components/room/PausedBanner";
 import {
   fetchThreeWords,
   chooseWord,
@@ -20,7 +24,6 @@ import {
 import { randomAvatar, randomColor } from "@/lib/avatars";
 import { Mascot } from "@/components/Mascot";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
-import { RoomChat } from "@/components/room/RoomChat";
 import {
   PhaseAnnouncer,
   PHASE_ANNOUNCER_TOTAL_MS,
@@ -28,15 +31,10 @@ import {
 import {
   playAlert,
   primeAudio,
-  playCorrectReveal,
   playGameWin,
   playPointMagnitude,
   playVoteReceived,
-  playRevealStinger,
   playWhooshUp,
-  playRevealBuildUp,
-  playCrowdReactionFooled,
-  playCrowdReactionNoOne,
   playStreak,
 } from "@/lib/sound";
 import { setMusicMood, stopMusic } from "@/lib/music";
@@ -74,27 +72,6 @@ const PhaseFallback = () => (
     <Mascot mood="thinking" size={90} />
   </div>
 );
-
-/** Quantos votos um único jogador (que não seja "__truth__") recebeu na rodada.
- *  Usado para detectar perfect round / savage e suprimir crowd genérico. */
-function countMaxFooledByOnePlayer(
-  roundVotes: Array<{ definition_id: string }>,
-  truthDefId: string,
-  definitions: Array<{ id: string; player_id: string | null }>,
-): number {
-  const counts = new Map<string, number>();
-  for (const v of roundVotes) {
-    if (v.definition_id === truthDefId) continue;
-    const def = definitions.find((d) => d.id === v.definition_id);
-    if (!def || !def.player_id || def.player_id === "__truth__") continue;
-    counts.set(def.player_id, (counts.get(def.player_id) ?? 0) + 1);
-  }
-  let max = 0;
-  counts.forEach((c) => {
-    if (c > max) max = c;
-  });
-  return max;
-}
 
 export const Route = createFileRoute("/room/$code")({
   head: ({ params }) => ({
@@ -250,49 +227,9 @@ function RoomPage() {
         setMusicMood("tension");
         break;
       case "reveal":
+        // Os sons da revelação saem da própria Reveal, um por passo da
+        // coreografia ("verdade primeiro", 2026-10-20) — aqui só a trilha.
         setMusicMood("reveal");
-        // Build-up cinematográfico: drumroll + riser + crash → stinger.
-        // playCorrectReveal só toca se ALGUÉM acertou (senão soaria cínico).
-        void playRevealBuildUp();
-        setTimeout(() => {
-          void playRevealStinger();
-        }, 1200);
-        // Reação coletiva e acorde resolvido — só se não houver stinger personalizado pesado
-        setTimeout(() => {
-          try {
-            const truthDef = definitions.find(
-              (d) => d.player_id === "__truth__",
-            );
-            if (!truthDef) return;
-            const roundVotes = votes.filter(
-              (v) => v.round === room.current_round,
-            );
-            const correctCount = roundVotes.filter(
-              (v) => v.definition_id === truthDef.id,
-            ).length;
-            const fooledCount = roundVotes.length - correctCount;
-            // Toca o acorde C maj9 só quando alguém acertou (representa "resolução")
-            if (correctCount > 0) void playCorrectReveal();
-
-            // Skip reações genéricas quando o Reveal.tsx vai disparar perfect/savage
-            // (4+ enganados por um único jogador = stinger personalizado já inclui crowd).
-            const maxFooledByOne = countMaxFooledByOnePlayer(
-              roundVotes,
-              truthDef.id,
-              definitions,
-            );
-            const willPlayPerfectOrSavage =
-              maxFooledByOne >= 4 ||
-              (maxFooledByOne >= 3 && maxFooledByOne >= roundVotes.length);
-            if (willPlayPerfectOrSavage) return;
-
-            if (roundVotes.length > 0 && correctCount === 0) {
-              void playCrowdReactionNoOne();
-            } else if (fooledCount >= 1) {
-              void playCrowdReactionFooled(fooledCount);
-            }
-          } catch {}
-        }, 2400);
         break;
       case "finished":
         setMusicMood("victory");
@@ -375,36 +312,88 @@ function RoomPage() {
     playerId,
   ]);
 
-  // Fallback global: se o coordenador for bot, qualquer navegador destrava a escolha
+  // Coordenador bot: o HOST sorteia e escolhe; os demais navegadores só
+  // destravam se o host não fizer (antes TODOS sorteavam e chamavam
+  // chooseWord ao mesmo tempo — N buscas e N escolhas duplicadas por rodada,
+  // auditoria de 2026-10-20). A RPC aceita só a primeira escolha. A escolha
+  // espera a cortina + a tela do coordenador ficar legível (botPickDelayMs);
+  // as palavras já vêm sendo buscadas durante a espera. Sala pausada não
+  // escolhe nada.
   const botAutopickRef = useRef<string | null>(null);
+  // Âncora da escolha do bot: o instante em que ESTE navegador viu a rodada
+  // entrar na escolha. Trocar o coordenador depois disso não reinicia a
+  // conta (antes, provisório → autoritativo dava ~5,1 s de tela na 1ª rodada).
+  // Piso do embaralhamento NESTE aparelho (2026-10-22): a votação só toma o
+  // lugar do "Embaralhando" depois de ele ficar NARRATIVE_MIN_VISIBLE_MS à
+  // vista aqui (quem o recebe atrasado via ~2,3 s).
+  const shuffleSeenRef = useRef<{ key: string; at: number } | null>(null);
+  const roundKey = room ? `${room.id}:${room.current_round}` : "";
+  if (room?.status === "shuffling" && shuffleSeenRef.current?.key !== roundKey)
+    shuffleSeenRef.current = { key: roundKey, at: Date.now() };
+  const shuffleHoldUntil = room
+    ? shuffleScreenHoldUntil(room.status, shuffleSeenRef.current, roundKey)
+    : 0;
+  const [, bumpScreen] = useState(0);
+  useEffect(() => {
+    const wait = shuffleHoldUntil - Date.now();
+    if (wait <= 0) return;
+    const t = setTimeout(() => bumpScreen((n) => n + 1), wait);
+    return () => clearTimeout(t);
+  }, [shuffleHoldUntil]);
+  const screenStatus =
+    shuffleHoldUntil > Date.now() ? "shuffling" : room?.status;
+  const choosingSeenRef = useRef<{ key: string; at: number } | null>(null);
+  // Partida nova (2026-10-22): a rodada 1 do match seguinte tem a mesma chave
+  // da rodada 1 do anterior — sem zerar aqui (mesmo que o lobby passe batido
+  // entre duas leituras), o bot escolhia na hora, ainda sob a cortina.
+  if (room?.status === "lobby" || room?.status === "finished") {
+    choosingSeenRef.current = null;
+    botAutopickRef.current = null;
+  }
+  if (room?.status === "choosing") {
+    const seenKey = `${room.id}:${room.current_round}`;
+    if (choosingSeenRef.current?.key !== seenKey)
+      choosingSeenRef.current = { key: seenKey, at: Date.now() };
+  }
   useEffect(() => {
     if (!room || room.status !== "choosing" || room.current_word_id) return;
-    if (!currentCoordinator?.is_bot) return;
-    const key = `${room.id}:${room.current_round}:${room.current_coordinator}`;
+    if (!currentCoordinator?.is_bot || room.paused_at) return;
+    // uma escolha por RODADA (não por coordenador)
+    const key = `${room.id}:${room.current_round}`;
+    const seen = choosingSeenRef.current;
+    const elapsed = seen?.key === key ? Date.now() - seen.at : 0;
     if (botAutopickRef.current === key) return;
+    // Só o host busca já (N navegadores buscando por rodada era o problema
+    // de 2026-10-20); quem cobre a falta dele busca na hora.
+    const fetchWords = () =>
+      fetchThreeWords(
+        room.used_word_ids ?? [],
+        room.categories ?? [],
+        room.id,
+        room.nivel ?? "aleatorio",
+      ).catch(() => []);
+    const words = isHost ? fetchWords() : null;
     const timer = setTimeout(
       async () => {
         if (botAutopickRef.current === key) return;
         botAutopickRef.current = key;
         try {
-          const options = await fetchThreeWords(
-            room.used_word_ids ?? [],
-            room.categories ?? [],
-            room.id,
-            room.nivel ?? "aleatorio",
-          );
+          const options = await (words ?? fetchWords());
           if (!options.length) {
             botAutopickRef.current = null;
             return;
           }
           const pick = options[Math.floor(Math.random() * options.length)]!;
-          await chooseWord(room.id, pick.id, 60, players.length);
+          await chooseWord(room.id, pick.id, 60, players.length, {
+            optimistic: isHost,
+          });
         } catch (e) {
           console.error("bot global auto-pick failed", e);
           botAutopickRef.current = null;
         }
       },
-      900 + Math.random() * 900,
+      Math.max(0, botPickDelayMs(isHost, PHASE_ANNOUNCER_TOTAL_MS) - elapsed) +
+        (isHost ? 0 : Math.random() * 900),
     );
     return () => clearTimeout(timer);
   }, [
@@ -413,7 +402,9 @@ function RoomPage() {
     room?.current_round,
     room?.current_coordinator,
     room?.current_word_id,
+    room?.paused_at,
     currentCoordinator?.is_bot,
+    isHost,
   ]);
 
   // Auto-rejoin para o host se o registro de jogador sumiu
@@ -457,6 +448,17 @@ function RoomPage() {
       if (!ok) migrateTriedRef.current = null;
     });
   }, [room?.id, room?.host_id, players, playerId]);
+
+  // Pausa de partida: presença do jogador (toque/tela) para o servidor saber
+  // se a mesa inteira saiu antes de punir alguém pelo prazo.
+  usePausePresence({
+    roomId: room?.id,
+    playerId,
+    // desde o lobby: o registro de presença nasce na entrada e marca o
+    // cliente novo (humano sem registro = cliente antigo, nunca pausa)
+    inGame: !!room && room.status !== "finished",
+    activeHuman: !!me && !me.is_bot,
+  });
 
   // Kicked notice
   const wasInGameRef = useRef(false);
@@ -599,8 +601,8 @@ function RoomPage() {
       className="mobile-shell stage-wide room-shell relative no-scrollbar"
       style={{
         paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)",
-        // Reserva espaço apenas para a barra de reações flutuante (~56px + safe-area)
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 60px)",
+        // Reserva só a faixa da barra de reações compacta (--dock-h, styles.css)
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + var(--dock-h))",
         overflow: "hidden",
         touchAction: "manipulation",
       }}
@@ -617,6 +619,14 @@ function RoomPage() {
         degraded={degraded}
         onReset={() => setConfirmReset(true)}
       />
+      {room.paused_at &&
+        (room.status === "writing" || room.status === "voting") && (
+          <PausedBanner
+            roomId={room.id}
+            playerId={playerId}
+            canResume={!!me && !me.is_bot}
+          />
+        )}
 
       <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
         <AlertDialogContent>
@@ -652,7 +662,7 @@ function RoomPage() {
         >
           <AnimatePresence mode="wait">
             <motion.div
-              key={room.status}
+              key={screenStatus}
               initial={{ opacity: 0, y: 16, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.99 }}
@@ -696,15 +706,23 @@ function RoomPage() {
                     isDeputy={isDeputy}
                   />
                 )}
-                {room.status === "shuffling" && word && (
+                {screenStatus === "shuffling" && word && (
                   <Shuffling
                     room={room}
                     word={word}
                     definitions={definitions}
                     isHost={isHost}
+                    onShown={() => {
+                      // o piso conta de quando a tela montou (depois da
+                      // saída animada da escrita), não da virada da fase
+                      shuffleSeenRef.current = {
+                        key: roundKey,
+                        at: Date.now(),
+                      };
+                    }}
                   />
                 )}
-                {room.status === "voting" && word && (
+                {screenStatus === "voting" && word && (
                   <Voting
                     room={room}
                     players={players}
@@ -759,14 +777,8 @@ function RoomPage() {
         )}
       </div>
 
-      <PhaseAnnouncer status={room.status} />
+      <PhaseAnnouncer status={room.status} round={room.current_round} />
       <ReactionsLayer roomId={room.id} playerId={playerId} />
-      <RoomChat
-        roomId={room.id}
-        status={room.status}
-        playerId={playerId}
-        players={players}
-      />
     </div>
   );
 }

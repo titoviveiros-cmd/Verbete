@@ -60,26 +60,43 @@ export function ProgressBar({
   );
 }
 
+/** "Falta: 🐰 MestreLero" / "Faltam: 🐰 MestreLero · 🦄 Raiza". */
+export function pendingSentence(pending: Player[]): string {
+  const who = pending.map((p) => `${p.avatar} ${p.nickname}`).join(" · ");
+  return `${pending.length === 1 ? "Falta" : "Faltam"}: ${who}`;
+}
+
+/** "🤖 Dona Lupa está preparando a definição…" (um ou vários bots). */
+export function botsPreparingSentence(bots: Player[]): string {
+  if (bots.length === 1)
+    return `🤖 ${bots[0]!.nickname} está preparando a definição…`;
+  const names = bots.map((b) => b.nickname);
+  const last = names.pop();
+  return `🤖 ${names.join(", ")} e ${last} estão preparando as definições…`;
+}
+
+// Quem falta, pelo nome e numa frase só (playtest 2026-10-20: aparecia só
+// "FALTAM 1:" e os nomes, em chips abaixo, caíam para fora da tela). Bots
+// que ainda não enviaram aparecem à parte e discretos — a lista vem das
+// definições reais, então quem já enviou nunca aparece "preparando".
 export function PendingList({ pending }: { pending: Player[] }) {
   if (!pending || pending.length === 0) {
     return <p className="text-sm text-mint font-display">✨ todos enviaram!</p>;
   }
+  const humans = pending.filter((p) => !p.is_bot);
+  const bots = pending.filter((p) => p.is_bot);
   return (
-    <div className="w-full flex flex-col items-center gap-2">
-      <p className="eyebrow">faltam {pending.length}:</p>
-      <div className="flex flex-wrap justify-center gap-2">
-        {pending.map((p) => (
-          <motion.div
-            key={p.id}
-            animate={{ scale: [1, 1.05, 1] }}
-            transition={{ duration: 1.6, repeat: Infinity }}
-            className="chip !pl-1 !pr-3 !py-1"
-          >
-            <span className="text-lg">{p.avatar}</span>
-            <span className="font-display text-sm">{p.nickname}</span>
-          </motion.div>
-        ))}
-      </div>
+    <div className="w-full flex flex-col items-center gap-1 text-center">
+      {humans.length > 0 && (
+        <p className="font-display text-sm leading-snug">
+          {pendingSentence(humans)}
+        </p>
+      )}
+      {bots.length > 0 && (
+        <p className="text-xs text-muted-foreground font-display leading-snug">
+          {botsPreparingSentence(bots)}
+        </p>
+      )}
     </div>
   );
 }
