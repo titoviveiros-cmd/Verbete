@@ -341,7 +341,10 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
 
     // ---------- D) Excluir conta: só sai depois de o servidor confirmar
     await page.goto("/profile");
-    await page.getByRole("button", { name: /Excluir minha conta/ }).click();
+    await expect(page.getByText("Excluir minha conta")).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "Excluir", exact: true }).click();
     await page.getByPlaceholder(displayName).fill(displayName);
     await page.getByRole("button", { name: /Excluir tudo/ }).click();
     await expect
@@ -351,11 +354,18 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
       .toBe(404);
     deleted = true;
     expect((await rows(`profiles?user_id=eq.${uid}`)).length).toBe(0);
-    await expect(page).toHaveURL(new RegExp(`^${host}/?$`), {
+    // logout depois da confirmação: o app vai ao início ou ao login (a
+    // proteção do /profile manda quem saiu para /login) e a sessão some
+    await expect(page).toHaveURL(new RegExp(`^${host}/(login)?$`), {
       timeout: 15_000,
     });
+    await expect
+      .poll(() =>
+        page.evaluate((k) => localStorage.getItem(k), `sb-${REF}-auth-token`),
+      )
+      .toBeNull();
     console.log(
-      "D) EXCLUIR CONTA: usuário some do servidor (404) e o perfil some; só então volta ao início — PASS",
+      `D) EXCLUIR CONTA: usuário some do servidor (404) e o perfil some; só então sai da sessão (${new URL(page.url()).pathname}) — PASS`,
     );
   } finally {
     if (!deleted)
