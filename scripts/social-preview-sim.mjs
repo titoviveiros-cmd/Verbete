@@ -22,7 +22,7 @@ if (images.length === 0) {
 const OUT = resolve(process.cwd(), "resources", "social-preview-sim.png");
 mkdirSync(resolve(process.cwd(), "resources"), { recursive: true });
 
-const TITLE = "Verbete — blefe com palavras raras";
+const TITLE = "Verbete: blefe com palavras raras";
 const DESC =
   "Invente significados, engane os amigos e descubra a verdade. De 4 a 12 jogadores.";
 const HOST = "jogo.verbete.workers.dev";

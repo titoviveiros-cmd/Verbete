@@ -193,12 +193,18 @@ test(`política nova dos bots: 2 humanos + ${BOTS} bots, ${ROUNDS} rodadas`, asy
         await guest.waitForTimeout(600);
         await ballots(guest).first().click({ force: true });
       }
-      // revelação → placar → próxima rodada
-      await expect(
-        host.getByText(/Como cada um pontuou|Pontuação por equipe/i).first(),
-      ).toBeVisible({
-        timeout: 120_000,
-      });
+      // revelação → placar → próxima rodada. A sala é "score 15": se alguém
+      // chega à meta, a partida termina (tela de fim de jogo, sem o placar
+      // da rodada) — fim legítimo, não falha.
+      const roundScore = host
+        .getByText(/Como cada um pontuou|Pontuação por equipe/i)
+        .first();
+      const gameOver = host.getByText(/Fim de jogo/).first();
+      await expect(roundScore.or(gameOver)).toBeVisible({ timeout: 120_000 });
+      if (await gameOver.isVisible().catch(() => false)) {
+        console.log(`RODADA ${round} OK — partida terminou (meta de pontos)`);
+        break;
+      }
       console.log(`RODADA ${round} OK`);
       if (round === ROUNDS) break;
       await host

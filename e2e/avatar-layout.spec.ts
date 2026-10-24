@@ -19,7 +19,7 @@ test.skip(
 );
 test.setTimeout(420_000);
 
-const WIDTHS = [320, 360, 412];
+const WIDTHS = [320, 360, 375, 390, 412, 430];
 const BASE = process.env.E2E_BASE_URL!;
 
 const phone = (browser: Browser, width: number) =>
@@ -104,7 +104,7 @@ async function createRoom(browser: Browser) {
   return { ctx, code: page.url().match(/room\/(\d{4})/)![1]! };
 }
 
-test("avatar: só animais e nada vaza do card em 320/360/412 px", async ({
+test("avatar: só animais e nada vaza do card em 320–430 px (Android e iPhone)", async ({
   browser,
 }) => {
   const host = await createRoom(browser);
@@ -150,7 +150,7 @@ const SB_KEY =
   "";
 const SR = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
-test("Perfil: editor de avatar só com animais, sem vazar, em 320/360/412 px", async ({
+test("Perfil: editor de avatar só com animais, sem vazar, em 320–430 px", async ({
   browser,
 }) => {
   test.skip(!SR || !SB_URL, "precisa de SUPABASE_SERVICE_ROLE_KEY");
