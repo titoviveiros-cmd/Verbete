@@ -69,7 +69,13 @@ test("a home declara a prévia completa com URLs absolutas do domínio público"
   expect(meta("property", "og:image:height")).toBe("630");
   expect(meta("property", "og:image:alt")?.length ?? 0).toBeGreaterThan(20);
   expect(meta("name", "twitter:card")).toBe("summary_large_image");
-  expect(meta("property", "og:title")).toMatch(/Verbete/);
+  // título exato da prévia (dois-pontos, não travessão — 2.1.1)
+  expect(meta("property", "og:title")).toBe(
+    "Verbete: blefe com palavras raras",
+  );
+  expect(meta("name", "twitter:title")).toBe(
+    "Verbete: blefe com palavras raras",
+  );
   expect(meta("property", "og:description")?.length ?? 0).toBeGreaterThan(40);
   expect(meta("property", "og:url")).toMatch(/^https:\/\/[^/]+\/$/);
   expect(meta("property", "og:locale")).toBe("pt_BR");

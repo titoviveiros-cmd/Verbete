@@ -112,7 +112,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           name: "verbete-build",
           content: (import.meta.env.VITE_BUILD_ID as string) ?? "dev",
         },
-        { title: "Verbete — blefe com palavras raras" },
+        { title: "Verbete: blefe com palavras raras" },
         {
           name: "description",
           content:
@@ -121,7 +121,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "author", content: "Verbete" },
         {
           property: "og:title",
-          content: "Verbete — blefe com palavras raras",
+          content: "Verbete: blefe com palavras raras",
         },
         {
           property: "og:description",
@@ -132,7 +132,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
         {
           name: "twitter:title",
-          content: "Verbete — blefe com palavras raras",
+          content: "Verbete: blefe com palavras raras",
         },
         {
           name: "twitter:description",

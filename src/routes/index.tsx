@@ -28,7 +28,7 @@ const HomeStatsCard = lazy(() =>
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Verbete — blefe com palavras raras" },
+      { title: "Verbete: blefe com palavras raras" },
       {
         name: "description",
         content:
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:title",
-        content: "Verbete — blefe com palavras raras",
+        content: "Verbete: blefe com palavras raras",
       },
       {
         property: "og:description",
