@@ -132,3 +132,131 @@ export function sanitizeNickname(input: string): string {
       .slice(0, 14) || "Anônimo"
   );
 }
+
+// ---------------------------------------------------------------------------
+// FORMA da definição gerada (2026-10-24) — CÓPIA de definitionShapeIssue da
+// edge (supabase/functions/bot-definitions/logic.ts); um teste garante que as
+// duas respondem igual (bot-definitions-logic.test.ts). Defesa do client: o
+// texto da IA ou da reserva que chega quebrado ("tecido tecido", "min
+// mineral…", "… (3)") é pulado — nunca vira cédula de bot nem sugestão.
+
+/** Regras na ordem em que são checadas; devolve-se o código da 1ª violada. */
+export const SHAPE_RULES = [
+  "length", // R1 tamanho: 3–16 palavras e 12–120 caracteres
+  "stutter", // R2 gagueira: "tecido tecido", "min mineral"
+  "label", // R3 rótulo de dicionário: "(bot.) …", "s.m. …", "adj. …"
+  "truncated", // R4 corte: termina em "de"/"que"/… ou em , ; : ( - ou parêntese aberto
+  "junk", // R5 lixo: {}[]<>"`*#\|_ , "..", "…" ou "(3)" no fim
+  "chars", // R6 caractere fora de [a-z0-9 ,.;:()'/-], token sem vogal, letra solta
+  "word", // R7 a palavra da rodada (ou a raiz) no texto
+] as const;
+export type ShapeIssue = (typeof SHAPE_RULES)[number];
+
+/** Listas das regras (iguais às do servidor — teste de igualdade). */
+export const SHAPE_VOCAB = {
+  /** R2: palavra funcional não conta como gagueira ("com comida", "para parede"). */
+  functionWords: (
+    "a o as os um uma uns umas de do da dos das em no na nos nas ao aos e ou " +
+    "que se com sem por para pelo pela pelos pelas entre sobre ate como mais " +
+    "muito seu sua seus suas ser ter sob num numa"
+  ).split(" "),
+  /** R3: rótulos de dicionário que o prompt já proíbe (pontos internos saem: "s.m." = sm). */
+  labels: (
+    "s sm sf adj adv v vt vi vtd vti vint vpron loc interj bot zool med min " +
+    "quim geol gram fig bras pl mus anat arq fam"
+  ).split(" "),
+  /** R4: frase que termina nestas palavras foi cortada no meio. */
+  dangling: (
+    "de do da dos das em no na nos nas a o as os um uma uns umas ao aos num " +
+    "numa e ou que com para por pelo pela pelos pelas cujo cuja cujos cujas onde"
+  ).split(" "),
+};
+const FUNCTION_WORDS = new Set(SHAPE_VOCAB.functionWords);
+const DICT_LABELS = new Set(SHAPE_VOCAB.labels);
+const DANGLING = new Set(SHAPE_VOCAB.dangling);
+
+/** "(" e ")" fecham na ordem certa. */
+function balancedParens(s: string): boolean {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === "(") depth++;
+    else if (ch === ")" && --depth < 0) return false;
+  }
+  return depth === 0;
+}
+
+/**
+ * Código da regra de forma violada (SHAPE_RULES) ou null quando o texto está
+ * bem formado. `word` = palavra da rodada (R7, com a mesma regra de
+ * leaksWord: rejeita em vez de mascarar).
+ */
+export function definitionShapeIssue(
+  text: string,
+  word = "",
+): ShapeIssue | null {
+  const raw = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const flat = normalizeForGame(raw);
+  const plain = flat.replace(/[^a-z0-9]+/g, " ").trim();
+  const nWords = plain ? plain.split(" ").length : 0;
+  if (nWords < 3 || nWords > 16 || plain.length < 12 || raw.length > 120) {
+    return "length";
+  }
+  // Tokens por espaço — hífen e apóstrofo ficam dentro ("reco-reco" é 1
+  // token); a pontuação das pontas sai na comparação.
+  const spaced = flat.split(" ");
+  const toks = spaced.map((t) => t.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ""));
+  for (let i = 0; i + 1 < toks.length; i++) {
+    const a = toks[i]!;
+    const b = toks[i + 1]!;
+    // o 1º termina em pontuação: não é gagueira ("mentir, mentiroso")
+    if (!a || !b || /[^a-z0-9]$/.test(spaced[i]!)) continue;
+    if (a === b) return "stutter";
+    if (
+      a.replace(/[^a-z]/g, "").length >= 3 &&
+      !FUNCTION_WORDS.has(a) &&
+      b.startsWith(a)
+    ) {
+      return "stutter";
+    }
+  }
+  if (
+    raw.startsWith("(") ||
+    DICT_LABELS.has((toks[0] ?? "").replace(/\./g, ""))
+  ) {
+    return "label";
+  }
+  let last = "";
+  for (let i = toks.length - 1; i >= 0 && !last; i--) last = toks[i]!;
+  if (DANGLING.has(last) || /[,;:(\-–—]$/.test(raw) || !balancedParens(raw)) {
+    return "truncated";
+  }
+  if (/[{}[\]<>"`*#\\|_]|\.\.|…/.test(raw) || /\(\s*\d+\s*\)$/.test(raw)) {
+    return "junk";
+  }
+  if (/[^a-z0-9 ,.;:()'/-]/.test(flat)) return "chars";
+  for (const t of toks) {
+    if (!t) continue;
+    if (!/[aeiouy0-9]/.test(t) || (t.length === 1 && !/[aeo0-9]/.test(t))) {
+      return "chars";
+    }
+  }
+  if (word && leaksWord(flat, normalizeForGame(word.trim()))) return "word";
+  return null;
+}
+
+/**
+ * Texto da IA ou de reserva pronto para a mesa (sanitizado), ou null quando
+ * está quebrado — antes OU depois de sanitizar: máscara de palavrão ("*"),
+ * link ("[link]") ou a palavra da rodada também descartam, em vez de virar
+ * cédula/sugestão mascarada.
+ */
+export function wellFormedDefinition(
+  raw: string,
+  word?: string,
+): string | null {
+  if (definitionShapeIssue(raw, word ?? "")) return null;
+  const clean = sanitizeDefinition(raw, 140, word);
+  return definitionShapeIssue(clean, word ?? "") ? null : clean;
+}

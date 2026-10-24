@@ -44,6 +44,8 @@ import {
   generateAiDefinitionForPlayer,
 } from "@/lib/room";
 import { NUDGE_EVENT } from "@/lib/sync-nudge";
+import { BOT_FAKE_DEFINITIONS_TEMPLATES } from "@/lib/bot-names";
+import { wellFormedDefinition } from "@/lib/text-filter";
 import { PERSONA_PROMPTS } from "../../../supabase/functions/bot-definitions-v2/prompts.ts";
 
 const named = (name: string) => h.calls.filter((c) => c.name === name);
@@ -458,5 +460,38 @@ describe("aviso dos bots e sugestão do jogador (Red Team 2026-10-22)", () => {
       },
     });
     expect(await p).toBe("reserva vetada pelo servidor para teste");
+  });
+
+  // Forma (2026-10-24): a auto-definição nunca entrega texto quebrado.
+  const quebrada = "relativo a tecido tecido com fios metalicos finos";
+
+  it("IA mandou quebrada: pula e usa a reserva vetada — UMA chamada à edge", async () => {
+    const p = generateAiDefinitionForPlayer(word, "room-1", 2);
+    await tick();
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: {
+        definitions: [quebrada],
+        fallbacks: ["reserva vetada pelo servidor para teste"],
+      },
+    });
+    expect(await p).toBe("reserva vetada pelo servidor para teste");
+    expect(named("edge:bot-definitions-v2")).toHaveLength(1);
+  });
+
+  it("tudo quebrado ou com a palavra da rodada: template local bem formado, sem máscara nem '(n)'", async () => {
+    const p = generateAiDefinitionForPlayer(word, "room-1", 2);
+    await tick();
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: {
+        definitions: [quebrada, "cerimonia de rapapes na corte antiga"],
+        fallbacks: ["min mineral de coloracao escura encontrado em regioes"],
+      },
+    });
+    const got = await p;
+    const templates = BOT_FAKE_DEFINITIONS_TEMPLATES.map((t) =>
+      wellFormedDefinition(t, word.word),
+    );
+    expect(templates).toContain(got);
+    expect(got).not.toMatch(/\*|\(\d+\)|incomum/);
   });
 });

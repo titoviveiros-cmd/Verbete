@@ -11,6 +11,7 @@ import {
   sanitizeNickname,
   humanizeMeaning,
   textSimilarity,
+  wellFormedDefinition,
 } from "./text-filter";
 import {
   BOT_NAMES,
@@ -713,7 +714,10 @@ export const BOT_MATCH_REPEAT_SIMILARITY = 0.5;
  * definições da IA já aprovadas pela edge v2 (filtros + juiz semântico), depois
  * as reservas que a edge vetou, por fim o reserva local. Nenhuma linha fica
  * igual/parecida com outra da rodada nem com o que um bot já disse em rodada
- * anterior DESTA partida (`previous`). Pura — testável sem rede.
+ * anterior DESTA partida (`previous`). Texto quebrado (forma, palavra da
+ * rodada, máscara — wellFormedDefinition) é pulado: vai o próximo da fila.
+ * Fila esgotada: o bot fica SEM linha (não envia) — nunca "texto (n)".
+ * Pura — testável sem rede.
  */
 export function assembleBotRows(input: {
   bots: Player[];
@@ -732,21 +736,23 @@ export function assembleBotRows(input: {
     );
   const queue = [...input.ai, ...input.vetted, ...input.local];
   let q = 0;
-  const next = (): string => {
+  const next = (): string | null => {
     while (q < queue.length) {
-      const text = sanitizeDefinition(queue[q++]!, 140, input.word);
+      const text = wellFormedDefinition(queue[q++]!, input.word);
+      if (!text) continue;
       const n = normalizeDefText(text);
       if (n && !tooClose(n)) return text;
     }
-    // reserva esgotada (dezenas de modelos): variação para nunca travar
-    const base = input.local[used.length % Math.max(1, input.local.length)];
-    return `${sanitizeDefinition(base ?? "objeto antigo de uso domestico", 120, input.word)} (${used.length + 1})`;
+    return null;
   };
-  return input.bots.map((bot) => {
+  const rows: Array<{ player_id: string; text: string }> = [];
+  for (const bot of input.bots) {
     const text = next();
+    if (text === null) break; // reserva esgotada: os que faltam não enviam
     used.push(normalizeDefText(text));
-    return { player_id: bot.id, text };
-  });
+    rows.push({ player_id: bot.id, text });
+  }
+  return rows;
 }
 
 /** Textos dos bots nas rodadas ANTERIORES desta partida (vazio se falhar). */
@@ -865,6 +871,7 @@ async function submitBotRows(
   round: number,
   rows: Array<{ player_id: string; text: string }>,
 ) {
+  if (rows.length === 0) return; // nenhum texto bem formado: o bot não envia
   try {
     const { data, error } = await supabase.rpc("submit_bot_definitions_bulk", {
       p_room_id: roomId,
@@ -940,31 +947,35 @@ export async function generateAiDefinitionForPlayer(
         round,
       },
     });
+    // 1ª bem formada (forma, palavra da rodada, sem máscara) — a quebrada é
+    // pulada, nunca entregue ao jogador
     const firstOk = (arr: unknown) =>
       Array.isArray(arr)
-        ? (arr.find(
-            (s: unknown) => typeof s === "string" && (s as string).length > 5,
-          ) as string | undefined)
+        ? arr
+            .filter((s): s is string => typeof s === "string" && s.length > 5)
+            .map((s) => wellFormedDefinition(s, word.word))
+            .find(
+              (s): s is string => s !== null && !used.has(normalizeDefText(s)),
+            )
         : undefined;
     // sem candidata da IA: a reserva que o SERVIDOR já vetou contra a
     // verdade (a lista local crua fica só como último recurso)
     const fbs = (data as any)?.fallbacks;
-    const raw =
+    const clean =
       firstOk((data as any)?.definitions) ??
       firstOk(Array.isArray(fbs) ? shuffle([...fbs]) : null);
-    if (raw) {
-      const clean = sanitizeDefinition(raw as string, 140, word.word);
-      if (!used.has(normalizeDefText(clean))) return clean;
-    }
+    if (clean) return clean;
   } catch (e) {
     console.warn("generateAiDefinitionForPlayer failed, using fallback", e);
   }
   const pool = shuffle([...BOT_FAKE_DEFINITIONS_TEMPLATES]);
   for (const fb of pool) {
-    const clean = sanitizeDefinition(fb, 140, word.word);
-    if (!used.has(normalizeDefText(clean))) return clean;
+    const clean = wellFormedDefinition(fb, word.word);
+    if (clean && !used.has(normalizeDefText(clean))) return clean;
   }
-  return sanitizeDefinition(pool[0] + " incomum", 140, word.word);
+  // nenhuma bem formada (a palavra da rodada em todas?): sem sugestão — o
+  // toque cai na reserva da tela; nunca um texto quebrado ou mascarado
+  return "";
 }
 
 export async function startShuffling(roomId: string): Promise<boolean> {

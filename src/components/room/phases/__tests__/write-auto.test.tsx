@@ -21,9 +21,15 @@ const room = vi.hoisted(() => ({
   DuplicateDefinitionError: class extends Error {},
 }));
 vi.mock("@/lib/room", () => room);
+// edge dos 💡 (v1): por padrão "pensa" para sempre; um teste responde
+const edge = vi.hoisted(() => ({
+  invoke: vi.fn(
+    (..._args: unknown[]): Promise<unknown> => new Promise(() => {}),
+  ),
+}));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    functions: { invoke: () => new Promise(() => {}) },
+    functions: { invoke: edge.invoke },
     rpc: () => new Promise(() => {}),
   },
 }));
@@ -159,5 +165,32 @@ describe("WriteDefinition — 🤖 sugestão antecipada", () => {
     fireEvent.change(field(), { target: { value: "minha propria ideia" } });
     await wait(AUTO_DEF_WAIT_MS);
     expect(field().value).toBe("minha propria ideia");
+  });
+});
+
+describe("WriteDefinition — 💡 sugestões (forma, 2026-10-24)", () => {
+  afterEach(() => {
+    edge.invoke.mockImplementation(() => new Promise(() => {}));
+  });
+
+  it("sugestão quebrada da IA não aparece; a boa entra e a local completa", async () => {
+    edge.invoke.mockImplementation((name: unknown) =>
+      name === "bot-definitions"
+        ? Promise.resolve({
+            data: {
+              definitions: [
+                "relativo a tecido tecido com fios metalicos finos",
+                "doce de abobora com cravo e canela",
+              ],
+            },
+          })
+        : new Promise(() => {}),
+    );
+    show();
+    await flush();
+    await flush();
+    expect(screen.queryByText(/tecido tecido/)).toBeNull();
+    expect(screen.getByText(/doce de abobora com cravo e canela/)).toBeTruthy();
+    expect(screen.getAllByText(/💡/)).toHaveLength(2);
   });
 });
