@@ -11,6 +11,7 @@ import {
   sanitizeNickname,
   humanizeMeaning,
   textSimilarity,
+  wellFormedDefinition,
 } from "./text-filter";
 import {
   BOT_NAMES,
@@ -384,6 +385,9 @@ export async function fetchThreeWords(
   categories: string[] = [],
   roomId?: string,
   nivel: NivelFilter = "aleatorio",
+  // quantas devolver (a escolha da palavra pede candidatas a mais para ficar
+  // só com as que cabem inteiras na tela — lib/word-fit.ts)
+  count = 3,
 ): Promise<Word[]> {
   // 1) Palavras customizadas da sala (se houver) e 2) sorteio global, EM
   // PARALELO (playtest 2026-10-20: em série eram ≈0,52 s; juntas ≈0,27 s).
@@ -407,7 +411,7 @@ export async function fetchThreeWords(
       supabase.rpc("get_random_word_prompts", {
         exclude_ids: excludeIds,
         min_rarity: 2,
-        lim: 3,
+        lim: count,
         p_categories: categories,
         p_nivel: nivel,
       }),
@@ -426,12 +430,16 @@ export async function fetchThreeWords(
       }));
   }
 
-  // Quantas faltam para completar 3
-  const needed = Math.max(0, 3 - Math.min(customPool.length, 3));
+  // Quantas faltam para completar `count`. Acima das 3 opções da escolha é
+  // folga para o word-fit: as alternativas abaixo (sorteio sem filtro, tabela
+  // crua) só entram se faltar para as 3 — como era com 3. Exigir as 9 trocava
+  // um sorteio curto e bom pela tabela crua (CI do 7ea1e72, choosing-palavras).
+  const needed = Math.max(0, count - Math.min(customPool.length, count));
+  const atLeast = Math.min(needed, Math.max(0, 3 - customPool.length));
   let globalPool: Word[] = [];
   if (needed > 0) {
     const { data, error } = globalRes;
-    if (!error && data && data.length >= needed) {
+    if (!error && data && data.length >= atLeast) {
       globalPool = (data as Word[]).slice(0, needed);
     } else if (categories.length > 0 || nivel !== "aleatorio") {
       const { data: any3 } = await supabase.rpc("get_random_word_prompts", {
@@ -441,7 +449,7 @@ export async function fetchThreeWords(
       });
       if (any3) globalPool = any3 as Word[];
     }
-    if (globalPool.length < needed) {
+    if (globalPool.length < atLeast) {
       let q = supabase
         .from("words")
         .select("id,word,category,rarity,nivel,classe,pronuncia")
@@ -453,9 +461,22 @@ export async function fetchThreeWords(
     }
   }
 
-  // 3) Mescla: pega até 3 customs (sorteadas) + completa com globais
-  const pickedCustom = shuffle(customPool).slice(0, 3);
-  return shuffle([...pickedCustom, ...globalPool]).slice(0, 3);
+  // 3) Mescla em ORDEM DE PRIORIDADE — a escolha pede candidatas a mais e
+  // fica com as primeiras que cabem na tela (lib/word-fit.ts): as da sala
+  // (sorteadas), depois as do sorteio que seguem categorias/nível e só então
+  // as que o servidor usou para completar (get_random_words: outra categoria,
+  // outro nível, sem raridade mínima). Com 3 candidatas era isto mesmo: as de
+  // fora só entravam se faltasse. Embaralhar tudo (como antes) misturava as de
+  // fora entre as 9 e furava o filtro do lobby (Red Team 2026-10-24).
+  const followsRoom = (w: Word) =>
+    (categories.length === 0 || categories.includes(w.category ?? "")) &&
+    (nivel === "aleatorio" ? w.rarity >= 2 : w.nivel === nivel);
+  const pickedCustom = shuffle(customPool).slice(0, count);
+  return [
+    ...pickedCustom,
+    ...globalPool.filter(followsRoom),
+    ...globalPool.filter((w) => !followsRoom(w)),
+  ].slice(0, count);
 }
 
 export async function setNivel(
@@ -710,7 +731,10 @@ export const BOT_MATCH_REPEAT_SIMILARITY = 0.5;
  * definições da IA já aprovadas pela edge v2 (filtros + juiz semântico), depois
  * as reservas que a edge vetou, por fim o reserva local. Nenhuma linha fica
  * igual/parecida com outra da rodada nem com o que um bot já disse em rodada
- * anterior DESTA partida (`previous`). Pura — testável sem rede.
+ * anterior DESTA partida (`previous`). Texto quebrado (forma, palavra da
+ * rodada, máscara — wellFormedDefinition) é pulado: vai o próximo da fila.
+ * Fila esgotada: o bot fica SEM linha (não envia) — nunca "texto (n)".
+ * Pura — testável sem rede.
  */
 export function assembleBotRows(input: {
   bots: Player[];
@@ -729,21 +753,23 @@ export function assembleBotRows(input: {
     );
   const queue = [...input.ai, ...input.vetted, ...input.local];
   let q = 0;
-  const next = (): string => {
+  const next = (): string | null => {
     while (q < queue.length) {
-      const text = sanitizeDefinition(queue[q++]!, 140, input.word);
+      const text = wellFormedDefinition(queue[q++]!, input.word);
+      if (!text) continue;
       const n = normalizeDefText(text);
       if (n && !tooClose(n)) return text;
     }
-    // reserva esgotada (dezenas de modelos): variação para nunca travar
-    const base = input.local[used.length % Math.max(1, input.local.length)];
-    return `${sanitizeDefinition(base ?? "objeto antigo de uso domestico", 120, input.word)} (${used.length + 1})`;
+    return null;
   };
-  return input.bots.map((bot) => {
+  const rows: Array<{ player_id: string; text: string }> = [];
+  for (const bot of input.bots) {
     const text = next();
+    if (text === null) break; // reserva esgotada: os que faltam não enviam
     used.push(normalizeDefText(text));
-    return { player_id: bot.id, text };
-  });
+    rows.push({ player_id: bot.id, text });
+  }
+  return rows;
 }
 
 /** Textos dos bots nas rodadas ANTERIORES desta partida (vazio se falhar). */
@@ -862,6 +888,7 @@ async function submitBotRows(
   round: number,
   rows: Array<{ player_id: string; text: string }>,
 ) {
+  if (rows.length === 0) return; // nenhum texto bem formado: o bot não envia
   try {
     const { data, error } = await supabase.rpc("submit_bot_definitions_bulk", {
       p_room_id: roomId,
@@ -937,31 +964,35 @@ export async function generateAiDefinitionForPlayer(
         round,
       },
     });
+    // 1ª bem formada (forma, palavra da rodada, sem máscara) — a quebrada é
+    // pulada, nunca entregue ao jogador
     const firstOk = (arr: unknown) =>
       Array.isArray(arr)
-        ? (arr.find(
-            (s: unknown) => typeof s === "string" && (s as string).length > 5,
-          ) as string | undefined)
+        ? arr
+            .filter((s): s is string => typeof s === "string" && s.length > 5)
+            .map((s) => wellFormedDefinition(s, word.word))
+            .find(
+              (s): s is string => s !== null && !used.has(normalizeDefText(s)),
+            )
         : undefined;
     // sem candidata da IA: a reserva que o SERVIDOR já vetou contra a
     // verdade (a lista local crua fica só como último recurso)
     const fbs = (data as any)?.fallbacks;
-    const raw =
+    const clean =
       firstOk((data as any)?.definitions) ??
       firstOk(Array.isArray(fbs) ? shuffle([...fbs]) : null);
-    if (raw) {
-      const clean = sanitizeDefinition(raw as string, 140, word.word);
-      if (!used.has(normalizeDefText(clean))) return clean;
-    }
+    if (clean) return clean;
   } catch (e) {
     console.warn("generateAiDefinitionForPlayer failed, using fallback", e);
   }
   const pool = shuffle([...BOT_FAKE_DEFINITIONS_TEMPLATES]);
   for (const fb of pool) {
-    const clean = sanitizeDefinition(fb, 140, word.word);
-    if (!used.has(normalizeDefText(clean))) return clean;
+    const clean = wellFormedDefinition(fb, word.word);
+    if (clean && !used.has(normalizeDefText(clean))) return clean;
   }
-  return sanitizeDefinition(pool[0] + " incomum", 140, word.word);
+  // nenhuma bem formada (a palavra da rodada em todas?): sem sugestão — o
+  // toque cai na reserva da tela; nunca um texto quebrado ou mascarado
+  return "";
 }
 
 export async function startShuffling(roomId: string): Promise<boolean> {

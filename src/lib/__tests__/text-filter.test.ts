@@ -4,6 +4,7 @@ import {
   sanitizeDefinition,
   sanitizeNickname,
   humanizeMeaning,
+  wellFormedDefinition,
 } from "@/lib/text-filter";
 
 describe("normalizeForGame", () => {
@@ -69,6 +70,34 @@ describe("sanitizeDefinition", () => {
         "livro antigo e volumoso",
       );
     });
+  });
+});
+
+describe("wellFormedDefinition (texto da IA/reserva para a mesa)", () => {
+  it("bem formado: devolve o texto sanitizado", () => {
+    expect(
+      wellFormedDefinition("Tipo de dança popular do interior do Brasil"),
+    ).toBe("tipo de danca popular do interior do brasil");
+  });
+  it("quebrado (gagueira, corte, '(3)') é descartado", () => {
+    expect(
+      wellFormedDefinition("relativo a tecido tecido com fios metalicos finos"),
+    ).toBeNull();
+    expect(wellFormedDefinition("ferramenta usada para cortar o")).toBeNull();
+    expect(
+      wellFormedDefinition("danca tipica do interior do brasil (3)"),
+    ).toBeNull();
+  });
+  it("descarta em vez de mascarar: palavra da rodada, palavrão e link", () => {
+    expect(
+      wellFormedDefinition("cerimonia de rapapes na corte antiga", "rapapé"),
+    ).toBeNull();
+    expect(
+      wellFormedDefinition("lugar onde se fala merda o dia todo"),
+    ).toBeNull();
+    expect(
+      wellFormedDefinition("pagina antiga em https://x.com/abc sobre festas"),
+    ).toBeNull();
   });
 });
 

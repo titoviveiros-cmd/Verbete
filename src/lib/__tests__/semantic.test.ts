@@ -196,6 +196,49 @@ describe("juiz do multiplayer (saída binária)", () => {
     expect(body.messages[0].content.startsWith(SEMANTIC_CORE)).toBe(true);
   });
 
+  // Auditoria 2026-10-24 (sala 3606): as notas que o juiz de produção deu às
+  // respostas do Tito, com a verdade e o texto reais no pedido. Corte 80
+  // inclusivo: 75 fica sem 🧠 +3, 90 ganha (o +3 em si: test-similarity-bonus).
+  it("casos reais: melancolia 75 fica sem +3; enfiteuta 90 ganha", async () => {
+    const judge = async (
+      word: string,
+      truth: string,
+      text: string,
+      score: number,
+    ) => {
+      const fetchFn = vi.fn(async (_u: string, _i: RequestInit) =>
+        ok(JSON.stringify({ scores: [{ id: "tito", score }] })),
+      );
+      const r = await judgeCandidates({
+        fetchFn,
+        apiKey: "k",
+        word,
+        truth,
+        candidates: [{ id: "tito", text }],
+      });
+      expect(sentBody(fetchFn).messages[1].content).toBe(
+        `Palavra: ${JSON.stringify(word)}\nDefinição sorteada: ${JSON.stringify(truth)}\nCandidatas (JSON): ${JSON.stringify([{ id: "tito", texto: text }])}`,
+      );
+      return r;
+    };
+    expect(
+      await judge(
+        "melancolia",
+        "tristeza vaga, profunda, persistente e sem causa aparente",
+        "atitude sentimental por tristeza",
+        75,
+      ),
+    ).toMatchObject({ ok: true, matches: [] });
+    expect(
+      await judge(
+        "enfiteuta",
+        "aquele que tem o direito de enfiteuse",
+        "aquele que e parte de uma enfiteuse",
+        90,
+      ),
+    ).toMatchObject({ ok: true, matches: ["tito"] });
+  });
+
   it("Gemini fora ou resposta fora do formato: ok=false (sem bônus)", async () => {
     const down = vi.fn(async () => new Response("x", { status: 503 }));
     expect(
