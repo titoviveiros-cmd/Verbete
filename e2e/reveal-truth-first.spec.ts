@@ -67,10 +67,12 @@ test("rede lenta: a verdade aparece com o texto antes de qualquer blefe", async 
   page,
 }) => {
   let slow = false;
-  await page.route("**/rest/v1/rpc/get_round_sync", async (route) => {
-    if (slow) await new Promise((r) => setTimeout(r, 5_000));
-    await route.continue().catch(() => {});
-  });
+  // as duas leituras que trazem definições (poll da fase e recarga da sala)
+  for (const rpc of ["get_round_sync", "get_room_state"])
+    await page.route(`**/rest/v1/rpc/${rpc}`, async (route) => {
+      if (slow) await new Promise((r) => setTimeout(r, 5_000));
+      await route.continue().catch(() => {});
+    });
   const ballots = await untilVoting(page);
   slow = true; // daqui em diante toda leitura da rodada chega 5 s depois
   const n = await ballots.count();
@@ -116,6 +118,12 @@ test("rede lenta: a verdade aparece com o texto antes de qualquer blefe", async 
   console.log(
     `REVELAÇÃO (rede lenta): 1ª verdade em ${firstTruth?.t ?? "-"} ms com "${(firstTruth?.truth ?? "").slice(0, 40)}" | 1º blefe em ${firstBluff?.t ?? "-"} ms | verdade final "${finalTruth.slice(0, 40)}" | ${snaps.length} quadros`,
   );
+  // instrumento: a tela de fato esperou (sem verdade e sem blefes) — se ela
+  // montasse já com tudo, o teste passaria até no código antigo
+  expect(
+    snaps.some((s) => s.truth === null && s.bluffs.length === 0),
+    "houve espera observada",
+  ).toBe(true);
   expect(finalTruth, "a verdade foi mostrada").not.toBe("");
   expect(firstTruth?.truth, "1ª verdade já com o texto certo").toBe(finalTruth);
   expect(firstBluff, "houve blefes").toBeTruthy();

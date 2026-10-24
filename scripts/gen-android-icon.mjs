@@ -27,13 +27,55 @@ const DENSITIES = {
   xxhdpi: 3,
   xxxhdpi: 4,
 };
-// Canvas adaptativo 108 dp; o tile (48 dp, cantos arredondados, com a sombra) cabe no
-// círculo seguro de 66 dp com folga. Legado: 48 dp.
+// Canvas adaptativo 108 dp; o tile (46 dp, cantos arredondados, com a sombra
+// 3D de baixo) cabe no círculo seguro de 66 dp (raio 33 dp) — conferido abaixo
+// pixel a pixel. Legado: 48 dp, sem encostar na borda.
 const ADAPTIVE_DP = 108;
-const TILE_DP = 48;
+const TILE_DP = 46;
+const SAFE_RADIUS_DP = 33;
 const LEGACY_DP = 48;
 
+// A sombra 3D de baixo do tile (0 12s 0) fica fora da caixa dele: centraliza
+// o CONJUNTO tile + sombra (sobe o tile metade da sombra).
+const lifted = (html, size) =>
+  `<div style="padding-bottom:${Math.round((12 * size) / 124)}px">${html}</div>`;
+
 const browser = await chromium.launch();
+
+// Alcance do desenho: maior distância do centro com alfa > 25 e quantos
+// pixels visíveis (alfa > 10) encostam na borda do PNG.
+async function alphaStats(file) {
+  const pg = await browser.newPage();
+  const src = `data:image/png;base64,${readFileSync(file).toString("base64")}`;
+  const stats = await pg.evaluate(async (s) => {
+    const img = new Image();
+    img.src = s;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const {
+      data,
+      width: w,
+      height: h,
+    } = ctx.getImageData(0, 0, img.width, img.height);
+    let maxR = 0;
+    let edge = 0;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const a = data[(y * w + x) * 4 + 3];
+        if (a > 25)
+          maxR = Math.max(maxR, Math.hypot(x + 0.5 - w / 2, y + 0.5 - h / 2));
+        if (a > 10 && (x === 0 || y === 0 || x === w - 1 || y === h - 1))
+          edge++;
+      }
+    return { maxR, edge };
+  }, src);
+  await pg.close();
+  return stats;
+}
 async function shot(file, px, bodyBg, inner, transparent) {
   const pg = await browser.newPage({
     viewport: { width: px, height: px },
@@ -51,36 +93,53 @@ for (const [name, d] of Object.entries(DENSITIES)) {
   const canvas = Math.round(ADAPTIVE_DP * d);
   const tile = Math.round(TILE_DP * d);
   const legacy = Math.round(LEGACY_DP * d);
-  // camada da frente (transparente) e monocromática (só o glifo)
+  // camada da frente (transparente) e monocromática (só o glifo, na mesma
+  // posição do glifo da frente)
   await shot(
     resolve(dir, "ic_launcher_foreground.png"),
     canvas,
     "transparent",
-    tileHtml(tile, { glow: false }),
+    lifted(tileHtml(tile, { glow: false }), tile),
     true,
   );
   await shot(
     resolve(dir, "ic_launcher_monochrome.png"),
     canvas,
     "transparent",
-    glyphHtml(tile),
+    lifted(glyphHtml(tile), tile),
     true,
   );
   // legado quadrado: o tile; redondo: o tile sobre círculo creme
+  const sq = Math.round(legacy * 0.8);
   await shot(
     resolve(dir, "ic_launcher.png"),
     legacy,
     "transparent",
-    tileHtml(Math.round(legacy * 0.84), { glow: false }),
+    lifted(tileHtml(sq, { glow: false }), sq),
     true,
   );
+  const rd = Math.round(legacy * 0.58);
   await shot(
     resolve(dir, "ic_launcher_round.png"),
     legacy,
     "transparent",
-    `<div style="width:${legacy}px;height:${legacy}px;border-radius:50%;background:${CREAM};display:flex;align-items:center;justify-content:center;">${tileHtml(Math.round(legacy * 0.62), { glow: false })}</div>`,
+    `<div style="width:${legacy}px;height:${legacy}px;border-radius:50%;background:${CREAM};display:flex;align-items:center;justify-content:center;">${lifted(tileHtml(rd, { glow: false }), rd)}</div>`,
     true,
   );
+  // Conferência pixel a pixel: frente e monocromático dentro do círculo
+  // seguro; legado quadrado sem encostar na borda (sombra inteira).
+  for (const f of ["ic_launcher_foreground", "ic_launcher_monochrome"]) {
+    const { maxR } = await alphaStats(resolve(dir, `${f}.png`));
+    if (maxR > SAFE_RADIUS_DP * d)
+      throw new Error(
+        `${name}/${f}: desenho a ${(maxR / d).toFixed(1)} dp do centro (> ${SAFE_RADIUS_DP} dp)`,
+      );
+  }
+  const { edge } = await alphaStats(resolve(dir, "ic_launcher.png"));
+  if (edge > 0)
+    throw new Error(
+      `${name}/ic_launcher: ${edge} pixel(s) encostando na borda`,
+    );
   // o fundo agora é cor (@color/ic_launcher_background): PNG antigo sai
   const oldBg = resolve(dir, "ic_launcher_background.png");
   if (existsSync(oldBg)) rmSync(oldBg);
