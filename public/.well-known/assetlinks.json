@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "app.verbete.game",
       "sha256_cert_fingerprints": [
-        "FA:CC:D8:6C:68:B9:66:9D:A7:DB:59:67:5F:8E:17:4F:A1:15:BF:F2:5A:3A:C8:A4:ED:E5:C8:CD:58:39:54:65"
+        "FA:CC:D8:6C:68:B9:66:9D:A7:DB:59:67:5F:8E:17:4F:A1:15:BF:F2:5A:3A:C8:A4:ED:E5:C8:CD:58:39:54:65",
+        "71:6A:56:2C:D6:64:2F:CA:DA:13:33:0B:D8:27:76:98:F3:2D:43:D3:C3:5D:48:31:69:1C:0C:C4:6F:9A:60:97"
       ]
     }
   }
