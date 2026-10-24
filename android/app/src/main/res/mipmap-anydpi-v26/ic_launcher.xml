@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone adaptativo (2.1.1): fundo = cor creme do app, cobrindo o canvas
+     inteiro (sem inset — inset no fundo deixava borda transparente, que os
+     launchers pintam de preto); frente = VerbeteTile no canvas de 108 dp,
+     dentro do círculo seguro; monocromático = só o "V" e o livro (ícone
+     temático do Android 13+). Gerado por scripts/gen-android-icon.mjs. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background>
-        <inset android:drawable="@mipmap/ic_launcher_background" android:inset="16.7%" />
-    </background>
-    <foreground>
-        <inset android:drawable="@mipmap/ic_launcher_foreground" android:inset="16.7%" />
-    </foreground>
-    <!-- Android 13+ ícone temático: o launcher tinge a silhueta do tile -->
-    <monochrome>
-        <inset android:drawable="@mipmap/ic_launcher_foreground" android:inset="16.7%" />
-    </monochrome>
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
 </adaptive-icon>
