@@ -2,7 +2,8 @@ import { APP_URL } from "@/lib/app-url";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AVATARS, randomAvatar, randomColor } from "@/lib/avatars";
+import { randomAvatar, randomColor } from "@/lib/avatars";
+import { AvatarGrid } from "@/components/AvatarGrid";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { createRoom, joinRoom } from "@/lib/room";
@@ -579,24 +580,7 @@ function AvatarPicker({
     <div>
       <p className="eyebrow mb-1.5 px-1">Avatar</p>
       <div className="sticker !p-2.5">
-        <div className="grid grid-cols-8 gap-1">
-          {AVATARS.map((a) => (
-            <button
-              key={a}
-              onClick={() => onAvatar(a)}
-              aria-label={`Escolher avatar ${a}`}
-              aria-pressed={avatar === a}
-              className={
-                "text-2xl rounded-xl p-1 transition " +
-                (avatar === a
-                  ? "bg-pink/25 ring-2 ring-pink"
-                  : "hover:bg-white/5")
-              }
-            >
-              {a}
-            </button>
-          ))}
-        </div>
+        <AvatarGrid value={avatar} onChange={onAvatar} />
       </div>
     </div>
   );

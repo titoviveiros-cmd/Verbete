@@ -12,7 +12,7 @@ import {
 } from "@/lib/daily";
 import { deleteAccount, resetMyStats } from "@/lib/account.functions";
 import { expectOk } from "@/lib/server-fn-transport";
-import { AVATARS, COLORS } from "@/lib/avatars";
+import { AvatarGrid } from "@/components/AvatarGrid";
 import { setStored } from "@/lib/player-id";
 
 export const Route = createFileRoute("/profile")({
@@ -223,7 +223,7 @@ function ProfilePage() {
         <button
           type="button"
           onClick={() => setEditingAvatar((v) => !v)}
-          aria-label="Alterar avatar e cor"
+          aria-label="Alterar avatar"
           className="rounded-full w-24 h-24 mx-auto flex items-center justify-center text-5xl shadow-pop transition active:scale-95 relative"
           style={{
             background: `radial-gradient(circle at 30% 25%, ${profile?.color ?? "#FFD166"}cc, ${profile?.color ?? "#FFD166"})`,
@@ -239,48 +239,11 @@ function ProfilePage() {
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mb-1">
               Avatar
             </div>
-            <div className="grid grid-cols-8 gap-1 mb-3">
-              {AVATARS.map((a) => (
-                <button
-                  key={a}
-                  onClick={() => updateAppearance({ avatar: a })}
-                  aria-label={`Escolher avatar ${a}`}
-                  aria-pressed={profile?.avatar === a}
-                  className={
-                    "text-2xl rounded-lg p-1 transition " +
-                    (profile?.avatar === a
-                      ? "bg-pink/30 ring-2 ring-pink"
-                      : "hover:bg-white/5")
-                  }
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-display mb-1">
-              Cor
-            </div>
-            <div className="flex gap-1 justify-center flex-wrap">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => updateAppearance({ color: c })}
-                  aria-label={`Escolher cor ${c}`}
-                  aria-pressed={profile?.color === c}
-                  className="p-2 rounded-full transition active:scale-95"
-                >
-                  <span
-                    className={
-                      "block w-6 h-6 rounded-full border-2 " +
-                      (profile?.color === c
-                        ? "border-white scale-110"
-                        : "border-black/40")
-                    }
-                    style={{ background: c }}
-                  />
-                </button>
-              ))}
-            </div>
+            {/* Só os animais: a cor é interna (sem seletor na interface). */}
+            <AvatarGrid
+              value={profile?.avatar}
+              onChange={(a) => updateAppearance({ avatar: a })}
+            />
           </div>
         )}
         {editing ? (
