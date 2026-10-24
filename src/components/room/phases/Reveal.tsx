@@ -67,6 +67,15 @@ function RevealImpl({
     () => definitions.find((d) => d.player_id === "__truth__"),
     [definitions],
   );
+  // Dados da revelação completos. Na votação as cédulas chegam SEM autor
+  // (player_id "") e sem a marca da verdadeira; o shape da revelação vem numa
+  // ida ao servidor depois da troca de fase. O relógio só começa com ele —
+  // em rede lenta (celular) a verdadeira entrava como "blefe", a verdade
+  // aparecia vazia e o significado só surgia depois dos blefes.
+  const ready =
+    definitions.length > 0 &&
+    definitions.every((d) => d.player_id !== "") &&
+    (!!truth || !!word.meaning);
   const playersById = useMemo(() => {
     const map = new Map<string, Player>();
     for (const p of players) map.set(p.id, p);
@@ -131,18 +140,26 @@ function RevealImpl({
   const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
-    startRef.current = Date.now();
     advancingRef.current = false;
     setAdvancing(false);
     setElapsed(0);
   }, [roundKey]);
+  // A coreografia parte quando os dados da revelação estão completos (`ready`)
+  // — até lá fica a preparação "✨ Revelação".
+  const [startedKey, setStartedKey] = useState<string | null>(null);
+  const started = startedKey === roundKey;
+  useEffect(() => {
+    if (!ready || started) return;
+    startRef.current = Date.now();
+    setStartedKey(roundKey);
+  }, [ready, started, roundKey]);
 
   // Agenda os próximos passos a partir do tempo já decorrido — se os dados da
   // rodada chegarem atrasados, o plano muda sem voltar no tempo.
   const planRef = useRef(plan);
   planRef.current = plan;
   useEffect(() => {
-    if (advancingRef.current) return;
+    if (!started || advancingRef.current) return;
     const { steps, holdAt } = planRef.current;
     const now = Date.now() - startRef.current;
     setElapsed((e) => Math.max(e, Math.min(now, holdAt)));
@@ -154,7 +171,7 @@ function RevealImpl({
         }, s.at - now),
       );
     return () => timers.forEach(clearTimeout);
-  }, [roundKey, planKey]);
+  }, [roundKey, planKey, started]);
 
   const reached = (s: RevealStep | undefined) => !!s && elapsed >= s.at;
   const stepOf = (kind: RevealStep["kind"]) =>
