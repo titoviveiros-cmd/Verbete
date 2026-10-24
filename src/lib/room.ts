@@ -384,6 +384,9 @@ export async function fetchThreeWords(
   categories: string[] = [],
   roomId?: string,
   nivel: NivelFilter = "aleatorio",
+  // quantas devolver (a escolha da palavra pede candidatas a mais para ficar
+  // só com as que cabem inteiras na tela — lib/word-fit.ts)
+  count = 3,
 ): Promise<Word[]> {
   // 1) Palavras customizadas da sala (se houver) e 2) sorteio global, EM
   // PARALELO (playtest 2026-10-20: em série eram ≈0,52 s; juntas ≈0,27 s).
@@ -407,7 +410,7 @@ export async function fetchThreeWords(
       supabase.rpc("get_random_word_prompts", {
         exclude_ids: excludeIds,
         min_rarity: 2,
-        lim: 3,
+        lim: count,
         p_categories: categories,
         p_nivel: nivel,
       }),
@@ -426,8 +429,8 @@ export async function fetchThreeWords(
       }));
   }
 
-  // Quantas faltam para completar 3
-  const needed = Math.max(0, 3 - Math.min(customPool.length, 3));
+  // Quantas faltam para completar `count`
+  const needed = Math.max(0, count - Math.min(customPool.length, count));
   let globalPool: Word[] = [];
   if (needed > 0) {
     const { data, error } = globalRes;
@@ -453,9 +456,9 @@ export async function fetchThreeWords(
     }
   }
 
-  // 3) Mescla: pega até 3 customs (sorteadas) + completa com globais
-  const pickedCustom = shuffle(customPool).slice(0, 3);
-  return shuffle([...pickedCustom, ...globalPool]).slice(0, 3);
+  // 3) Mescla: pega até `count` customs (sorteadas) + completa com globais
+  const pickedCustom = shuffle(customPool).slice(0, count);
+  return shuffle([...pickedCustom, ...globalPool]).slice(0, count);
 }
 
 export async function setNivel(

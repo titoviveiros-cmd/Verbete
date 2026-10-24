@@ -9,6 +9,16 @@ import {
 } from "@/lib/room";
 import { Mascot } from "@/components/Mascot";
 import { playUITap } from "@/lib/sound";
+import {
+  drawFittingWords,
+  OPTION_CHIP_CLASS,
+  OPTION_CLASS,
+  OPTION_ICON_CLASS,
+  OPTION_WORD_CLASS,
+} from "@/lib/word-fit";
+
+// Candidatas por sorteio: sobra para ficar só com as que cabem inteiras.
+const CANDIDATES = 9;
 
 // O sorteio continua sendo o momento do coordenador: o dicionário folheia por
 // FLIP_MIN_MS depois do toque. Mas as palavras já vêm buscadas desde que a
@@ -28,6 +38,7 @@ export function ChooseWord({
 }) {
   const [phase, setPhase] = useState<"idle" | "flipping" | "ready">("idle");
   const [words, setWords] = useState<Word[] | null>(null);
+  const [scale, setScale] = useState<Record<string, number>>({});
   const [picking, setPicking] = useState<string | null>(null);
   const coord = players.find((p) => p.id === room.current_coordinator);
 
@@ -38,16 +49,21 @@ export function ChooseWord({
   const drawKey = `${room.id}:${room.current_round}`;
   const prefetch = useRef<{
     key: string;
-    words: Promise<Word[] | null>;
+    words: Promise<Awaited<ReturnType<typeof drawFittingWords>> | null>;
   } | null>(null);
+  // As 3 opções cabem inteiras na tela (lib/word-fit.ts): sem "…".
   const draw = () => {
     const r = roomRef.current;
-    return fetchThreeWords(
-      r.used_word_ids ?? [],
-      r.categories ?? [],
-      r.id,
-      r.nivel ?? "aleatorio",
-    );
+    return drawFittingWords({
+      fetch: (seen) =>
+        fetchThreeWords(
+          [...(r.used_word_ids ?? []), ...seen],
+          r.categories ?? [],
+          r.id,
+          r.nivel ?? "aleatorio",
+          CANDIDATES,
+        ),
+    });
   };
   useEffect(() => {
     if (!isCoordinator || prefetch.current?.key === drawKey) return;
@@ -63,10 +79,11 @@ export function ChooseWord({
         prefetch.current?.key === drawKey ? prefetch.current.words : null;
       let drawn = pre ? await pre : null;
       // pré-busca falhou (rede): busca de novo agora
-      if (!drawn || drawn.length === 0) drawn = await draw();
+      if (!drawn || drawn.words.length === 0) drawn = await draw();
       const left = FLIP_MIN_MS - (Date.now() - startedAt);
       if (left > 0) await new Promise((r) => setTimeout(r, left));
-      setWords(drawn);
+      setWords(drawn.words);
+      setScale(drawn.scale);
       setPhase("ready");
     } catch (e) {
       // sem palavras: o botão volta para o coordenador tentar de novo
@@ -204,7 +221,7 @@ export function ChooseWord({
                     onCopy={(e) => e.preventDefault()}
                     onContextMenu={(e) => e.preventDefault()}
                     className={
-                      "w-full sticker text-left transition !px-4 !py-3 short:!py-2 flex items-center gap-3 no-copy lg:flex-col lg:items-start lg:!py-5 " +
+                      `${OPTION_CLASS} short:!py-2 no-copy lg:flex-col lg:items-start lg:!py-5 ` +
                       (picking && picking !== w.id
                         ? "opacity-40 pointer-events-none "
                         : "") +
@@ -213,17 +230,23 @@ export function ChooseWord({
                   >
                     <span
                       aria-hidden
-                      className="text-2xl lg:text-3xl leading-none"
+                      className={`${OPTION_ICON_CLASS} lg:text-3xl`}
                     >
                       📖
                     </span>
-                    <p className="font-display text-[22px] lg:text-[26px] leading-tight flex-1 min-w-0 truncate capitalize">
+                    <p
+                      className={`${OPTION_WORD_CLASS} lg:text-[26px]`}
+                      // último recurso (acervo mínimo): fonte menor até caber
+                      style={
+                        scale[w.id] && scale[w.id]! < 1
+                          ? { fontSize: `${Math.max(14, 22 * scale[w.id]!)}px` }
+                          : undefined
+                      }
+                    >
                       {w.word}
                     </p>
                     {w.category && (
-                      <span className="chip text-muted-foreground uppercase tracking-wider !text-[10px] shrink-0">
-                        {w.category}
-                      </span>
+                      <span className={OPTION_CHIP_CLASS}>{w.category}</span>
                     )}
                   </motion.button>
                 ))}

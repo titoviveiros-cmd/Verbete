@@ -55,6 +55,27 @@ const measure = (page: Page) =>
     };
   });
 
+// Opções da palavra (coordenador): nenhuma palavra cortada com reticências.
+async function checkWordOptions(page: Page) {
+  for (const width of WIDTHS) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(900);
+    const cut = await page.evaluate(() =>
+      [...document.querySelectorAll("button.sticker p.capitalize")]
+        .filter((p) => p.scrollWidth > p.clientWidth + 1)
+        .map((p) => p.textContent ?? ""),
+    );
+    console.log(`opções da palavra @${width}: cortadas=${JSON.stringify(cut)}`);
+    for (const w of cut)
+      problems.push({
+        screen: "escolha da palavra",
+        width,
+        what: `"${w}" cortada`,
+      });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 async function check(page: Page, screen: string) {
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 844 });
@@ -134,6 +155,11 @@ test("mobile 320/375/390/430: nenhuma tela da partida vaza ou corta", async ({
     const sortear = page.getByRole("button", { name: /Sortear palavra/ });
     if (await sortear.isVisible().catch(() => false)) {
       await sortear.click({ force: true, timeout: 3_000 });
+      // as 3 opções aparecem INTEIRAS (sem "Gastroenterol…") em 320–430 px
+      await expect(page.getByText("Escolha uma palavra rara!")).toBeVisible({
+        timeout: 15_000,
+      });
+      await checkWordOptions(page);
       await page
         .locator("button.sticker")
         .first()
