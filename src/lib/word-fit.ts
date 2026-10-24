@@ -72,6 +72,8 @@ export async function measureWordFit(
 /**
  * Sorteia `n` palavras que cabem inteiras: pede candidatas a mais e, se não
  * bastarem, sorteia de novo sem as já vistas (no máximo `attempts` vezes).
+ * Fica com as PRIMEIRAS que cabem, na ordem do `fetch` (fetchThreeWords já
+ * entrega em ordem de prioridade: da sala, filtros da sala, complemento).
  * Último recurso (acervo mínimo, ex.: palavras próprias longas): completa com
  * as mais curtas, cada uma com a escala de fonte que a faz caber — nunca "…".
  */

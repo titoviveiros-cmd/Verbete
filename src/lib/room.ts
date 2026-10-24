@@ -457,9 +457,22 @@ export async function fetchThreeWords(
     }
   }
 
-  // 3) Mescla: pega até `count` customs (sorteadas) + completa com globais
+  // 3) Mescla em ORDEM DE PRIORIDADE — a escolha pede candidatas a mais e
+  // fica com as primeiras que cabem na tela (lib/word-fit.ts): as da sala
+  // (sorteadas), depois as do sorteio que seguem categorias/nível e só então
+  // as que o servidor usou para completar (get_random_words: outra categoria,
+  // outro nível, sem raridade mínima). Com 3 candidatas era isto mesmo: as de
+  // fora só entravam se faltasse. Embaralhar tudo (como antes) misturava as de
+  // fora entre as 9 e furava o filtro do lobby (Red Team 2026-10-24).
+  const followsRoom = (w: Word) =>
+    (categories.length === 0 || categories.includes(w.category ?? "")) &&
+    (nivel === "aleatorio" ? w.rarity >= 2 : w.nivel === nivel);
   const pickedCustom = shuffle(customPool).slice(0, count);
-  return shuffle([...pickedCustom, ...globalPool]).slice(0, count);
+  return [
+    ...pickedCustom,
+    ...globalPool.filter(followsRoom),
+    ...globalPool.filter((w) => !followsRoom(w)),
+  ].slice(0, count);
 }
 
 export async function setNivel(

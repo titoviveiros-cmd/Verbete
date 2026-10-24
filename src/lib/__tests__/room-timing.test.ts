@@ -145,6 +145,94 @@ describe("fetchThreeWords — busca paralela, mesmas regras", () => {
     expect((await p).map((w) => w.id).sort()).toEqual(["a", "b", "c"]);
   });
 
+  // Red Team 2026-10-24: a escolha pede 9 candidatas e fica com as 3 primeiras
+  // que cabem na tela (lib/word-fit.ts). Embaralhar tudo misturava o
+  // complemento do servidor (get_random_words: outra categoria/nível quando o
+  // filtro tem menos de 9) entre as que seguem o filtro — Direito + Fácil tem
+  // 3 palavras e ~2 das 3 opções viriam de fora. Ordem de prioridade agora.
+  const G = (id: string, category: string | null, nivel: string, rarity = 3) =>
+    ({ id, word: id, category, nivel, rarity }) as Word;
+
+  it("9 candidatas: as que seguem categoria + nível vêm antes do complemento, em qualquer ordem do servidor", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "facil", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [
+        G("f1", "medicina", "dificil"),
+        G("d1", "direito", "facil"),
+        G("f2", "direito", "dificil"), // categoria certa, nível errado
+        G("f3", "planta", "facil"), // nível certo, categoria errada
+        G("d2", "direito", "facil"),
+        G("f4", "medicina", "medio"),
+        G("f5", null, "facil"),
+        G("d3", "direito", "facil"),
+        G("f6", "sentimento", "facil"),
+      ],
+      error: null,
+    });
+    expect((await p).map((w) => w.id)).toEqual([
+      "d1",
+      "d2",
+      "d3", // filtro da sala, na ordem sorteada pelo servidor
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+      "f5",
+      "f6", // complemento: só se faltar
+    ]);
+  });
+
+  it("nível aleatório com categoria: palavra comum (raridade < 2) do complemento vai para o fim", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "aleatorio", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [
+        G("comum", "direito", "facil", 1),
+        G("d1", "direito", "medio"),
+        G("fora", "medicina", "facil"),
+        G("d2", "direito", "dificil", 2),
+        ...["d3", "d4", "d5", "d6", "d7"].map((id) =>
+          G(id, "direito", "medio"),
+        ),
+      ],
+      error: null,
+    });
+    expect((await p).map((w) => w.id)).toEqual([
+      "d1",
+      "d2",
+      "d3",
+      "d4",
+      "d5",
+      "d6",
+      "d7",
+      "comum",
+      "fora",
+    ]);
+  });
+
+  it("9 candidatas: as palavras da sala vêm primeiro (com 3, sempre entravam)", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "facil", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({
+      data: [
+        { id: "c1", word: "cafuné", category: null },
+        { id: "c2", word: "xodó", category: "custom" },
+      ],
+    });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"].map((id) =>
+        G(id, "direito", "facil"),
+      ),
+      error: null,
+    });
+    const ids = (await p).map((w) => w.id);
+    expect(ids.slice(0, 2).sort()).toEqual(["c1", "c2"]);
+    expect(ids.slice(2)).toEqual(["g1", "g2", "g3", "g4", "g5", "g6", "g7"]);
+  });
+
   it("sem sala (desafio etc.): só o sorteio", async () => {
     const p = fetchThreeWords([], [], undefined);
     await tick();
