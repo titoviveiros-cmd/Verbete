@@ -171,16 +171,17 @@ describe("fetchThreeWords — busca paralela, mesmas regras", () => {
       ],
       error: null,
     });
+    // filtro da sala (na ordem sorteada pelo servidor); depois o complemento
     expect((await p).map((w) => w.id)).toEqual([
       "d1",
       "d2",
-      "d3", // filtro da sala, na ordem sorteada pelo servidor
+      "d3",
       "f1",
       "f2",
       "f3",
       "f4",
       "f5",
-      "f6", // complemento: só se faltar
+      "f6",
     ]);
   });
 
@@ -231,6 +232,45 @@ describe("fetchThreeWords — busca paralela, mesmas regras", () => {
     const ids = (await p).map((w) => w.id);
     expect(ids.slice(0, 2).sort()).toEqual(["c1", "c2"]);
     expect(ids.slice(2)).toEqual(["g1", "g2", "g3", "g4", "g5", "g6", "g7"]);
+  });
+
+  // CI do 7ea1e72 (teste visual choosing-palavras): o sorteio devolveu 3 e,
+  // por faltarem 9, a busca TROCOU as 3 pela tabela crua (sem o filtro de
+  // publicadas). As 9 são folga para o word-fit: as alternativas só entram
+  // abaixo do mínimo das 3 opções — como era com 3.
+  it("9 candidatas com acervo pequeno: usa as que vieram, sem trocar pela tabela crua", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "facil", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [
+        G("d1", "direito", "facil"),
+        G("d2", "direito", "facil"),
+        G("f1", "planta", "medio"),
+      ],
+      error: null,
+    });
+    expect((await p).map((w) => w.id)).toEqual(["d1", "d2", "f1"]);
+    expect(h.calls.map((c) => c.name)).toEqual([
+      "from:room_words",
+      "rpc:get_random_word_prompts",
+    ]);
+  });
+
+  it("9 candidatas, abaixo do mínimo das 3 opções: cai no sorteio sem filtro, como antes", async () => {
+    const p = fetchThreeWords([], ["náutica"], "room-1", "insano", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [G("n1", "náutica", "insano"), G("n2", "náutica", "insano")],
+      error: null,
+    });
+    await tick();
+    const retry = named("rpc:get_random_word_prompts");
+    expect(retry).toHaveLength(2);
+    expect(retry[1]!.args).toEqual({ exclude_ids: [], min_rarity: 2, lim: 9 });
+    retry[1]!.resolve({ data: [W("x"), W("y"), W("z")] });
+    expect((await p).map((w) => w.id).sort()).toEqual(["x", "y", "z"]);
   });
 
   it("sem sala (desafio etc.): só o sorteio", async () => {

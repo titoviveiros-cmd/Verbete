@@ -430,12 +430,16 @@ export async function fetchThreeWords(
       }));
   }
 
-  // Quantas faltam para completar `count`
+  // Quantas faltam para completar `count`. Acima das 3 opções da escolha é
+  // folga para o word-fit: as alternativas abaixo (sorteio sem filtro, tabela
+  // crua) só entram se faltar para as 3 — como era com 3. Exigir as 9 trocava
+  // um sorteio curto e bom pela tabela crua (CI do 7ea1e72, choosing-palavras).
   const needed = Math.max(0, count - Math.min(customPool.length, count));
+  const atLeast = Math.min(needed, Math.max(0, 3 - customPool.length));
   let globalPool: Word[] = [];
   if (needed > 0) {
     const { data, error } = globalRes;
-    if (!error && data && data.length >= needed) {
+    if (!error && data && data.length >= atLeast) {
       globalPool = (data as Word[]).slice(0, needed);
     } else if (categories.length > 0 || nivel !== "aleatorio") {
       const { data: any3 } = await supabase.rpc("get_random_word_prompts", {
@@ -445,7 +449,7 @@ export async function fetchThreeWords(
       });
       if (any3) globalPool = any3 as Word[];
     }
-    if (globalPool.length < needed) {
+    if (globalPool.length < atLeast) {
       let q = supabase
         .from("words")
         .select("id,word,category,rarity,nivel,classe,pronuncia")
