@@ -23,38 +23,54 @@ const WIDTHS = [320, 375, 390, 430];
 type Problem = { screen: string; width: number; what: string };
 const problems: Problem[] = [];
 
+// Uma leitura da tela: rolagem lateral, elementos fora da tela e textos de
+// botão cortados.
+const measure = (page: Page) =>
+  page.evaluate(() => {
+    const vw = window.innerWidth;
+    const hidden = (el: Element) =>
+      !!el.closest('[aria-hidden="true"], [inert]') ||
+      Number(getComputedStyle(el).opacity) === 0;
+    const off: string[] = [];
+    const clipped: string[] = [];
+    for (const el of document.querySelectorAll(
+      "button, a, input, textarea, select, h1, h2, h3, p, li",
+    )) {
+      const b = el.getBoundingClientRect();
+      if (b.width === 0 || b.height === 0 || hidden(el)) continue;
+      const label = `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 28)}"`;
+      if (b.left < -1 || b.right > vw + 1)
+        off.push(`${label} [${Math.round(b.left)}..${Math.round(b.right)}]`);
+      if (
+        el.tagName === "BUTTON" &&
+        el.scrollWidth > el.clientWidth + 1 &&
+        getComputedStyle(el).overflowX !== "visible"
+      )
+        clipped.push(label);
+    }
+    return {
+      overflow: document.documentElement.scrollWidth - vw,
+      off: off.slice(0, 5),
+      clipped: clipped.slice(0, 5),
+    };
+  });
+
 async function check(page: Page, screen: string) {
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 844 });
     await page.waitForTimeout(700); // animações de entrada assentarem
-    const r = await page.evaluate(() => {
-      const vw = window.innerWidth;
-      const hidden = (el: Element) =>
-        !!el.closest('[aria-hidden="true"], [inert]') ||
-        Number(getComputedStyle(el).opacity) === 0;
-      const off: string[] = [];
-      const clipped: string[] = [];
-      for (const el of document.querySelectorAll(
-        "button, a, input, textarea, select, h1, h2, h3, p, li",
-      )) {
-        const b = el.getBoundingClientRect();
-        if (b.width === 0 || b.height === 0 || hidden(el)) continue;
-        const label = `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 28)}"`;
-        if (b.left < -1 || b.right > vw + 1)
-          off.push(`${label} [${Math.round(b.left)}..${Math.round(b.right)}]`);
-        if (
-          el.tagName === "BUTTON" &&
-          el.scrollWidth > el.clientWidth + 1 &&
-          getComputedStyle(el).overflowX !== "visible"
-        )
-          clipped.push(label);
-      }
-      return {
-        overflow: document.documentElement.scrollWidth - vw,
-        off: off.slice(0, 5),
-        clipped: clipped.slice(0, 5),
-      };
-    });
+    // Só vale o layout ESTÁVEL: depois de trocar a largura, barras e cartões
+    // ainda se reposicionam (o lobby leu -8 px e 0 px no meio do caminho e
+    // 16 px parado — conferido por print). Mede até duas leituras seguidas,
+    // com 0,6 s de intervalo, darem iguais (no máximo ~6 s).
+    let r = await measure(page);
+    for (let i = 0; i < 10; i++) {
+      await page.waitForTimeout(600);
+      const again = await measure(page);
+      const same = JSON.stringify(again) === JSON.stringify(r);
+      r = again;
+      if (same) break;
+    }
     console.log(`${screen} @${width}: ${JSON.stringify(r)}`);
     if (r.overflow > 0)
       problems.push({ screen, width, what: `rolagem lateral ${r.overflow}px` });
@@ -103,8 +119,17 @@ test("mobile 320/375/390/430: nenhuma tela da partida vaza ou corta", async ({
   await check(page, "lobby");
   await page.getByRole("button", { name: /Começar/ }).click();
 
-  // escrita (escolhendo a palavra se o coordenador for o host)
+  // escrita. Se o host for o coordenador, ele sorteia a palavra e NÃO escreve;
+  // com 1 humano só, ninguém escreve e a mesa pausa (regra da pausa) —
+  // "Continuar" retoma. A tela de escrita é medida na rodada em que o host
+  // escreve (esta ou a seguinte: o coordenador troca a cada rodada).
   const field = page.getByPlaceholder("escreva sua definicao mirabolante...");
+  const ballots = page.locator("button:has(.token)");
+  const resume = page.getByRole("button", { name: /Continuar/ });
+  const unpause = async () => {
+    if (await resume.isVisible().catch(() => false))
+      await resume.click({ timeout: 3_000 }).catch(() => {});
+  };
   await expect(async () => {
     const sortear = page.getByRole("button", { name: /Sortear palavra/ });
     if (await sortear.isVisible().catch(() => false)) {
@@ -114,15 +139,27 @@ test("mobile 320/375/390/430: nenhuma tela da partida vaza ou corta", async ({
         .first()
         .click({ force: true, timeout: 15_000 });
     }
-    expect(await field.isVisible()).toBe(true);
+    await unpause();
+    const writing = await field.isVisible().catch(() => false);
+    const voting = await ballots
+      .first()
+      .isVisible()
+      .catch(() => false);
+    expect(writing || voting).toBe(true);
   }).toPass({ timeout: 180_000, intervals: [2_000] });
-  await field.fill("utensilio usado para conferir telas pequenas");
-  await check(page, "escrita");
-  await page.getByRole("button", { name: /Enviar definição/ }).click();
+  let wrote = false;
+  if (await field.isVisible().catch(() => false)) {
+    await field.fill("utensilio usado para conferir telas pequenas");
+    await check(page, "escrita");
+    await page.getByRole("button", { name: /Enviar definição/ }).click();
+    wrote = true;
+  } else console.log("rodada 1: host é o coordenador (não escreve)");
 
   // votação
-  const ballots = page.locator("button:has(.token)");
-  await expect(ballots.first()).toBeVisible({ timeout: 180_000 });
+  await expect(async () => {
+    await unpause();
+    expect(await ballots.first().isVisible()).toBe(true);
+  }).toPass({ timeout: 180_000, intervals: [2_000] });
   await check(page, "votação");
   const n = await ballots.count();
   for (let i = 0; i < n; i++) {
@@ -136,7 +173,10 @@ test("mobile 320/375/390/430: nenhuma tela da partida vaza ou corta", async ({
 
   // revelação (com os blefes já na tela) e placar
   const reveal = page.getByRole("region", { name: "Revelação da rodada" });
-  await expect(reveal).toBeVisible({ timeout: 120_000 });
+  await expect(async () => {
+    await unpause();
+    expect(await reveal.isVisible()).toBe(true);
+  }).toPass({ timeout: 120_000, intervals: [2_000] });
   await expect(
     reveal.getByRole("list", { name: "Blefes da rodada" }),
   ).toBeVisible({ timeout: 30_000 });
@@ -159,6 +199,12 @@ test("mobile 320/375/390/430: nenhuma tela da partida vaza ou corta", async ({
     expect(writing || choosing).toBe(true);
   }).toPass({ timeout: 120_000, intervals: [2_000] });
   await check(page, "rodada seguinte");
+  // a tela de escrita precisa ter sido medida em alguma rodada
+  if (!wrote) {
+    await expect(field).toBeVisible({ timeout: 60_000 });
+    await field.fill("utensilio usado para conferir telas pequenas");
+    await check(page, "escrita");
+  }
 
   await page
     .getByRole("button", { name: "Resetar jogo" })
