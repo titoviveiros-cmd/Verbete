@@ -408,3 +408,73 @@ describe("contagem e avanço", () => {
     expect(advance).toHaveBeenCalledTimes(1);
   });
 });
+
+// Regressão 2.1.1 (teste real no Android): a troca votação → revelação chega
+// antes do shape da revelação. Na votação o servidor manda as cédulas SEM
+// autor (player_id "") e sem a marca da verdadeira (get_round_sync,
+// fase1_ballot_secure); em rede lenta a coreografia começava com elas — a
+// verdade aparecia vazia, a verdadeira ia para a lista de blefes e o
+// significado só surgia depois dos blefes.
+describe("dados da revelação atrasados (rede lenta / celular)", () => {
+  const ballots = definitions.map((d) => ({ ...d, player_id: "" }));
+  const hiddenWord = { ...word, meaning: undefined } as Word;
+  const view = (defs: Definition[], w: Word) => (
+    <Reveal
+      room={room}
+      word={w}
+      players={players}
+      definitions={defs}
+      votes={votes}
+      isHost
+    />
+  );
+
+  it("com as cédulas anônimas da votação: nada revelado (nem verdade vazia, nem blefes)", async () => {
+    render(view(ballots, hiddenWord));
+    await tick(4_000);
+    expect(shown("Revelação")).toBeTruthy();
+    expect(
+      within(region()).queryByText("A definição verdadeira", { exact: false }),
+    ).toBeNull();
+    expect(
+      within(region()).queryByRole("list", { name: "Blefes da rodada" }),
+    ).toBeNull();
+    expect(sound.playImpact).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
+  });
+
+  it("quando os dados chegam (mesmo tarde): VERDADE primeiro, blefes só depois, e a verdadeira nunca vira blefe", async () => {
+    const r = render(view(ballots, hiddenWord));
+    await tick(4_000);
+    r.rerender(view(definitions, word));
+    await tick(600);
+    expect(
+      within(region()).getByText("A definição verdadeira", { exact: false }),
+    ).toBeTruthy();
+    expect(shown("tubo de soprar dardos")).toBeTruthy();
+    expect(bluffOrderOnScreen()).toEqual([]);
+    await tick(2_500);
+    expect(bluffOrderOnScreen()).toEqual(["fruta azeda"]);
+    await tick(10_000);
+    const list = within(region()).getByRole("list", {
+      name: "Blefes da rodada",
+    });
+    // só os cartões (itens diretos); dentro deles há listas de votantes
+    expect(list.querySelectorAll(":scope > li")).toHaveLength(4);
+    expect(
+      within(list).queryByText("tubo de soprar dardos", { exact: false }),
+    ).toBeNull();
+  });
+
+  it("autores conhecidos mas sem verdade nem significado ainda: espera o significado", async () => {
+    const noTruth = definitions.filter((d) => d.player_id !== "__truth__");
+    const r = render(view(noTruth, hiddenWord));
+    await tick(3_000);
+    expect(
+      within(region()).queryByText("A definição verdadeira", { exact: false }),
+    ).toBeNull();
+    r.rerender(view(noTruth, word));
+    await tick(600);
+    expect(shown("tubo de soprar dardos")).toBeTruthy();
+  });
+});

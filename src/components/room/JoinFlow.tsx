@@ -4,7 +4,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { joinRoom } from "@/lib/room";
 import { friendlyEntryError } from "@/lib/entry-errors";
-import { AVATARS, randomAvatar, randomColor } from "@/lib/avatars";
+import { randomAvatar, randomColor } from "@/lib/avatars";
+import { AvatarGrid } from "@/components/AvatarGrid";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
 import { primeAudio, playUITap } from "@/lib/sound";
@@ -147,24 +148,7 @@ export function JoinFlow({
                 {avatar}
               </motion.div>
             </div>
-            <div className="grid grid-cols-8 gap-1">
-              {AVATARS.map((a) => (
-                <button
-                  key={a}
-                  onClick={() => setAvatar(a)}
-                  aria-label={`Escolher avatar ${a}`}
-                  aria-pressed={avatar === a}
-                  className={
-                    "text-2xl rounded-lg p-1 transition " +
-                    (avatar === a
-                      ? "bg-pink/30 ring-2 ring-pink"
-                      : "hover:bg-white/5")
-                  }
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
+            <AvatarGrid value={avatar} onChange={setAvatar} />
           </div>
         </div>
 
