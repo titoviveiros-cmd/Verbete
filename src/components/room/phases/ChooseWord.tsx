@@ -11,9 +11,16 @@ import { Mascot } from "@/components/Mascot";
 import { playUITap } from "@/lib/sound";
 import {
   drawFittingWords,
+  measureWordFit,
   OPTION_CHIP_CLASS,
   OPTION_CLASS,
+  OPTION_GRID_CLASS,
   OPTION_ICON_CLASS,
+  OPTION_LG_CLASS,
+  OPTION_LG_ICON_CLASS,
+  OPTION_LG_TEXT_CLASS,
+  OPTION_LG_WORD_CLASS,
+  OPTION_TEXT_CLASS,
   OPTION_WORD_CLASS,
 } from "@/lib/word-fit";
 
@@ -51,10 +58,19 @@ export function ChooseWord({
     key: string;
     words: Promise<Awaited<ReturnType<typeof drawFittingWords>> | null>;
   } | null>(null);
-  // As 3 opções cabem inteiras na tela (lib/word-fit.ts): sem "…".
+  // As 3 opções cabem inteiras na tela (lib/word-fit.ts): sem "…". No
+  // desktop elas ficam lado a lado, mais estreitas que no celular: a medida
+  // também usa a largura real dessa grade.
+  const rootRef = useRef<HTMLDivElement>(null);
   const draw = () => {
     const r = roomRef.current;
+    const lgGridWidth =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(min-width: 1024px)")?.matches
+        ? rootRef.current?.clientWidth
+        : undefined;
     return drawFittingWords({
+      measure: (ws) => measureWordFit(ws, { lgGridWidth }),
       fetch: (seen) =>
         fetchThreeWords(
           [...(r.used_word_ids ?? []), ...seen],
@@ -107,6 +123,7 @@ export function ChooseWord({
 
   return (
     <motion.div
+      ref={rootRef}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -204,7 +221,7 @@ export function ChooseWord({
               <p className="text-center font-display text-pink text-xl short:text-lg">
                 {picking ? "Confirmando palavra…" : "Escolha uma palavra rara!"}
               </p>
-              <div className="flex flex-col gap-3 short:gap-2 lg:grid lg:grid-cols-3">
+              <div className={OPTION_GRID_CLASS}>
                 {words.map((w, i) => (
                   <motion.button
                     key={w.id}
@@ -221,7 +238,7 @@ export function ChooseWord({
                     onCopy={(e) => e.preventDefault()}
                     onContextMenu={(e) => e.preventDefault()}
                     className={
-                      `${OPTION_CLASS} short:!py-2 no-copy lg:flex-col lg:items-start lg:!py-5 ` +
+                      `${OPTION_CLASS} ${OPTION_LG_CLASS} short:!py-2 no-copy ` +
                       (picking && picking !== w.id
                         ? "opacity-40 pointer-events-none "
                         : "") +
@@ -230,24 +247,31 @@ export function ChooseWord({
                   >
                     <span
                       aria-hidden
-                      className={`${OPTION_ICON_CLASS} lg:text-3xl`}
+                      className={`${OPTION_ICON_CLASS} ${OPTION_LG_ICON_CLASS}`}
                     >
                       📖
                     </span>
-                    <p
-                      className={`${OPTION_WORD_CLASS} lg:text-[26px]`}
-                      // último recurso (acervo mínimo): fonte menor até caber
-                      style={
-                        scale[w.id] && scale[w.id]! < 1
-                          ? { fontSize: `${Math.max(14, 22 * scale[w.id]!)}px` }
-                          : undefined
-                      }
+                    {/* a categoria só divide a linha se couber; senão desce */}
+                    <div
+                      className={`${OPTION_TEXT_CLASS} ${OPTION_LG_TEXT_CLASS}`}
                     >
-                      {w.word}
-                    </p>
-                    {w.category && (
-                      <span className={OPTION_CHIP_CLASS}>{w.category}</span>
-                    )}
+                      <p
+                        className={`${OPTION_WORD_CLASS} ${OPTION_LG_WORD_CLASS}`}
+                        // último recurso (acervo mínimo): fonte menor até caber
+                        style={
+                          scale[w.id] && scale[w.id]! < 1
+                            ? {
+                                fontSize: `${Math.max(14, 22 * scale[w.id]!)}px`,
+                              }
+                            : undefined
+                        }
+                      >
+                        {w.word}
+                      </p>
+                      {w.category && (
+                        <span className={OPTION_CHIP_CLASS}>{w.category}</span>
+                      )}
+                    </div>
                   </motion.button>
                 ))}
               </div>
