@@ -43,7 +43,7 @@ export const OPTION_LG_WORD_CLASS = "lg:text-[26px]";
 // (components/room/shared.tsx) e Voting.tsx usam exatamente estas classes.
 export const HERO_CLASS = "word-hero text-center no-copy px-4 py-3";
 export const HERO_WORD_CLASS =
-  "font-display text-stroke capitalize text-white mt-0.5 leading-tight text-[34px]";
+  "font-display text-stroke capitalize text-white mt-0.5 leading-tight whitespace-nowrap text-[34px]";
 export const VOTE_BAR_CLASS =
   "word-hero shrink-0 flex items-center gap-3 px-4 py-2 w-full max-w-full";
 export const VOTE_TEXT_CLASS = "flex-1 min-w-0 no-copy";
@@ -128,13 +128,9 @@ export function probeLayouts({
   const rows = words.map((w) => {
     const opt = card(w, false);
     box.append(opt.row);
-    // cartão grande: a palavra numa linha só (sem quebrar no hífen)
+    // cartão grande: a palavra numa linha só (o WordCard é whitespace-nowrap)
     const hero = el("div", C.hero);
-    const h = el(
-      "h2",
-      `${C.heroWord} whitespace-nowrap overflow-hidden`,
-      w.word,
-    );
+    const h = el("h2", `${C.heroWord} overflow-hidden`, w.word);
     hero.append(h);
     box.append(hero);
     // votação: palavra + relógio ("60s") na mesma linha
@@ -198,9 +194,17 @@ export async function measureWordFit(
     for (const w of words) out.set(w.id, { fits: true, need: 0, avail: 0 });
     return out;
   }
+  // Fredoka já vem pré-carregada desde a abertura do app; o teto (2 s) só
+  // impede que uma fonte presa na rede segure o "Folheando o dicionário…" e
+  // a escolha do bot coordenador (Red Team 2.1.2).
   try {
-    await document.fonts?.load?.("700 22px Fredoka");
-    await document.fonts?.ready;
+    await Promise.race([
+      (async () => {
+        await document.fonts?.load?.("700 22px Fredoka");
+        await document.fonts?.ready;
+      })(),
+      new Promise((r) => setTimeout(r, 2000)),
+    ]);
   } catch {
     /* sem a API de fontes: mede com o que houver */
   }

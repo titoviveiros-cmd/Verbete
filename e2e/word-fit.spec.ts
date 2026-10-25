@@ -40,8 +40,9 @@ const WIDTHS: Record<number, number> = {
   412: 380,
   430: 398,
 };
-// desktop: largura da grade das 3 opções (coluna da fase ao lado da mesa)
-const LG_GRID: Record<number, number> = { 1024: 588, 1280: 820 };
+// desktop: largura REAL da grade das 3 opções (coluna da fase ao lado da
+// mesa; a 1024 px a moldura de 1 px deixa 586 — medido no app pelo Red Team)
+const LG_GRID: Record<number, number> = { 1024: 586, 1280: 820 };
 
 type W = { id: string; word: string; category: string | null };
 const fonts = (page: Page) =>

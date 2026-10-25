@@ -32,13 +32,17 @@ describe("word-fit mede as MESMAS vitrines que o jogo mostra", () => {
     expect(HERO_CLASS).toBe(
       mobile("word-hero text-center no-copy px-4 py-3 lg:py-5"),
     );
+    // numa linha só: sem quebrar no hífen; no desktop estreito a palavra que
+    // não cabe diminui o necessário (useFitOneLine) em vez de ser cortada
     expect(s).toContain(
-      '"font-display text-stroke capitalize text-white mt-0.5 leading-tight " +',
+      '"font-display text-stroke capitalize text-white mt-0.5 leading-tight whitespace-nowrap " +',
     );
     expect(s).toContain('"text-[34px] lg:text-[46px]"');
+    expect(s).toContain("useFitOneLine(titleRef, word.word)");
+    expect(s).toContain("ref={titleRef}");
     expect(HERO_WORD_CLASS).toBe(
       mobile(
-        "font-display text-stroke capitalize text-white mt-0.5 leading-tight text-[34px] lg:text-[46px]",
+        "font-display text-stroke capitalize text-white mt-0.5 leading-tight whitespace-nowrap text-[34px] lg:text-[46px]",
       ),
     );
   });
