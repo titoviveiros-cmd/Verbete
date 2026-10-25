@@ -14,6 +14,27 @@ export function scalePhaseSecs(base: number, activePlayers: number): number {
   return Math.round(base * phaseTimeFactor(activePlayers));
 }
 
+// Votação: o mesmo prazo do servidor (advance_writing_to_voting e a volta da
+// pausa: phase_secs(sala, 30); prorrogação phase_secs(sala, 20 / 15)). A
+// barra usava base 40 contra 30 do servidor (2026-10-25); o teste de paridade
+// (phase-parity.test.ts) lê as migrations e falha se os lados divergirem.
+export const VOTING_BASE_SECS = 30;
+export const VOTING_EXTENSION_SECS = [20, 15] as const;
+
+/** Máximo da barra da votação: prazo da fase ou a prorrogação em curso. */
+export function votingTimerMax(
+  activeExtension: number,
+  activePlayers: number,
+): number {
+  const base =
+    activeExtension >= 2
+      ? VOTING_EXTENSION_SECS[1]
+      : activeExtension === 1
+        ? VOTING_EXTENSION_SECS[0]
+        : VOTING_BASE_SECS;
+  return scalePhaseSecs(base, activePlayers);
+}
+
 // Escrita (2026-10-25): cada jogador escreve UMA definição, com 4 ou com 12
 // na sala — o tempo NÃO cresce com o nº de jogadores: é a base + 10 s fixos
 // (antes, base × n/6: 60 s viravam 120 s com 12). A prorrogação também não

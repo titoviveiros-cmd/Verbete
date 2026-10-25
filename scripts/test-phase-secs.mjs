@@ -81,10 +81,10 @@ const left = async () =>
     ).rows[0].s,
   );
 const about = (s, target) => Math.abs(s - target) <= 2;
-const toChoosing = (extra = "") =>
+const toChoosing = (deadline = "now() + interval '60 seconds'") =>
   db.query(
     `UPDATE public.rooms SET status = 'choosing', current_round = 1, current_word_id = NULL,
-            used_word_ids = '{}', paused_at = NULL, round_phase_ends_at = now() + interval '60 seconds'${extra}
+            used_word_ids = '{}', paused_at = NULL, round_phase_ends_at = ${deadline}
       WHERE id = $1`,
     [roomId],
   );
@@ -104,7 +104,7 @@ check(
   about(writing[4], 70) && about(writing[12], 70),
   `4=${writing[4].toFixed(1)}s 12=${writing[12].toFixed(1)}s`,
 );
-await toChoosing(", round_phase_ends_at = now() - interval '1 second'");
+await toChoosing("now() - interval '1 second'");
 const auto = (
   await db.query(`SELECT public.advance_choosing_to_writing($1) AS r`, [roomId])
 ).rows[0].r;

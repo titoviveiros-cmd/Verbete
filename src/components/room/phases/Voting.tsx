@@ -13,7 +13,7 @@ import {
 } from "@/lib/room";
 import { playVoteCast, vibrate } from "@/lib/sound";
 import { getStored } from "@/lib/player-id";
-import { scalePhaseSecs } from "@/lib/game-times";
+import { votingTimerMax } from "@/lib/game-times";
 import { ReportButton } from "@/components/room/ReportButton";
 import type { RoundExtension } from "@/hooks/use-room";
 import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
@@ -412,10 +412,8 @@ function VotingImpl({
     () => voters.reduce((max, p) => Math.max(max, deltaExt(p)), 0),
     [voters, room.current_round],
   );
-  const timerMax = scalePhaseSecs(
-    activeExtension >= 2 ? 15 : activeExtension === 1 ? 20 : 40,
-    players.length,
-  );
+  // Mesmo prazo do servidor (base 30 × sala; antes a barra usava 40).
+  const timerMax = votingTimerMax(activeExtension, players.length);
   const myExt = me ? deltaExt(me) : 0;
   const showExtBanner = !myVote && myExt > 0;
   return (
