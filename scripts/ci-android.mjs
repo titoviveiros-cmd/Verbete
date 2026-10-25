@@ -8,6 +8,11 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 if (!process.env.CI || !process.env.ANDROID_HOME) {
+  // No job `android` da CI (ANDROID_REQUIRED=1) pular seria verde sem build.
+  if (process.env.ANDROID_REQUIRED) {
+    console.error("❌ ANDROID_REQUIRED: fora do CI ou sem ANDROID_HOME — o build Android não rodaria");
+    process.exit(1);
+  }
   console.log("pulado: fora do CI ou sem ANDROID_HOME");
   process.exit(0);
 }

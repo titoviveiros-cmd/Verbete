@@ -2,12 +2,21 @@
 # build-and-test: lint + typecheck + unit + build (sem segredos).
 # integration: Supabase LOCAL (Docker) no runner com as migrations aplicadas
 # do zero — valida o motor SQL inteiro sem tocar produção e sem segredos.
+# android: Gradle + checagens do APK (scripts/ci-android.mjs), sem segredos e
+# sem AAB. Os três jobs começam juntos: nenhum consome artefato de outro, e o
+# run só fica verde com os três verdes.
 name: CI
 
 on:
   push:
     branches: [master]
   pull_request:
+
+# Push novo no mesmo PR cancela o run anterior (SHA obsoleto). No master cada
+# push tem grupo próprio (run_id): nada é cancelado nem enfileirado.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -38,7 +47,6 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    needs: build-and-test
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
@@ -70,3 +78,28 @@ jobs:
           export VITE_SUPABASE_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
           export VITE_SUPABASE_PUBLISHABLE_KEY=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
           npx playwright test
+
+  # Antes era a última suíte do run-integration (2,5–3,5 min no caminho
+  # crítico, dividindo o runner com o Supabase local). Mesmo script, mesmas
+  # checagens; com ANDROID_REQUIRED o script FALHA em vez de pular se faltar o
+  # SDK — nunca verde sem build. Sem segredos e sem AAB: a release assinada
+  # segue só no workflow_dispatch do android.yml.
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      # O lockfile é gerado com npm 11 (local); o npm 10 do runner resolve a
+      # árvore diferente e falha o `npm ci` (Missing: lru-cache from lock file).
+      - name: Alinha versão do npm
+        run: npm install -g npm@11
+      - name: Instala dependências
+        run: npm ci
+      - name: Build Android + checagens do APK (scripts/ci-android.mjs)
+        run: node scripts/ci-android.mjs
+        env:
+          ANDROID_REQUIRED: "1"
