@@ -16,7 +16,11 @@ export default defineConfig({
   // dev server e flakava na hidratação da home.
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? "github" : "list",
+  // timing-reporter: tabela de tempo por spec/teste no fim (só mede).
+  reporter: [
+    [process.env.CI ? "github" : "list"],
+    ["./e2e/timing-reporter.ts"],
+  ],
   use: {
     baseURL,
     viewport: { width: 390, height: 844 }, // mobile portrait — formato do jogo
