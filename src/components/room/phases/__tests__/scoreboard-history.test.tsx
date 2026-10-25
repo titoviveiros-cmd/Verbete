@@ -170,7 +170,7 @@ const calls = (name: string) => h.log.filter((n) => n === name).length;
 
 const ANA_R1 = [
   "🎯 Acertou a verdade 1× → +3 pts",
-  "🤥 Enganou jogadores 1× → +1 pts",
+  "🤥 Enganou jogadores 1× → +1 pt",
 ];
 const SEM = ["Ainda sem pontos — bora pra próxima! 💪"];
 
@@ -272,7 +272,7 @@ describe("Placar — histórico consistente com nova tentativa", () => {
       "👑 Coordenou e ninguém acertou 1× → +2 pts",
     ]);
     expect(lines(container, "Beto")).toEqual([
-      "🤥 Enganou jogadores 1× → +1 pts",
+      "🤥 Enganou jogadores 1× → +1 pt",
     ]);
   });
 

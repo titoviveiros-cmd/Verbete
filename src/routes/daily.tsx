@@ -426,56 +426,6 @@ function DailyPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Uniformização (playtest 2026-07-21): conta transparente,
-                    agora recolhível para não competir com o resultado. */}
-                {displayResult && (
-                  <details className="group text-left rounded-2xl border border-[var(--c-line)] bg-black/15 px-3 py-2">
-                    <summary className="cursor-pointer list-none flex items-center justify-between font-display text-sm text-sun">
-                      <span>🧮 Como calculamos</span>
-                      <span
-                        aria-hidden
-                        className="transition-transform group-open:rotate-180 text-muted-foreground"
-                      >
-                        ▾
-                      </span>
-                    </summary>
-                    <div className="mt-2 text-[12px] text-foreground/85 leading-relaxed">
-                      {displayResult.correct ? (
-                        <>
-                          <p>
-                            base = máx(100 − <b>{displayResult.timeSeconds}s</b>
-                            , 20) ={" "}
-                            <b>
-                              {Math.max(100 - displayResult.timeSeconds, 20)}
-                            </b>
-                          </p>
-                          <p>
-                            pts = arred(base ×{" "}
-                            <b>{displayResult.similarity}%</b>) mín. 20 ={" "}
-                            <b>{displayResult.score}</b>
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p>
-                            Sua semelhança foi{" "}
-                            <b>{displayResult.similarity}%</b>, abaixo do mínimo
-                            de <b>80%</b> para pontuar.
-                          </p>
-                          <p className="mt-1 opacity-80">
-                            Se tivesse atingido 80%+: base = máx(100 −{" "}
-                            <b>{displayResult.timeSeconds}s</b>, 20) ={" "}
-                            <b>
-                              {Math.max(100 - displayResult.timeSeconds, 20)}
-                            </b>
-                            , depois multiplicada pela semelhança (mín. 20 pts).
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </details>
-                )}
               </motion.div>
             )}
           </AnimatePresence>

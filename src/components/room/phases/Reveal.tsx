@@ -414,7 +414,7 @@ function RevealImpl({
     if (!currentStep) return "";
     switch (currentStep.kind) {
       case "truth":
-        return `A definição verdadeira: ${truth?.text ?? humanizeMeaning(word.meaning ?? "")}`;
+        return `A definição verdadeira${truth?.letter ? ` (alternativa ${truth.letter})` : ""}: ${truth?.text ?? humanizeMeaning(word.meaning ?? "")}`;
       case "correct":
         return `${correctHeadline(truthVoters.length, roundVoterIds.size, iHitTruth)} ${truthVoters.map((p) => p.nickname).join(", ")}`;
       case "bluff": {
@@ -547,7 +547,21 @@ function RevealImpl({
               }}
               className="relative truth-card text-center px-4 pt-4 pb-5"
             >
-              <span className="truth-seal">✓ Verdade</span>
+              {/* A letra da verdade (Android 2026-10-25): a MESMA da cédula
+                  na votação — vem de definitions.letter, sorteada no
+                  servidor; nada é recalculado pela posição na tela. */}
+              <div className="flex items-center justify-center gap-2 mb-2">
+                {truth?.letter && (
+                  <span
+                    className="token !w-8 !h-8 !text-base"
+                    data-truth-letter={truth.letter}
+                    aria-label={`Alternativa ${truth.letter}`}
+                  >
+                    {truth.letter}
+                  </span>
+                )}
+                <span className="truth-seal !mb-0">✓ Verdade</span>
+              </div>
               <h2 className="eyebrow !text-[var(--c-on-turq)]/80">
                 A definição verdadeira é…
               </h2>
@@ -682,28 +696,32 @@ function RevealImpl({
                             d.letter,
                           )}
                         </span>
-                        {(dVoters.length > 0 || nearTruthIds.has(d.id)) && (
+                        {dVoters.length > 0 && (
                           <span className="ml-auto text-pink font-display flex items-center gap-1">
-                            {dVoters.length > 0 && (
-                              <span className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]">
-                                +{dVoters.length} pt
-                                {dVoters.length > 1 ? "s" : ""}
-                              </span>
-                            )}
-                            {/* 🧠 quase a verdade: +3 do juiz de IA */}
-                            {nearTruthIds.has(d.id) && (
-                              <motion.span
-                                initial={{ scale: 0, y: 8 }}
-                                animate={{ scale: 1, y: 0 }}
-                                transition={{ type: "spring", stiffness: 300 }}
-                                className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px]"
-                              >
-                                🧠 +3 pts
-                              </motion.span>
-                            )}
+                            <span className="rounded-full bg-sun/20 border border-sun text-sun px-1.5 py-0.5 text-[11px] whitespace-nowrap">
+                              +{dVoters.length} pt
+                              {dVoters.length > 1 ? "s" : ""}
+                            </span>
                           </span>
                         )}
                       </div>
+                      {/* 🧠 chegou perto da verdade (+3 do juiz de IA): selo
+                          próprio, em uva — não se confunde com a verdade
+                          (turquesa/ouro) nem com os pontos de voto (ouro). */}
+                      {nearTruthIds.has(d.id) && (
+                        <motion.p
+                          initial={{ scale: 0.6, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 300 }}
+                          data-near-truth="1"
+                          className="mt-2 inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-xl border border-grape/60 bg-grape/[0.14] px-2 py-1 text-[12px] font-display text-grape"
+                        >
+                          <span>🧠 Chegou perto da verdade</span>
+                          <span className="whitespace-nowrap font-bold">
+                            +3 pts
+                          </span>
+                        </motion.p>
+                      )}
                       {dVoters.length > 0 && (
                         <div className="mt-2 flex items-center gap-1 flex-wrap">
                           <span className="eyebrow mr-1">😂 caíram:</span>
