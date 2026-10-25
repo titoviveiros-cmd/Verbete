@@ -229,15 +229,47 @@ describe("verdade primeiro", () => {
     expect(sound.playImpact).toHaveBeenCalledTimes(1);
   });
 
-  it("🧠 +3 continua aparecendo quando o juiz marca o blefe", async () => {
+  it("🧠 'Chegou perto da verdade +3 pts' no blefe que o juiz marcou — só nele", async () => {
     rpc.mockResolvedValue({ data: { near_truth_ids: ["dB"] } });
     mount();
     await tick(12_000);
-    const b = within(region())
-      .getByText("fruta azeda", { exact: false })
-      .closest("li")!;
-    expect(b.textContent).toContain("🧠 +3 pts");
+    const tags = region().querySelectorAll('[data-near-truth="1"]');
+    expect(tags).toHaveLength(1);
+    const tag = tags[0]!;
+    expect(tag.textContent).toBe("🧠 Chegou perto da verdade+3 pts");
+    // no card do blefe do Beto ("fruta azeda"), não na verdade nem em quem
+    // acertou (Ana só leva o +3 do acerto, sem o selo de proximidade)
+    expect(tag.closest("li")!.textContent).toContain("fruta azeda");
+    expect(tag.closest(".truth-card")).toBeNull();
+    const ana = within(region()).getByText("Ana").closest("li")!;
+    expect(ana.querySelector('[data-near-truth="1"]')).toBeNull();
+    // o valor fica junto (unidade que não quebra)
+    expect(tag.querySelector(".whitespace-nowrap")!.textContent).toBe("+3 pts");
     rpc.mockResolvedValue({ data: { near_truth_ids: [] } });
+  });
+
+  it("card da verdade mostra a letra da cédula verdadeira (definitions.letter)", async () => {
+    mount();
+    await tick(600);
+    const card = region().querySelector(".truth-card")!;
+    const letter = card.querySelector("[data-truth-letter]")!;
+    // a mesma letra que a cédula da verdade teve na votação ("E" no banco),
+    // não a posição na tela
+    expect(letter.textContent).toBe("E");
+    expect(letter.getAttribute("aria-label")).toBe("Alternativa E");
+    expect(card.textContent).toContain("✓ Verdade");
+  });
+
+  it("sem letra (dados antigos): o card da verdade não mostra um quadrado vazio", async () => {
+    mount({
+      definitions: definitions.map((d) =>
+        d.player_id === "__truth__" ? { ...d, letter: null } : d,
+      ),
+    });
+    await tick(600);
+    const card = region().querySelector(".truth-card")!;
+    expect(card.querySelector("[data-truth-letter]")).toBeNull();
+    expect(card.textContent).toContain("✓ Verdade");
   });
 });
 

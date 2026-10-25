@@ -151,7 +151,8 @@ for (const [i, id] of m1.ids.entries()) {
 s1 = await room(m1.id);
 const endsIn = (new Date(s1.round_phase_ends_at).getTime() - Date.now()) / 1000;
 check("retomou na MESMA fase e rodada", s1.status === "writing" && s1.current_round === 4 && !s1.paused_at, short(s1));
-check("prazo novo de escrita (~60 s)", endsIn > 45 && endsIn <= 61, `${endsIn.toFixed(1)} s`);
+// 2026-10-25: a escrita tem tempo fixo (base 60 + 10 s), sem escalar com a sala
+check("prazo novo de escrita (70 s fixos)", endsIn > 55 && endsIn <= 71, `${endsIn.toFixed(1)} s`);
 check("placar preservado na retomada, sem vencedor", short(await scores(m1.id)) === short(before1) && s1.status !== "finished");
 await db.query(`SELECT public.tick_stalled_rooms()`);
 s1 = await room(m1.id);

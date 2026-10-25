@@ -57,14 +57,26 @@ const AFTER_R3: Record<string, number> = {
   [DUDU]: 1,
 };
 
+// Apelidos no limite do campo (14 caracteres) para medir cards e linhas — com
+// espaço e o pior caso de largura (14 "W").
+export const LONG_NAMES: Record<string, string> = {
+  [BIA]: "Beatriz Helena",
+  [ZE]: "Joaquim Felipe",
+  [NINA]: "Ana Luiza Rosa",
+  [LARA]: "Larissa Cabral",
+  [TIO]: "TioBlefeDoBolo",
+  [DUDU]: "WWWWWWWWWWWWWW",
+};
+
 function players(
   scores: Record<string, number> | null,
   ids = PEOPLE.map((p) => p.id),
+  longNames = false,
 ) {
   return PEOPLE.filter((p) => ids.includes(p.id)).map((p, i) => ({
     id: p.id,
     room_id: ROOM_ID,
-    nickname: p.nickname,
+    nickname: longNames ? (LONG_NAMES[p.id] ?? p.nickname) : p.nickname,
     avatar: p.avatar,
     color: p.color,
     score: scores ? (scores[p.id] ?? 0) : 0,
@@ -252,6 +264,11 @@ const VOTES: Array<[number, string, string]> = [
   [3, TIO, d(301)],
 ];
 const NEAR_TRUTH = [d(204), d(305)];
+// Rodada 3 (a da revelação/placar simulados): a verdade e o blefe 🧠.
+export const R3_TRUTH = DEFS.find(
+  (x) => x.round === 3 && x.player_id === "__truth__",
+)!;
+export const R3_NEAR = DEFS.find((x) => x.id === d(305))!;
 // room_id como no banco (NOT NULL): o simulador aplica o filtro room_id=eq.
 const ROUNDS = [
   {
@@ -311,7 +328,12 @@ export type Phase =
  */
 export function roomBackend(
   phase: Phase,
-  opts: { loggedIn?: boolean; guest?: boolean; voted?: boolean } = {},
+  opts: {
+    loggedIn?: boolean;
+    guest?: boolean;
+    voted?: boolean;
+    longNames?: boolean;
+  } = {},
 ): MockBackend {
   const now = Date.now();
   const inSecs = (s: number) => new Date(now + s * 1000).toISOString();
@@ -400,7 +422,7 @@ export function roomBackend(
   const allDefs = DEFS.map((x) => defRow(x, "revealed"));
   const allVotes = voteRows(() => true);
   const word = wordId ? { ...WORD } : null;
-  const roster = players(scores, ids);
+  const roster = players(scores, ids, opts.longNames);
 
   return {
     user: opts.loggedIn ? { id: USER_ID, name: "Bia" } : null,

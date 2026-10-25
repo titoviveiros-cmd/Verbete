@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { hapticSuccess } from "@/lib/sound";
 import { getPlayerId } from "@/lib/player-id";
 import { scalePhaseSecs } from "@/lib/game-times";
+import { formatPoints, type ScoreReason } from "@/lib/score-format";
 import { TrophyIcon } from "@/components/TrophyIcon";
 import { motion } from "framer-motion";
 import {
@@ -137,7 +138,7 @@ function ScoreboardImpl({
   const countedVotes = useMemo<Vote[]>(() => history?.votes ?? [], [history]);
 
   const breakdownByPlayer = useMemo(() => {
-    const out = new Map<string, string[]>();
+    const out = new Map<string, ScoreReason[]>();
     if (!history) return out;
     const truthDefIds = new Set(
       history.defs.filter((d) => d.player_id === "__truth__").map((d) => d.id),
@@ -161,28 +162,32 @@ function ScoreboardImpl({
     }
 
     for (const p of players) {
-      const reasons: string[] = [];
+      const reasons: ScoreReason[] = [];
       const truthHits = truthHitsByVoter.get(p.id) ?? 0;
       if (truthHits > 0)
-        reasons.push(
-          `🎯 Acertou a verdade ${truthHits}× → +${truthHits * 3} pts`,
-        );
+        reasons.push({
+          label: `🎯 Acertou a verdade ${truthHits}×`,
+          points: truthHits * 3,
+        });
       const myFakeDefs = history.defs.filter(
         (d) => d.player_id === p.id && !(d.player_id === "__truth__"),
       );
       let foolsCount = 0;
       for (const d of myFakeDefs) foolsCount += votesByDefId.get(d.id) ?? 0;
       if (foolsCount > 0)
-        reasons.push(
-          `🤥 Enganou jogadores ${foolsCount}× → +${foolsCount} pts`,
-        );
+        reasons.push({
+          label: `🤥 Enganou jogadores ${foolsCount}×`,
+          points: foolsCount,
+        });
       const nearHits = myFakeDefs.filter((d) =>
         history.nearTruthIds.has(d.id),
       ).length;
       if (nearHits > 0)
-        reasons.push(
-          `🧠 Chegou perto da verdade ${nearHits}× → +${nearHits * 3} pts`,
-        );
+        reasons.push({
+          label: `🧠 Chegou perto da verdade ${nearHits}×`,
+          points: nearHits * 3,
+          near: true,
+        });
       let coordWins = 0;
       for (const r of allRounds) {
         const truthDef = history.defs.find(
@@ -208,21 +213,25 @@ function ScoreboardImpl({
         if (isCoordOfR && !someoneHit) coordWins++;
       }
       if (coordWins > 0)
-        reasons.push(
-          `👑 Coordenou e ninguém acertou ${coordWins}× → +${coordWins * 2} pts`,
-        );
+        reasons.push({
+          label: `👑 Coordenou e ninguém acertou ${coordWins}×`,
+          points: coordWins * 2,
+        });
       const penalties = history.extensions.filter(
         (e) => e.player_id === p.id,
       ).length;
       if (penalties > 0)
-        reasons.push(`⏰ Estourou o tempo ${penalties}× → -${penalties} pts`);
+        reasons.push({
+          label: `⏰ Estourou o tempo ${penalties}×`,
+          points: -penalties,
+        });
       if (reasons.length === 0)
-        reasons.push("Ainda sem pontos — bora pra próxima! 💪");
+        reasons.push({ label: "Ainda sem pontos — bora pra próxima! 💪" });
       out.set(p.id, reasons);
     }
     return out;
   }, [history, players, countedVotes]);
-  const breakdown = (playerId: string): string[] =>
+  const breakdown = (playerId: string): ScoreReason[] =>
     breakdownByPlayer.get(playerId) ?? [];
 
   // Delta da RODADA ATUAL por jogador — usado para reconstruir o placar
@@ -515,13 +524,30 @@ function ScoreboardImpl({
                   )}
                 </div>
               </div>
-              <ul className="mt-2.5 pl-14 flex flex-wrap gap-1.5">
+              {/* Linhas de pontuação (Android 2026-10-25): o valor "→ +3 pts"
+                  é uma unidade que nunca quebra ("pts" sozinho embaixo); só
+                  a descrição quebra, e só se precisar. */}
+              <ul className="mt-2.5 pl-11 min-[400px]:pl-14 flex flex-wrap gap-1.5">
                 {breakdown(p.id).map((r, idx) => (
                   <li
                     key={idx}
-                    className="chip !font-semibold !text-[12px] text-foreground/85"
+                    data-near-truth={r.near ? "1" : undefined}
+                    className={
+                      "chip !font-semibold !text-[12px] !leading-tight flex-wrap gap-x-1 gap-y-0.5 max-w-full " +
+                      (r.near
+                        ? "!border-grape/60 !bg-grape/[0.14] text-grape"
+                        : "text-foreground/85")
+                    }
                   >
-                    {r}
+                    <span>{r.label}</span>
+                    {r.points !== undefined && (
+                      <>
+                        {" "}
+                        <span className="whitespace-nowrap" data-points>
+                          → {formatPoints(r.points)}
+                        </span>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -547,13 +573,13 @@ function ScoreboardImpl({
                   }
                   if (!fooled.length) return null;
                   return (
-                    <div className="mt-3 pl-14">
+                    <div className="mt-3 pl-11 min-[400px]:pl-14">
                       <p className="text-xs font-display text-pink mb-1">
                         🪤 caíram na sua pegadinha:
                       </p>
                       <ul className="space-y-1">
                         {fooled.map((f, i) => (
-                          <li key={i} className="text-sm font-body">
+                          <li key={i} className="text-sm font-body break-words">
                             <span className="text-muted-foreground">
                               R{f.round} "{f.text}" →
                             </span>{" "}

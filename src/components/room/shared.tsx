@@ -176,7 +176,7 @@ export function TimerBar({
     } else if (remaining === 0) void playCountdownFinal();
   }, [remaining, max, tickStartAt]);
   return (
-    <div className="w-full flex flex-col items-center gap-1">
+    <div className="w-full flex flex-col items-center gap-1" data-max={max}>
       <motion.div
         key={remaining}
         initial={urgent ? { scale: 1.2 } : { scale: 1 }}
