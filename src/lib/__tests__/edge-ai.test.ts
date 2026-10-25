@@ -126,6 +126,114 @@ describe("callChat (Gemini via endpoint OpenAI-compatível)", () => {
   });
 });
 
+describe("callChat com prazo total (deadlineMs — juiz do 🧠, 2026-10-24)", () => {
+  // Gemini que só responde quando a tentativa é abortada (timeout).
+  const hang = (_url: string, init: RequestInit) =>
+    new Promise<Response>((_, reject) => {
+      init.signal?.addEventListener("abort", () =>
+        reject(new DOMException("aborted", "AbortError")),
+      );
+    });
+  const run = async (opts: Parameters<typeof callChat>[0]) => {
+    vi.useFakeTimers();
+    try {
+      const t0 = Date.now();
+      const p = callChat(opts);
+      await vi.runAllTimersAsync();
+      const r = await p;
+      return { r, elapsed: Date.now() - t0 };
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  it("cada tentativa usa só o que resta do prazo, e nenhuma começa sem tempo útil", async () => {
+    const fetchFn = vi.fn(hang);
+    const { r, elapsed } = await run({
+      fetchFn,
+      apiKey: "k",
+      messages,
+      timeoutMs: 8_000,
+      retries: 3,
+      deadlineMs: 10_000,
+      minAttemptMs: 1_500,
+    });
+    // 8 s + espera de 0,7 s = sobra 1,3 s < 1,5 s → não abre a 2ª
+    expect(r).toEqual({ ok: false, reason: "timeout", attempts: 1 });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(elapsed).toBe(8_000);
+  });
+
+  it("a última tentativa é encurtada para caber no prazo", async () => {
+    const fetchFn = vi.fn(hang);
+    const { r, elapsed } = await run({
+      fetchFn,
+      apiKey: "k",
+      messages,
+      timeoutMs: 8_000,
+      retries: 3,
+      deadlineMs: 12_000,
+      minAttemptMs: 1_500,
+    });
+    // 8 s + 0,7 s de espera → a 2ª só tem 3,3 s; termina no prazo exato
+    expect(r).toEqual({ ok: false, reason: "timeout", attempts: 2 });
+    expect(elapsed).toBe(12_000);
+  });
+
+  it("429: no máximo uma nova tentativa, mesmo com orçamento de sobra", async () => {
+    const fetchFn = vi.fn(async () => new Response("quota", { status: 429 }));
+    const { r } = await run({
+      fetchFn,
+      apiKey: "k",
+      messages,
+      retries: 3,
+      deadlineMs: 17_000,
+    });
+    expect(r).toEqual({
+      ok: false,
+      reason: "http_error",
+      status: 429,
+      attempts: 2,
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("onAttempt recebe o resultado de CADA tentativa (trilha da auditoria)", async () => {
+    const seen: string[] = [];
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+      .mockImplementationOnce(hang)
+      .mockResolvedValueOnce(ok("{}"));
+    const { r } = await run({
+      fetchFn,
+      apiKey: "k",
+      messages,
+      retries: 3,
+      deadlineMs: 17_000,
+      onAttempt: (a) => seen.push(a.ok ? "ok" : String(a.status ?? a.reason)),
+    });
+    expect(r).toEqual({ ok: true, content: "{}", attempts: 3 });
+    expect(seen).toEqual(["503", "timeout", "ok"]);
+  });
+
+  it("sem deadlineMs nada muda (bots e Diário): 503, 503 → falha na 2ª", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+      .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+      .mockResolvedValueOnce(ok("{}"));
+    const { r } = await run({ fetchFn, apiKey: "k", messages });
+    expect(r).toEqual({
+      ok: false,
+      reason: "http_error",
+      status: 503,
+      attempts: 2,
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("parseJsonObject", () => {
   it("tolera markdown em volta do JSON", () => {
     expect(parseJsonObject('```json\n{"matches":["1"]}\n```')).toEqual({

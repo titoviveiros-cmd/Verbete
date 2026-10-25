@@ -6,7 +6,7 @@
 // submit_daily_attempt_scored, com o mesmo valor; um teste garante). Mudou o
 // critério? Muda aqui e os dois modos mudam juntos.
 // Sem APIs do Deno: roda na edge e no servidor web.
-import { callChat, parseJsonObject, type ChatFailure } from "./ai.ts";
+import { callChat, parseJsonObject, type AttemptResult, type ChatFailure } from "./ai.ts";
 
 export const SEMANTIC_THRESHOLD = 80;
 /** Julgamento, não criação: temperatura 0 para a mesma entrada dar a mesma nota. */
@@ -136,6 +136,17 @@ export function parseJudgeScores(
 type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 type Failure = { ok: false; reason: ChatFailure; status?: number; attempts: number };
 
+/**
+ * Orçamento do juiz do bônus 🧠 (edge score-similarity; auditoria operacional
+ * de 2026-10-24). O juiz roda fora do caminho da mesa — a revelação dura
+ * ≥ 20 s — e o pg_net corta a chamada da edge em 20 s: até 3 novas tentativas
+ * enquanto couberem em 17 s de IA (folga para o banco). Falha rápida (503,
+ * rede) ganha mais chances; dois timeouts de 8 s já esgotam o prazo, como
+ * antes. Na ÚLTIMA rodada é a única proteção: a partida acaba em ~30–40 s e
+ * o reenvio do banco (retry_round_judgments) não alcança.
+ */
+export const JUDGE_BUDGET = { timeoutMs: 8_000, retries: 3, deadlineMs: 17_000 } as const;
+
 /** Multiplayer: aprova as candidatas com nota >= SEMANTIC_THRESHOLD. */
 export async function judgeCandidates(opts: {
   fetchFn: Fetch;
@@ -144,10 +155,12 @@ export async function judgeCandidates(opts: {
   word: string;
   truth: string;
   candidates: ReadonlyArray<{ id: string; text: string }>;
-  /** Orçamento opcional (o gate dos bots não pode segurar a mesa); sem
-   *  isso, os padrões de callChat — os mesmos do juiz do bônus 🧠. */
+  /** Orçamento opcional: o gate dos bots não pode segurar a mesa; o juiz do
+   *  bônus 🧠 passa JUDGE_BUDGET; sem nada, os padrões de callChat. */
   timeoutMs?: number;
   retries?: number;
+  deadlineMs?: number;
+  onAttempt?: (r: AttemptResult) => void;
 }): Promise<{ ok: true; scores: Map<string, number>; matches: string[]; attempts: number } | Failure> {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
@@ -157,6 +170,8 @@ export async function judgeCandidates(opts: {
     messages: judgeMessages(opts.word, opts.truth, opts.candidates),
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
     ...(opts.retries !== undefined ? { retries: opts.retries } : {}),
+    ...(opts.deadlineMs !== undefined ? { deadlineMs: opts.deadlineMs } : {}),
+    ...(opts.onAttempt ? { onAttempt: opts.onAttempt } : {}),
   });
   if (!chat.ok) return { ok: false, reason: chat.reason, status: chat.status, attempts: chat.attempts };
   const scores = parseJudgeScores(chat.content, new Set(opts.candidates.map((c) => c.id)));

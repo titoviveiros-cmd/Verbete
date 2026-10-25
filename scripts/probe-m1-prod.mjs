@@ -82,7 +82,7 @@ const mig = await q(
 check("5 migrations do M1 aplicadas", mig.length === 5, mig.map((m) => m.version).join(", "));
 const svc = await q(`
   SELECT t.tbl, t.priv
-    FROM (VALUES ('rooms','SELECT'), ('rounds','SELECT'), ('words','SELECT'), ('room_words','SELECT'),
+    FROM (VALUES ('rooms','SELECT'), ('rounds','SELECT'), ('rounds','UPDATE'), ('words','SELECT'), ('room_words','SELECT'),
                  ('definitions','SELECT'), ('ai_served_defs','INSERT'), ('ops_events','INSERT')) AS t(tbl, priv)
    WHERE NOT has_table_privilege('service_role', 'public.' || t.tbl, t.priv)`);
 check("chave de serviço (edges) lê/grava o que precisa", svc.length === 0, JSON.stringify(svc));
