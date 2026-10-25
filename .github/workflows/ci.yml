@@ -2,9 +2,10 @@
 # build-and-test: lint + typecheck + unit + build (sem segredos).
 # integration: Supabase LOCAL (Docker) no runner com as migrations aplicadas
 # do zero — valida o motor SQL inteiro sem tocar produção e sem segredos.
+# e2e-visual: specs do Playwright com o Supabase simulado (sem Supabase local).
 # android: Gradle + checagens do APK (scripts/ci-android.mjs), sem segredos e
-# sem AAB. Os três jobs começam juntos: nenhum consome artefato de outro, e o
-# run só fica verde com os três verdes.
+# sem AAB. Os quatro jobs começam juntos: nenhum consome artefato de outro, e o
+# run só fica verde com os quatro verdes.
 name: CI
 
 on:
@@ -72,12 +73,41 @@ jobs:
           npm run test:integration
       - name: Instala Chromium do Playwright
         run: npx playwright install --with-deps chromium
-      - name: E2E Playwright (smoke + partida multiplayer, Supabase local)
+      - name: E2E Playwright stateful (smoke + partida multiplayer, Supabase local)
         run: |
           STATUS=$(npx supabase status -o env)
           export VITE_SUPABASE_URL=$(echo "$STATUS" | grep -E '^API_URL=' | cut -d= -f2- | tr -d '"')
           export VITE_SUPABASE_PUBLISHABLE_KEY=$(echo "$STATUS" | grep -E '^ANON_KEY=' | cut -d= -f2- | tr -d '"')
-          npx playwright test
+          npx playwright test --project=stateful
+
+  # Specs do Playwright com o Supabase SIMULADO no navegador (e2e/visual =
+  # projeto `visual` do playwright.config.ts): não precisam do Supabase local,
+  # então começam junto com os outros jobs, fora do caminho do integration.
+  # Mesmas regras de antes (workers 1, retries do CI). A URL é a padrão do
+  # Supabase local, mas aqui NADA escuta nela: o que escapasse do mock
+  # falharia em vez de tocar um banco.
+  e2e-visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      # O lockfile é gerado com npm 11 (local); o npm 10 do runner resolve a
+      # árvore diferente e falha o `npm ci` (Missing: lru-cache from lock file).
+      - name: Alinha versão do npm
+        run: npm install -g npm@11
+      - name: Instala dependências
+        run: npm ci
+      - name: Instala Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+      - name: E2E Playwright visual (Supabase simulado, sem Supabase local)
+        run: npx playwright test --project=visual
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: e2e-visual-mock
 
   # Antes era a última suíte do run-integration (2,5–3,5 min no caminho
   # crítico, dividindo o runner com o Supabase local). Mesmo script, mesmas

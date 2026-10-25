@@ -39,7 +39,25 @@ export default defineConfig({
         }
       : {}),
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // Dois grupos com o MESMO dispositivo e as mesmas regras (workers, retries):
+  // - visual: e2e/visual — Supabase SIMULADO no navegador (installSupabaseMock
+  //   intercepta toda chamada e aborta o desconhecido); dispensa o Supabase
+  //   local, então roda no job `e2e-visual` da CI, em paralelo;
+  // - stateful: o resto — backend real (salas, multiplayer) e os specs de
+  //   produção (pulados sem E2E_BASE_URL); job `integration`.
+  // Sem --project roda tudo (135 testes), como antes.
+  projects: [
+    {
+      name: "visual",
+      testMatch: /[\\/]e2e[\\/]visual[\\/].*\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "stateful",
+      testIgnore: /[\\/]e2e[\\/]visual[\\/]/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
   ...(process.env.E2E_BASE_URL
     ? {}
     : {
