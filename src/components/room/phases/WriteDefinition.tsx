@@ -17,7 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { Mascot } from "@/components/Mascot";
 import { playSubmit, playUITap } from "@/lib/sound";
-import { scalePhaseSecs } from "@/lib/game-times";
+import { writingTimerMax } from "@/lib/game-times";
 import { shuffleAdvanceDelayMs } from "@/lib/transition-floor";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import {
@@ -339,10 +339,8 @@ export function WriteDefinition({
     () => Math.max(0, ...Array.from(roundExtMap.values())),
     [roundExtMap],
   );
-  const timerMax = scalePhaseSecs(
-    activeExtension >= 2 ? 15 : activeExtension === 1 ? 20 : 60,
-    players.length,
-  );
+  // Escrita não escala com a sala (2026-10-25): base + 10 s; prorrogação fixa.
+  const timerMax = writingTimerMax(activeExtension);
 
   const handleSubmit = async () => {
     if (!text.trim()) return;

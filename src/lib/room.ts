@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
-import { scalePhaseSecs } from "./game-times";
+import { WRITING_BASE_SECS, writingPhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
 import { queueRoomConfig } from "./room-config-writer";
 import { clearRoomOptimistic } from "./transition-floor";
@@ -560,16 +560,16 @@ export async function startGame(room: Room) {
 export async function chooseWord(
   roomId: string,
   wordId: string,
-  durationSec = 60,
-  activePlayers = 0,
+  durationSec = WRITING_BASE_SECS,
   /** false = sem otimismo (quem só cobre a falta do host não pode mostrar
    *  uma palavra que talvez perca a corrida para a escolha dele). */
   opts: { optimistic?: boolean } = {},
 ) {
-  // O servidor escala o prazo em salas de 7-12 (public.phase_secs); o otimismo
-  // usa a mesma conta para a barra não "pular" quando o realtime confirmar.
-  const scaledSec = scalePhaseSecs(durationSec, activePlayers);
-  const ends = new Date(Date.now() + scaledSec * 1000).toISOString();
+  // A escrita não escala com a sala (public.writing_phase_secs: base + 10 s);
+  // o otimismo usa a mesma conta para a barra não "pular" quando o realtime
+  // confirmar.
+  const secs = writingPhaseSecs(durationSec);
+  const ends = new Date(Date.now() + secs * 1000).toISOString();
   // Otimismo: transita para "writing" imediatamente para o coordenador e
   // demais clientes que estiverem ouvindo o evento. A RPC `choose_word` é
   // quem decide de fato (guarda atômica: status='choosing' + current_word_id

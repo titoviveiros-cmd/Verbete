@@ -394,7 +394,7 @@ function RoomPage() {
             return;
           }
           const pick = options[Math.floor(Math.random() * options.length)]!;
-          await chooseWord(room.id, pick.id, 60, players.length, {
+          await chooseWord(room.id, pick.id, undefined, {
             optimistic: isHost,
           });
         } catch (e) {
