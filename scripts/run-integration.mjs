@@ -2,7 +2,7 @@
 // fim, com o resumo — uma falha não esconde as demais.
 // test-semantic-calibration fica de fora: depende da chave real do Gemini
 // (test-edges-e2e cobre o mesmo caminho com um Gemini simulado).
-// ci-android.mjs (Gradle) só roda no CI com Android SDK; é no-op local.
+// ci-android.mjs (Gradle) roda à parte, no job `android` da CI, em paralelo.
 import { spawnSync } from "node:child_process";
 
 const SUITES = [
@@ -24,7 +24,6 @@ const SUITES = [
   "test-native-auth-callback.mjs",
   "test-rollback.mjs",
   "test-probe-local.mjs",
-  "ci-android.mjs",
 ];
 
 const results = [];
