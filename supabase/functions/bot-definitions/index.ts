@@ -2,13 +2,14 @@
 // Recebe { word_id, count, personas? } e devolve { definitions: string[] }.
 // IMPORTANTE: o significado da palavra é buscado AQUI (service role), nunca aceito
 // do cliente — assim ele não trafega no navegador e não pode ser usado para cheating.
-// A lógica pura (parse, anti-vazamento, memória por rodada, eventos) vive em
+// A lógica pura (parse, forma, anti-vazamento, memória por rodada, eventos) vive em
 // ./logic.ts e ../_shared/ai.ts, cobertas por testes.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import {
   dropAlreadyServed,
+  dropMalformed,
   dropNearTruth,
   outcomeEvent,
   parseDefinitions,
@@ -186,10 +187,18 @@ Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v.,
     const parsed = chat.ok ? parseDefinitions(chat.content, count) : null;
     if (chat.ok && parsed === null) console.error("parse failed: resposta do modelo sem 'definitions'");
 
+    // Forma (2026-10-24): texto quebrado do modelo ("relativo a tecido tecido
+    // com fios…") sai ANTES de tudo — não vira sugestão nem entra na memória
+    // da rodada. Sobrando menos, a tela fica com as sugestões locais.
+    const shape = dropMalformed(parsed ?? [], word);
+    if (shape.dropped > 0) {
+      console.warn(`forma: ${shape.dropped} candidata(s) quebrada(s) descartada(s)`);
+    }
+
     // Pós-filtro anti-vazamento (playtest 2026-07-21: sugestão da IA era a
     // própria verdade com outras palavras): descarta candidata lexicalmente
     // próxima do significado real (Dice/trigramas sobre texto normalizado).
-    const leak = dropNearTruth(parsed ?? [], meaning);
+    const leak = dropNearTruth(shape.kept, meaning);
     let defs = leak.kept;
     if (leak.dropped > 0) {
       console.warn(`anti-vazamento: ${leak.dropped} candidata(s) descartada(s) por proximidade com a verdade`);
@@ -228,6 +237,7 @@ Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v.,
         returned: defs.length,
         droppedLeak: leak.dropped,
         droppedServed,
+        droppedShape: shape.byRule,
         latencyMs: Date.now() - t0,
       }),
     );

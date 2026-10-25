@@ -44,6 +44,8 @@ import {
   generateAiDefinitionForPlayer,
 } from "@/lib/room";
 import { NUDGE_EVENT } from "@/lib/sync-nudge";
+import { BOT_FAKE_DEFINITIONS_TEMPLATES } from "@/lib/bot-names";
+import { wellFormedDefinition } from "@/lib/text-filter";
 import { PERSONA_PROMPTS } from "../../../supabase/functions/bot-definitions-v2/prompts.ts";
 
 const named = (name: string) => h.calls.filter((c) => c.name === name);
@@ -141,6 +143,134 @@ describe("fetchThreeWords — busca paralela, mesmas regras", () => {
     expect(rw).toHaveLength(2);
     rw[1]!.resolve({ data: [] });
     expect((await p).map((w) => w.id).sort()).toEqual(["a", "b", "c"]);
+  });
+
+  // Red Team 2026-10-24: a escolha pede 9 candidatas e fica com as 3 primeiras
+  // que cabem na tela (lib/word-fit.ts). Embaralhar tudo misturava o
+  // complemento do servidor (get_random_words: outra categoria/nível quando o
+  // filtro tem menos de 9) entre as que seguem o filtro — Direito + Fácil tem
+  // 3 palavras e ~2 das 3 opções viriam de fora. Ordem de prioridade agora.
+  const G = (id: string, category: string | null, nivel: string, rarity = 3) =>
+    ({ id, word: id, category, nivel, rarity }) as Word;
+
+  it("9 candidatas: as que seguem categoria + nível vêm antes do complemento, em qualquer ordem do servidor", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "facil", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [
+        G("f1", "medicina", "dificil"),
+        G("d1", "direito", "facil"),
+        G("f2", "direito", "dificil"), // categoria certa, nível errado
+        G("f3", "planta", "facil"), // nível certo, categoria errada
+        G("d2", "direito", "facil"),
+        G("f4", "medicina", "medio"),
+        G("f5", null, "facil"),
+        G("d3", "direito", "facil"),
+        G("f6", "sentimento", "facil"),
+      ],
+      error: null,
+    });
+    // filtro da sala (na ordem sorteada pelo servidor); depois o complemento
+    expect((await p).map((w) => w.id)).toEqual([
+      "d1",
+      "d2",
+      "d3",
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+      "f5",
+      "f6",
+    ]);
+  });
+
+  it("nível aleatório com categoria: palavra comum (raridade < 2) do complemento vai para o fim", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "aleatorio", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [
+        G("comum", "direito", "facil", 1),
+        G("d1", "direito", "medio"),
+        G("fora", "medicina", "facil"),
+        G("d2", "direito", "dificil", 2),
+        ...["d3", "d4", "d5", "d6", "d7"].map((id) =>
+          G(id, "direito", "medio"),
+        ),
+      ],
+      error: null,
+    });
+    expect((await p).map((w) => w.id)).toEqual([
+      "d1",
+      "d2",
+      "d3",
+      "d4",
+      "d5",
+      "d6",
+      "d7",
+      "comum",
+      "fora",
+    ]);
+  });
+
+  it("9 candidatas: as palavras da sala vêm primeiro (com 3, sempre entravam)", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "facil", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({
+      data: [
+        { id: "c1", word: "cafuné", category: null },
+        { id: "c2", word: "xodó", category: "custom" },
+      ],
+    });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"].map((id) =>
+        G(id, "direito", "facil"),
+      ),
+      error: null,
+    });
+    const ids = (await p).map((w) => w.id);
+    expect(ids.slice(0, 2).sort()).toEqual(["c1", "c2"]);
+    expect(ids.slice(2)).toEqual(["g1", "g2", "g3", "g4", "g5", "g6", "g7"]);
+  });
+
+  // CI do 7ea1e72 (teste visual choosing-palavras): o sorteio devolveu 3 e,
+  // por faltarem 9, a busca TROCOU as 3 pela tabela crua (sem o filtro de
+  // publicadas). As 9 são folga para o word-fit: as alternativas só entram
+  // abaixo do mínimo das 3 opções — como era com 3.
+  it("9 candidatas com acervo pequeno: usa as que vieram, sem trocar pela tabela crua", async () => {
+    const p = fetchThreeWords([], ["direito"], "room-1", "facil", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [
+        G("d1", "direito", "facil"),
+        G("d2", "direito", "facil"),
+        G("f1", "planta", "medio"),
+      ],
+      error: null,
+    });
+    expect((await p).map((w) => w.id)).toEqual(["d1", "d2", "f1"]);
+    expect(h.calls.map((c) => c.name)).toEqual([
+      "from:room_words",
+      "rpc:get_random_word_prompts",
+    ]);
+  });
+
+  it("9 candidatas, abaixo do mínimo das 3 opções: cai no sorteio sem filtro, como antes", async () => {
+    const p = fetchThreeWords([], ["náutica"], "room-1", "insano", 9);
+    await tick();
+    named("from:room_words")[0]!.resolve({ data: [] });
+    named("rpc:get_random_word_prompts")[0]!.resolve({
+      data: [G("n1", "náutica", "insano"), G("n2", "náutica", "insano")],
+      error: null,
+    });
+    await tick();
+    const retry = named("rpc:get_random_word_prompts");
+    expect(retry).toHaveLength(2);
+    expect(retry[1]!.args).toEqual({ exclude_ids: [], min_rarity: 2, lim: 9 });
+    retry[1]!.resolve({ data: [W("x"), W("y"), W("z")] });
+    expect((await p).map((w) => w.id).sort()).toEqual(["x", "y", "z"]);
   });
 
   it("sem sala (desafio etc.): só o sorteio", async () => {
@@ -458,5 +588,38 @@ describe("aviso dos bots e sugestão do jogador (Red Team 2026-10-22)", () => {
       },
     });
     expect(await p).toBe("reserva vetada pelo servidor para teste");
+  });
+
+  // Forma (2026-10-24): a auto-definição nunca entrega texto quebrado.
+  const quebrada = "relativo a tecido tecido com fios metalicos finos";
+
+  it("IA mandou quebrada: pula e usa a reserva vetada — UMA chamada à edge", async () => {
+    const p = generateAiDefinitionForPlayer(word, "room-1", 2);
+    await tick();
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: {
+        definitions: [quebrada],
+        fallbacks: ["reserva vetada pelo servidor para teste"],
+      },
+    });
+    expect(await p).toBe("reserva vetada pelo servidor para teste");
+    expect(named("edge:bot-definitions-v2")).toHaveLength(1);
+  });
+
+  it("tudo quebrado ou com a palavra da rodada: template local bem formado, sem máscara nem '(n)'", async () => {
+    const p = generateAiDefinitionForPlayer(word, "room-1", 2);
+    await tick();
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: {
+        definitions: [quebrada, "cerimonia de rapapes na corte antiga"],
+        fallbacks: ["min mineral de coloracao escura encontrado em regioes"],
+      },
+    });
+    const got = await p;
+    const templates = BOT_FAKE_DEFINITIONS_TEMPLATES.map((t) =>
+      wellFormedDefinition(t, word.word),
+    );
+    expect(templates).toContain(got);
+    expect(got).not.toMatch(/\*|\(\d+\)|incomum/);
   });
 });

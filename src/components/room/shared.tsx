@@ -1,7 +1,48 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { motion } from "framer-motion";
 import { playCountdownTick, playCountdownFinal, hapticTick } from "@/lib/sound";
 import type { Word, Player } from "@/lib/room";
+
+/**
+ * A palavra numa linha, INTEIRA. A escolha só oferece palavras que cabem no
+ * pior caso do celular (lib/word-fit.ts); no desktop a coluna da escrita fica
+ * estreita entre 1024 e ~1230 px e os 46 px cortavam palavras longas (Red Team
+ * 2.1.2: 136 a 1024 px — "Desvanecim"). Só a palavra que não couber na
+ * largura REAL diminui o necessário; as que cabem ficam no tamanho da tela.
+ */
+function useFitOneLine(ref: RefObject<HTMLElement | null>, text: string) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.fontSize = "";
+      if (el.clientWidth <= 0 || el.scrollWidth <= el.clientWidth) return;
+      const base = parseFloat(getComputedStyle(el).fontSize);
+      let size = Math.floor((base * el.clientWidth) / el.scrollWidth);
+      el.style.fontSize = `${size}px`;
+      while (el.scrollWidth > el.clientWidth && size > 16)
+        el.style.fontSize = `${--size}px`;
+    };
+    fit();
+    // só a largura importa (a altura muda com a própria fonte)
+    let width = el.clientWidth;
+    const ro =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            if (el.clientWidth === width) return;
+            width = el.clientWidth;
+            fit();
+          });
+    ro?.observe(el);
+    let alive = true;
+    void document.fonts?.ready?.then(() => alive && fit());
+    return () => {
+      alive = false;
+      ro?.disconnect();
+    };
+  }, [ref, text]);
+}
 
 export function WordCard({
   word,
@@ -10,6 +51,8 @@ export function WordCard({
   word: Word;
   compact?: boolean;
 }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useFitOneLine(titleRef, word.word);
   return (
     <motion.div
       initial={{ scale: 0.6, opacity: 0 }}
@@ -24,8 +67,9 @@ export function WordCard({
     >
       <p className="eyebrow !text-white/85 leading-tight">A palavra é</p>
       <h2
+        ref={titleRef}
         className={
-          "font-display text-stroke capitalize text-white mt-0.5 leading-tight " +
+          "font-display text-stroke capitalize text-white mt-0.5 leading-tight whitespace-nowrap " +
           (compact ? "text-2xl" : "text-[34px] lg:text-[46px]")
         }
       >

@@ -95,11 +95,14 @@ describe("ChooseWord — as 3 palavras prontas quando a transição termina", ()
     room.fetchThreeWords.mockReturnValue(new Promise(() => {}));
     render(<ChooseWord room={ROOM} players={PLAYERS} isCoordinator />);
     expect(room.fetchThreeWords).toHaveBeenCalledTimes(1);
+    // 9 candidatas: a escolha fica só com as 3 que cabem inteiras na tela
+    // (lib/word-fit.ts — teste real: "Gastroenterol…")
     expect(room.fetchThreeWords).toHaveBeenCalledWith(
       ["velha"],
       ["animal"],
       "r1",
       "medio",
+      9,
     );
   });
 

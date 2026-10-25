@@ -13,7 +13,12 @@
 //     vindo do client nunca vai ao juiz (não há oráculo da verdade).
 //  4. ORÇAMENTO: geração 6 s sem nova tentativa + juiz até 3,5 s; o client
 //     ainda corta em 6 s depois que a mesa escreveu (BOT_AI_GRACE_MS).
-// A v1 (bot-definitions) segue em produção sem nenhuma mudança.
+//  5. FORMA (2026-10-24): texto quebrado do modelo ("tecido tecido…", "min
+//     mineral…") sai ANTES de tudo — não vai ao juiz nem à memória da rodada.
+//     Faltando candidata, no máximo UMA regeneração curta antes do juiz
+//     (logic.ts/gatherCandidates); se ainda faltar, saem menos definições e o
+//     client cai nas reservas vetadas → templates locais → bot não envia.
+// A v1 (bot-definitions) segue em produção; ganhou só o filtro de forma.
 import {
   createClient,
   type SupabaseClient,
@@ -22,15 +27,15 @@ import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import { judgeCandidates } from "../_shared/semantic.ts";
 import {
-  avoidList,
   BOT_GATE_MAX_SCORE,
   dropAlreadyServed,
+  dropMalformed,
   dropMatchRepeats,
   dropNearTruth,
-  dropSelfSimilar,
+  gatherCandidates,
   gateByScores,
   outcomeEvent,
-  parseDefinitions,
+  regenEventFields,
   servedRows,
 } from "../bot-definitions/logic.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
@@ -180,43 +185,58 @@ Deno.serve(async (req) => {
       (r: { norm_text: string }) => r.norm_text,
     );
 
-    // 1) Geração (uma tentativa, com o que a partida já usou no prompt).
+    // 1) Geração (uma tentativa, com o que a partida já usou no prompt) e
+    // 2) filtros baratos — FORMA primeiro (texto cru do modelo), depois
+    // vazamento lexical, servidos na rodada, partida e entre si. Faltando
+    // candidata: no máximo UMA regeneração curta, ainda antes do juiz.
     const personas = choosePersonas(
       Math.min(10, count + EXTRA_CANDIDATES),
       body?.personas,
     );
-    const chat = await callChat({
-      fetchFn: fetch,
-      apiKey,
-      url,
-      timeoutMs: GEN_TIMEOUT_MS,
-      retries: 0,
-      messages: buildMessages({
-        word,
-        meaning,
-        category,
-        personas,
-        avoid: avoidList(previous),
-      }),
+    const gen = await gatherCandidates({
+      count,
+      word,
+      meaning,
+      previous,
+      servedNorms,
+      personas,
+      // continua o rodízio de estilos depois dos da 1ª chamada
+      morePersonas: (n) =>
+        choosePersonas(personas.length + n, body?.personas).slice(
+          personas.length,
+        ),
+      genTimeoutMs: GEN_TIMEOUT_MS,
+      totalBudgetMs: TOTAL_BUDGET_MS,
+      t0,
+      now: Date.now,
+      generate: (r) =>
+        callChat({
+          fetchFn: fetch,
+          apiKey,
+          url,
+          timeoutMs: r.timeoutMs,
+          retries: r.retries,
+          messages: buildMessages({
+            word,
+            meaning,
+            category,
+            personas: r.personas,
+            avoid: r.avoid,
+          }),
+        }),
     });
-    if (!chat.ok)
-      console.error("AI gateway error", chat.reason, chat.status ?? "");
-    const parsed = chat.ok
-      ? parseDefinitions(chat.content, personas.length)
-      : null;
-
-    // 2) Filtros baratos: vazamento lexical, servidos na rodada, partida, entre si.
-    const leak = dropNearTruth(parsed ?? [], meaning);
-    const fresh = dropAlreadyServed(leak.kept, servedNorms);
-    const notRepeated = dropMatchRepeats(fresh.kept, previous);
-    const distinct = dropSelfSimilar(notRepeated.kept);
-    const fbLeak = dropNearTruth(fallbacksIn, meaning);
+    if (!gen.chat.ok)
+      console.error("AI gateway error", gen.chat.reason, gen.chat.status ?? "");
+    // Reservas: mesma forma (a palavra da rodada pode estar numa delas —
+    // rejeitar em vez de mascarar) e os mesmos filtros.
+    const fbShape = dropMalformed(fallbacksIn, word);
+    const fbLeak = dropNearTruth(fbShape.kept, meaning);
     const fbMatch = dropMatchRepeats(fbLeak.kept, previous);
     const fbFresh = dropAlreadyServed(fbMatch.kept, servedNorms);
 
     // 3) Gate semântico com o juiz oficial — candidatas e reservas juntas.
     const items = [
-      ...distinct.kept.map((text, i) => ({ id: `c${i}`, text })),
+      ...gen.candidates.map((text, i) => ({ id: `c${i}`, text })),
       ...fbFresh.kept.map((text, i) => ({ id: `r${i}`, text })),
     ];
     let gate: "ok" | "failed" | "skipped" = "skipped";
@@ -290,13 +310,16 @@ Deno.serve(async (req) => {
         });
     }
 
+    // Só contagens e motivos (dropped_shape + shape_<regra>, regen_*): nunca
+    // palavra, verdade ou texto gerado.
     const ev = outcomeEvent({
-      chat,
-      parsedCount: parsed === null ? null : parsed.length,
+      chat: gen.chat,
+      parsedCount: gen.parsedCount,
       requested: count,
       returned: definitions.length,
-      droppedLeak: leak.dropped,
-      droppedServed: fresh.dropped,
+      droppedLeak: gen.dropped.leak,
+      droppedServed: gen.dropped.served,
+      droppedShape: gen.dropped.shape,
       latencyMs: Date.now() - t0,
     });
     await logEvent(admin, {
@@ -304,13 +327,14 @@ Deno.serve(async (req) => {
       payload: {
         ...ev.payload,
         fn: "bot-definitions-v2",
-        dropped_match: notRepeated.dropped,
-        dropped_self: distinct.dropped,
+        dropped_match: gen.dropped.match,
+        dropped_self: gen.dropped.self,
         dropped_gate: droppedGate,
         dropped_late: droppedLate,
         gate,
         gate_ms: gateMs,
         fallbacks_ok: fallbacks.length,
+        ...regenEventFields(gen.regen),
       },
     });
 

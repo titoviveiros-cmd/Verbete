@@ -20,7 +20,9 @@ import {
   restartGame,
   migrateHost,
   type RoomMode,
+  type Word,
 } from "@/lib/room";
+import { drawFittingWords } from "@/lib/word-fit";
 import { randomAvatar, randomColor } from "@/lib/avatars";
 import { Mascot } from "@/components/Mascot";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
@@ -365,13 +367,21 @@ function RoomPage() {
     if (botAutopickRef.current === key) return;
     // Só o host busca já (N navegadores buscando por rodada era o problema
     // de 2026-10-20); quem cobre a falta dele busca na hora.
+    // Mesmo filtro da escolha humana: só palavras que cabem inteiras na tela
+    // (lib/word-fit.ts) — o bot nunca escolhe "Gastroenterol…".
     const fetchWords = () =>
-      fetchThreeWords(
-        room.used_word_ids ?? [],
-        room.categories ?? [],
-        room.id,
-        room.nivel ?? "aleatorio",
-      ).catch(() => []);
+      drawFittingWords({
+        fetch: (seen) =>
+          fetchThreeWords(
+            [...(room.used_word_ids ?? []), ...seen],
+            room.categories ?? [],
+            room.id,
+            room.nivel ?? "aleatorio",
+            9,
+          ),
+      })
+        .then((r) => r.words)
+        .catch(() => [] as Word[]);
     const words = isHost ? fetchWords() : null;
     const timer = setTimeout(
       async () => {

@@ -31,7 +31,7 @@ import {
   botSubmitDefinitions,
 } from "@/lib/room";
 import { BOT_FAKE_DEFINITIONS_TEMPLATES } from "@/lib/bot-names";
-import { textSimilarity } from "@/lib/text-filter";
+import { textSimilarity, wellFormedDefinition } from "@/lib/text-filter";
 import {
   avoidList,
   BOT_GATE_MAX_SCORE,
@@ -379,6 +379,130 @@ describe("partida de várias rodadas procurando repetição de verdade", () => {
           similar(previous[i]!, previous[j]!),
           `"${previous[i]}" × "${previous[j]}"`,
         ).toBe(false);
+  });
+});
+
+describe("I — texto quebrado nunca vira cédula de bot (forma, 2026-10-24)", () => {
+  const quebradas = [
+    "min mineral de coloracao escura encontrado em regioes montanhosas",
+    "relativo a tecido tecido com fios metalicos finos",
+    "em horticultura trepadeira trepadeira de frutos comestiveis",
+  ];
+  const templates = new Set(
+    BOT_FAKE_DEFINITIONS_TEMPLATES.map((t) => wellFormedDefinition(t)),
+  );
+  const word = { id: "w1", word: "rapape", meaning: "bajulacao" } as Word;
+
+  it("a quebrada da IA é pulada: vai a próxima da IA e depois a reserva vetada", () => {
+    const rows = assembleBotRows({
+      bots: [bot("b1"), bot("b2")],
+      ai: [...quebradas, "pequeno instrumento de sopro usado em festas"],
+      vetted: ["Tipo de dança popular do interior do Brasil"],
+      local: [...BOT_FAKE_DEFINITIONS_TEMPLATES],
+      previous: [],
+      word: "rapapé",
+    });
+    expect(rows.map((r) => r.text)).toEqual([
+      "pequeno instrumento de sopro usado em festas",
+      "tipo de danca popular do interior do brasil",
+    ]);
+  });
+
+  it("só quebradas da IA e nada vetado: entra um template local bem formado", () => {
+    const rows = assembleBotRows({
+      bots: [bot("b1")],
+      ai: quebradas,
+      vetted: [],
+      local: [...BOT_FAKE_DEFINITIONS_TEMPLATES],
+      previous: [],
+    });
+    expect(templates.has(rows[0]!.text)).toBe(true);
+  });
+
+  it("palavra da rodada na definição: pula em vez de mascarar (nada de ***)", () => {
+    const rows = assembleBotRows({
+      bots: [bot("b1")],
+      ai: ["cerimonia de rapapes na corte antiga"],
+      vetted: [],
+      local: [...BOT_FAKE_DEFINITIONS_TEMPLATES],
+      previous: [],
+      word: "rapapé",
+    });
+    expect(rows[0]!.text).not.toContain("*");
+    expect(templates.has(rows[0]!.text)).toBe(true);
+  });
+
+  it("reserva esgotada: o bot que sobra NÃO envia — nunca 'texto (n)'", () => {
+    const rows = assembleBotRows({
+      bots: [bot("b1"), bot("b2"), bot("b3")],
+      ai: quebradas,
+      vetted: [],
+      local: BOT_FAKE_DEFINITIONS_TEMPLATES.slice(0, 2),
+      previous: [],
+    });
+    expect(rows.map((r) => r.player_id)).toEqual(["b1", "b2"]);
+    for (const r of rows) expect(r.text).not.toMatch(/\(\d+\)\s*$/);
+    expect(
+      assembleBotRows({
+        bots: [bot("b1")],
+        ai: quebradas,
+        vetted: [],
+        local: [],
+        previous: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("partida inteira: a edge manda quebradas — cada bot vai com reserva vetada, UMA chamada à edge", async () => {
+    vi.useFakeTimers();
+    void botSubmitDefinitions("room-1", 2, [bot("b1"), bot("b2")], word);
+    await tick();
+    named("rpc:get_room_definitions")[0]!.resolve({ data: [] });
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: {
+        definitions: quebradas,
+        fallbacks: [
+          "Pequeno animal noturno de hábitos solitários",
+          "Tipo de dança popular do interior do Brasil",
+        ],
+        gate: "ok",
+      },
+    });
+    await tick();
+    vi.advanceTimersByTime(BOT_FLOOR);
+    await settle();
+    expect(named("edge:bot-definitions-v2")).toHaveLength(1);
+    const rows = (
+      named("rpc:submit_bot_definitions_bulk")[0]!.args as {
+        p_rows: Array<{ text: string }>;
+      }
+    ).p_rows;
+    expect(rows.map((r) => r.text)).toEqual([
+      "pequeno animal noturno de habitos solitarios",
+      "tipo de danca popular do interior do brasil",
+    ]);
+  });
+
+  it("partida inteira com tudo já usado: o bot não envia (nenhum bulk com '(n)')", async () => {
+    vi.useFakeTimers();
+    void botSubmitDefinitions("room-1", 9, [bot("b1")], word);
+    await tick();
+    // a partida já usou todos os templates (memória) e a IA só mandou quebrada
+    named("rpc:get_room_definitions")[0]!.resolve({
+      data: BOT_FAKE_DEFINITIONS_TEMPLATES.map((text) => ({
+        player_id: "b1",
+        text,
+      })),
+    });
+    named("edge:bot-definitions-v2")[0]!.resolve({
+      data: { definitions: quebradas, fallbacks: [] },
+    });
+    await tick();
+    vi.advanceTimersByTime(BOT_FLOOR);
+    await settle();
+    named("rpc:get_round_sync")[0]!.resolve({ data: { definitions: [] } });
+    await settle();
+    expect(named("rpc:submit_bot_definitions_bulk")).toHaveLength(0);
   });
 });
 

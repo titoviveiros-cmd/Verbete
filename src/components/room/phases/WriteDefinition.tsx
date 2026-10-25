@@ -70,7 +70,9 @@ export function WriteDefinition({
     if (isCoordinator) return;
     let alive = true;
     (async () => {
-      const { sanitizeDefinition } = await import("@/lib/text-filter");
+      // Só texto bem formado vira 💡 (forma, palavra da rodada, sem máscara):
+      // a sugestão quebrada da IA é pulada e a local fica no lugar.
+      const { wellFormedDefinition } = await import("@/lib/text-filter");
       const { BOT_FAKE_DEFINITIONS_TEMPLATES } =
         await import("@/lib/bot-names");
       // 1) Pool local imediato
@@ -80,7 +82,7 @@ export function WriteDefinition({
       );
       for (const fb of pool) {
         if (local.length >= 2) break;
-        const s = sanitizeDefinition(fb, 140, word.word);
+        const s = wellFormedDefinition(fb, word.word);
         if (s && !local.includes(s)) local.push(s);
       }
       if (alive) setSuggestions(local);
@@ -103,7 +105,7 @@ export function WriteDefinition({
         const ai: string[] = [];
         for (const raw of arr) {
           if (typeof raw !== "string" || raw.length <= 5) continue;
-          const s = sanitizeDefinition(raw, 140, word.word);
+          const s = wellFormedDefinition(raw, word.word);
           if (!s) continue;
           // Sugestões precisam ser DIFERENTES entre si (playtest: a IA
           // convergia em frases quase iguais para personas distintas).
@@ -374,13 +376,12 @@ export function WriteDefinition({
       const localFallback = async (): Promise<string> => {
         const { BOT_FAKE_DEFINITIONS_TEMPLATES } =
           await import("@/lib/bot-names");
-        const { sanitizeDefinition } = await import("@/lib/text-filter");
-        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES].sort(
-          () => Math.random() - 0.5,
-        );
-        const pick = pool
-          .map((p) => sanitizeDefinition(p, 140, word.word))
-          .find((s) => s && s !== text && !suggestions.includes(s));
+        const { wellFormedDefinition } = await import("@/lib/text-filter");
+        const pool = [...BOT_FAKE_DEFINITIONS_TEMPLATES]
+          .sort(() => Math.random() - 0.5)
+          .map((p) => wellFormedDefinition(p, word.word))
+          .filter((s): s is string => !!s);
+        const pick = pool.find((s) => s !== text && !suggestions.includes(s));
         return pick ?? pool[0] ?? "";
       };
       const key = autoKey;
@@ -395,6 +396,8 @@ export function WriteDefinition({
       if (autoKeyRef.current !== key) return;
       // digitou ou tocou num 💡 durante a espera: não apaga o que ele fez
       if (textRef.current !== before) return;
+      // nenhuma bem formada: não mexe no campo
+      if (!got.text) return;
       setText(got.text.slice(0, 140));
     } catch (e) {
       console.error("generateAiDefinitionForPlayer failed", e);
