@@ -123,19 +123,38 @@ check(
 // ---------------------------------------------------------------------------
 console.log("\n— ops_health_check: alertas mínimos");
 await db.query(`DELETE FROM public.ops_alerts`);
-for (let i = 0; i < 6; i++) {
-  await db.query(
-    `INSERT INTO public.ops_events (kind, payload) VALUES ('bot_ai_error', '{"fn":"bot-definitions","reason":"exception"}')`,
-  );
-}
-let h = (await row(`SELECT public.ops_health_check() AS h`)).h;
 const kinds = async () =>
   (await db.query(`SELECT kind FROM public.ops_alerts ORDER BY kind`)).rows.map((x) => x.kind);
-check("IA falhando (6 erros, 0 sucesso) gera alerta ai_errors", (await kinds()).includes("ai_errors"), short(h));
-check("tick com erro gera alerta tick_errors", (await kinds()).includes("tick_errors"), short(h.fired));
-h = (await row(`SELECT public.ops_health_check() AS h`)).h;
-const dup = await row(`SELECT count(*)::int AS n FROM public.ops_alerts WHERE kind = 'ai_errors'`);
-check("o mesmo alerta não se repete dentro de 60 min", dup.n === 1, `n=${dup.n}`);
+let h;
+// Isolamento (2026-10-25): a regra conta TODOS os eventos de IA da última
+// hora, e os das suítes anteriores (ex.: test-edges-e2e, com os sucessos do
+// juiz 🧠) mudavam o placar deste cenário. Ele roda numa transação que tira
+// esses eventos da janela e é desfeita no fim — a regra de produção fica igual.
+await db.query("BEGIN");
+try {
+  await db.query(
+    `UPDATE public.ops_events SET at = at - interval '2 hours'
+      WHERE at > now() - interval '60 minutes'
+        AND kind IN ('bot_ai_error', 'judge_ai_error', 'bot_ai_success', 'judge_ai_success', 'bot_ai_fallback')`,
+  );
+  for (let i = 0; i < 6; i++) {
+    await db.query(
+      `INSERT INTO public.ops_events (kind, payload) VALUES ('bot_ai_error', '{"fn":"bot-definitions","reason":"exception"}')`,
+    );
+  }
+  h = (await row(`SELECT public.ops_health_check() AS h`)).h;
+  check(
+    "IA falhando (6 erros, 0 sucesso) gera alerta ai_errors",
+    (await kinds()).includes("ai_errors") && h.metrics?.ai_errors_1h === 6 && h.metrics?.ai_successes_1h === 0,
+    short(h),
+  );
+  check("tick com erro gera alerta tick_errors", (await kinds()).includes("tick_errors"), short(h.fired));
+  h = (await row(`SELECT public.ops_health_check() AS h`)).h;
+  const dup = await row(`SELECT count(*)::int AS n FROM public.ops_alerts WHERE kind = 'ai_errors'`);
+  check("o mesmo alerta não se repete dentro de 60 min", dup.n === 1, `n=${dup.n}`);
+} finally {
+  await db.query("ROLLBACK");
+}
 
 await db.query("BEGIN");
 await db.query(

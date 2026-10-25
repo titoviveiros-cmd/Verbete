@@ -49,7 +49,11 @@ let stubMode = "ok";
 // responde por 9 s — a edge corta em 8 s) ou a nota da candidata com
 // "ALVO" (as outras levam 10). Cada tentativa do banco = até 4 chamadas
 // (2026-10-24: prazo de 17 s — dois timeouts já o esgotam; 429 no máx. 2).
-let judgeQueue = [];
+// Uma fila POR CENÁRIO, escolhida pela marca "ALVO <cenário>:" no texto da
+// candidata (2026-10-25): o retry_round_judgments reenvia TODA rodada
+// elegível do banco, e uma rodada de outro cenário reenviada no meio
+// consumia a fila alheia (no CI, roubou a nota 82 do cenário A).
+const judgeQueues = new Map();
 let botDefs = [];
 const stub = http.createServer((req, res) => {
   let raw = "";
@@ -63,7 +67,9 @@ const stub = http.createServer((req, res) => {
     }
     calls.push(body);
     const sysQ = String(body?.messages?.[0]?.content ?? "");
-    if (!/lexic[oó]grafo/i.test(sysQ) && judgeQueue.length > 0) {
+    const scenario = String(body?.messages?.[1]?.content ?? "").match(/ALVO ([a-z0-9]+):/i)?.[1];
+    const judgeQueue = !/lexic[oó]grafo/i.test(sysQ) && scenario ? judgeQueues.get(scenario) : undefined;
+    if (judgeQueue?.length) {
       const step = judgeQueue.shift();
       if (step === "503") {
         res.writeHead(503);
@@ -477,14 +483,21 @@ try {
     });
     stubMode = "ok";
     ev = await lastEvent("judge_ai_%", baseEvent);
+    // 2026-10-24: 503 rápido ganha até 4 chamadas dentro do prazo de 17 s
+    // (JUDGE_BUDGET) — antes eram 2
     check(
-      "Gemini fora: sem bônus, nova tentativa e evento judge_ai_error",
+      "Gemini fora: sem bônus, novas tentativas no prazo (503×4) e evento judge_ai_error",
       r.json?.error === "ai_503" &&
         (await score(`edge_n3_${tag}`)) === 0 &&
         ev?.kind === "judge_ai_error" &&
-        ev.payload.attempts === 2,
+        ev.payload.attempts === 4 &&
+        ev.payload.tries === "503,503,503,503",
       `${short(r.json)} ${short(ev)}`,
     );
+    // Chamada direta, fora do reenvio do banco: a rodada falha ficaria
+    // elegível ao retry_round_judgments e o cron/cronStep dos cenários
+    // seguintes a reenviaria em segundo plano (eventos e +3 fora de hora).
+    await db.query(`UPDATE public.rounds SET judge_attempts = 4 WHERE room_id = $1`, [c.rid]);
 
     const junkFrom = (
       await row(`SELECT COALESCE(max(id), 0) AS id FROM public.ops_events`)
@@ -704,7 +717,7 @@ try {
 
       // ---------- 🧠 regressão (2026-10-22, sala 3361 / HIENA: o juiz caiu
       // com 503 e o +3 de uma nota 82 se perdeu). Sala nova por cenário.
-      const judgeRoom = async (label, text = "ALVO: fruto seco tipico do cerrado") => {
+      const judgeRoom = async (label, text = `ALVO ${label}: fruto seco tipico do cerrado`) => {
         const id = await mkRoom("voting");
         const ids = { V: `edge_${label}v_${tag}`, N: `edge_${label}n_${tag}`, C: `edge_${label}c_${tag}` };
         await db.query(
@@ -774,7 +787,7 @@ try {
       // A) tentativa 1 → 503 nas 4 chamadas, tentativa 2 → dois timeouts (o
       //    prazo de 17 s acaba), tentativa 3 → nota 82
       const A = await judgeRoom("a");
-      judgeQueue = ["503", "503", "503", "503", "timeout", "timeout", 82];
+      judgeQueues.set("a", ["503", "503", "503", "503", "timeout", "timeout", 82]);
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [A.id]);
       await waitResponse(A.id);
       for (let step = 0; step < 4; step++) {
@@ -822,7 +835,7 @@ try {
 
       // B) nota exatamente 80 → +3; C) 79 → nada
       const B = await judgeRoom("b");
-      judgeQueue = [80];
+      judgeQueues.set("b", [80]);
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [B.id]);
       await waitResponse(B.id);
       await sleep(1000);
@@ -832,7 +845,7 @@ try {
         `escritor=${await score(B.N)}`,
       );
       const C2 = await judgeRoom("c");
-      judgeQueue = [79];
+      judgeQueues.set("c", [79]);
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [C2.id]);
       await waitResponse(C2.id);
       await sleep(1000);
@@ -848,7 +861,6 @@ try {
       //    aprovação (95) chegar → nada muda (o juiz aprovou, mas o pódio
       //    já foi pago)
       const D = await judgeRoom("d", "TARDIO: fruto seco tipico do cerrado");
-      judgeQueue = [];
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [D.id]);
       await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [D.id]);
       await waitResponse(D.id);
@@ -869,7 +881,7 @@ try {
       //    de prazo sobrando; na ÚLTIMA rodada o reenvio do banco não
       //    alcança — a partida acaba antes). A rodada sai julgada na hora.
       const F = await judgeRoom("f");
-      judgeQueue = ["503", "503", 90];
+      judgeQueues.set("f", ["503", "503", 90]);
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [F.id]);
       await waitResponse(F.id);
       await sleep(500);
@@ -882,13 +894,22 @@ try {
           fEv.length === 1 && fEv[0].kind === "judge_ai_success" && fEv[0].payload.tries === "503,503,ok",
         short({ fRow, escritor: await score(F.N), fEv: fEv.map((e) => [e.kind, e.payload.attempt, e.payload.tries]) }),
       );
+      const fIdem = await cronStep(F.id);
+      await sleep(1000);
+      const fRow2 = await roundRow(F.id);
+      check(
+        "depois do sucesso no mesmo disparo: o cron não reenvia e o +3 não dobra",
+        (fIdem?.retried ?? 0) === 0 && fRow2?.judge_attempts === 1 &&
+          fRow2?.judge_request_id === fRow?.judge_request_id && (await score(F.N)) === 6,
+        short({ fIdem, fRow2 }),
+      );
 
       // G) ÚLTIMA rodada: julgamento OK (nota 30, sem bônus) e a partida
       //    acaba logo depois. Antes só o cron marcava "julgada", no minuto
       //    seguinte — com a partida já encerrada, registrava desistência
       //    (room_finished) de um julgamento que deu certo (4 das 7 de 18–24/10).
       const G = await judgeRoom("g");
-      judgeQueue = [30];
+      judgeQueues.set("g", [30]);
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [G.id]);
       await waitResponse(G.id);
       await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [G.id]);
@@ -905,7 +926,7 @@ try {
 
       // E) 3 falhas seguidas → desiste, registra, não inventa nota
       const E = await judgeRoom("e");
-      judgeQueue = Array(12).fill("503");
+      judgeQueues.set("e", Array(12).fill("503"));
       await db.query(`SELECT public.advance_voting_to_reveal($1)`, [E.id]);
       await waitResponse(E.id);
       for (let step = 0; step < 4; step++) {
@@ -918,11 +939,12 @@ try {
         "3 falhas seguidas → desiste (judge_gave_up), sem nota inventada e sem +3",
         eRow?.judge_attempts === 4 && (await score(E.N)) === 3 && !(await nearIds(E.id)).includes(E.alvo) &&
           eEv.filter((e) => e.kind === "judge_ai_error").length === 3 &&
+          eEv.filter((e) => e.kind === "judge_ai_error").every((e) => e.payload.tries === "503,503,503,503") &&
           eEv.some((e) => e.kind === "judge_gave_up") &&
           !eEv.some((e) => e.kind === "judge_ai_success"),
-        short(eEv.map((e) => [e.kind, e.payload.attempt])),
+        short(eEv.map((e) => [e.kind, e.payload.attempt, e.payload.tries])),
       );
-      judgeQueue = [];
+      judgeQueues.clear();
     } finally {
       await db.query(
         `DELETE FROM public.app_config WHERE key IN ('supabase_url', 'supabase_anon_key')`,
