@@ -1,8 +1,9 @@
-// Build Android (Gradle, APK de DEBUG) no CI do PR — enquanto o android.yml
-// não roda em pull requests (o commit que liga isso exige token com escopo
-// `workflow`; até lá este estágio cobre a mesma trilha). Nada de AAB nem
-// secrets: a release assinada continua só no workflow_dispatch.
-// Só roda no CI com Android SDK presente; fora disso é no-op.
+// Build Android (Gradle: APK de debug + release sem assinatura) e checagens
+// do APK — job `android` da CI (ci.yml), em paralelo aos demais; até
+// 2026-10-25 era a última suíte do run-integration, no caminho crítico. Nada
+// de AAB nem secrets: a release assinada continua só no workflow_dispatch.
+// Só roda no CI com Android SDK presente; fora disso é no-op — exceto com
+// ANDROID_REQUIRED=1 (o job da CI), em que faltar o SDK é falha.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
