@@ -7,7 +7,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
-import { judgeCandidates } from "../_shared/semantic.ts";
+import { JUDGE_BUDGET, judgeCandidates } from "../_shared/semantic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -123,8 +123,12 @@ Deno.serve(async (req) => {
     // flash-lite: pool de quota gratuita separado e maior — o flash comum
     // estourou o free tier no playtest e TODAS as rodadas perderam o bônus
     // silenciosamente (429 -> matches vazio). Timeout de 8s por tentativa,
-    // 1 nova tentativa em falha transitória e evento de erro (alerta no
-    // /admin/ops e no webhook) quando o julgamento não acontece.
+    // novas tentativas em falha transitória dentro do prazo de JUDGE_BUDGET
+    // (abaixo dos 20 s do pg_net) e evento de erro (alerta no /admin/ops e
+    // no webhook) quando o julgamento não acontece.
+    // Trilha por chamada ("503,timeout,ok"): o evento guardava só o motivo
+    // da ÚLTIMA — em produção, um "503" de 9 s era timeout + 503.
+    const tries: string[] = [];
     const judged = await judgeCandidates({
       fetchFn: fetch,
       apiKey,
@@ -132,6 +136,8 @@ Deno.serve(async (req) => {
       word,
       truth,
       candidates,
+      ...JUDGE_BUDGET,
+      onAttempt: (r) => tries.push(r.ok ? "ok" : String(r.status ?? r.reason)),
     });
     if (!judged.ok) {
       console.error("AI gateway error", judged.reason, judged.status ?? "");
@@ -146,6 +152,7 @@ Deno.serve(async (req) => {
           ...(judged.status ? { status: judged.status } : {}),
           candidates: candidates.length,
           attempts: judged.attempts,
+          tries: tries.join(","),
           latency_ms: Date.now() - t0,
         },
       });
@@ -197,6 +204,18 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Julgada: marca a rodada AGORA (2026-10-24). Antes só o reenvio do banco
+    // marcava, no minuto seguinte — e na última rodada a partida já tinha
+    // acabado: o cron registrava desistência (room_finished) de um julgamento
+    // que deu certo (4 das 7 desistências de 18–24/10). Falhou? O cron marca.
+    const { error: markError } = await admin
+      .from("rounds")
+      .update({ judged_at: new Date().toISOString() })
+      .eq("room_id", roomId)
+      .eq("round", round)
+      .is("judged_at", null);
+    if (markError) console.warn("rounds.judged_at update failed", markError.code, markError.message);
+
     await logEvent(admin, {
       kind: "judge_ai_success",
       payload: {
@@ -205,6 +224,7 @@ Deno.serve(async (req) => {
         matched: matches.length,
         max_score: Math.max(-1, ...judged.scores.values()),
         attempts: judged.attempts,
+        tries: tries.join(","),
         latency_ms: Date.now() - t0,
         ...trail,
       },

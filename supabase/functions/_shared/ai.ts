@@ -8,7 +8,7 @@ export const GEMINI_MODEL = "gemini-flash-lite-latest";
 
 export type ChatFailure = "timeout" | "network" | "http_error" | "invalid_response";
 
-type AttemptResult =
+export type AttemptResult =
   | { ok: true; content: string }
   | { ok: false; reason: ChatFailure; status?: number };
 
@@ -16,11 +16,16 @@ export type ChatResult = AttemptResult & { attempts: number };
 
 type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
 
-/** Falhas transitórias que valem uma nova tentativa. */
-function retriable(r: AttemptResult): boolean {
+/** Falhas transitórias que valem uma nova tentativa. 429 (cota/ritmo) vale
+ *  UMA só: o limite do Gemini é por minuto e insistir em segundos só gasta
+ *  chamadas — quem espera o minuto é o reenvio do banco (22/10: as rodadas
+ *  com 429 voltaram 1 min depois). */
+function retriable(r: AttemptResult, attemptIndex: number): boolean {
   if (r.ok) return false;
   if (r.reason === "timeout" || r.reason === "network") return true;
-  return r.reason === "http_error" && (r.status === 429 || (r.status ?? 0) >= 500);
+  if (r.reason !== "http_error") return false;
+  if (r.status === 429) return attemptIndex === 0;
+  return (r.status ?? 0) >= 500;
 }
 
 async function attempt(
@@ -83,6 +88,13 @@ export async function callChat(opts: {
   timeoutMs?: number;
   retries?: number;
   backoffMs?: number;
+  /** Prazo TOTAL, somando tentativas e esperas: cada tentativa usa no
+   *  máximo o que resta, e nenhuma nova começa com menos de `minAttemptMs`.
+   *  Omitido = sem prazo total (bots e Diário seguem como antes). */
+  deadlineMs?: number;
+  minAttemptMs?: number;
+  /** Chamado ao fim de cada tentativa (trilha da auditoria). */
+  onAttempt?: (r: AttemptResult) => void;
   /** Omitida = padrão do modelo (geração criativa dos bots). */
   temperature?: number;
 }): Promise<ChatResult> {
@@ -90,12 +102,28 @@ export async function callChat(opts: {
   const timeoutMs = opts.timeoutMs ?? 8000;
   const retries = opts.retries ?? 1;
   const backoffMs = opts.backoffMs ?? 700;
+  const minAttemptMs = opts.minAttemptMs ?? 1500;
+  const t0 = Date.now();
+  const left = () =>
+    opts.deadlineMs === undefined ? Infinity : opts.deadlineMs - (Date.now() - t0);
   let last: ChatResult = { ok: false, reason: "network", attempts: 0 };
   for (let i = 0; i <= retries; i++) {
-    if (i > 0) await new Promise((res) => setTimeout(res, backoffMs * i));
-    const res = await attempt(opts.fetchFn, url, opts.apiKey, opts.messages, timeoutMs, opts.temperature);
+    if (i > 0) {
+      // sem tempo para a espera e uma tentativa útil: fica a última falha
+      if (left() - backoffMs * i < minAttemptMs) return last;
+      await new Promise((res) => setTimeout(res, backoffMs * i));
+    }
+    const res = await attempt(
+      opts.fetchFn,
+      url,
+      opts.apiKey,
+      opts.messages,
+      Math.min(timeoutMs, left()),
+      opts.temperature,
+    );
+    opts.onAttempt?.(res);
     last = { ...res, attempts: i + 1 };
-    if (!retriable(res)) return last;
+    if (!retriable(res, i)) return last;
   }
   return last;
 }
