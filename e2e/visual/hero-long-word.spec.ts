@@ -4,7 +4,7 @@
 // INTEIRA numa linha: só a que não cabe na largura real diminui o necessário;
 // a que cabe fica no tamanho da tela. Celular, deitado e desktop.
 import { expect, test, type Page } from "@playwright/test";
-import { installSupabaseMock, type MockBackend } from "./supabase-mock";
+import { installSupabaseMock } from "./supabase-mock";
 import { ROOM_CODE, WORD, roomBackend, roomStorage } from "./fixtures";
 
 const LONG = ["desvanecimento", "infundibuliforme", "compromissório"];
@@ -22,9 +22,9 @@ const SHOTS_DIR = process.env.SHOTS_DIR;
 
 async function writing(page: Page, word: string, w: number, h: number) {
   await page.setViewportSize({ width: w, height: h });
-  const backend = roomBackend("writing") as MockBackend;
-  backend.tables["words"] = [{ ...WORD, word }];
-  await installSupabaseMock(page, backend);
+  // A palavra nas duas fontes (get_room_state e tabela words): trocar só a
+  // tabela deixava uma recarga tardia da sala devolver o "rapapé" ao cartão.
+  await installSupabaseMock(page, roomBackend("writing", { word }));
   await page.addInitScript(
     (entries) => {
       for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
@@ -49,6 +49,7 @@ async function writing(page: Page, word: string, w: number, h: number) {
     const cssFont = parseFloat(getComputedStyle(h).fontSize);
     h.style.fontSize = inline;
     return {
+      text: h.textContent,
       cut: h.scrollWidth > h.clientWidth,
       inside: text.left >= card.left - 0.5 && text.right <= card.right + 0.5,
       oneLine: range.getClientRects().length === 1,
@@ -66,6 +67,7 @@ for (const [w, h] of VIEWPORTS) {
     const seen: string[] = [];
     for (const word of LONG) {
       const r = await writing(page, word, w, h);
+      expect(r.text, `${word}: mediu outra palavra`).toBe(word);
       seen.push(
         `${word} ${r.font}px${r.font < r.cssFont ? ` (de ${r.cssFont})` : ""}`,
       );
@@ -82,6 +84,7 @@ for (const [w, h] of VIEWPORTS) {
     }
     // palavra curta: nunca diminui
     const short = await writing(page, WORD.word, w, h);
+    expect(short.text, `${WORD.word}: mediu outra palavra`).toBe(WORD.word);
     expect(short.font, `${WORD.word}: diminuiu sem precisar`).toBe(
       short.cssFont,
     );
