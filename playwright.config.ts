@@ -16,7 +16,11 @@ export default defineConfig({
   // dev server e flakava na hidratação da home.
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? "github" : "list",
+  // timing-reporter: tabela de tempo por spec/teste no fim (só mede).
+  reporter: [
+    [process.env.CI ? "github" : "list"],
+    ["./e2e/timing-reporter.ts"],
+  ],
   use: {
     baseURL,
     viewport: { width: 390, height: 844 }, // mobile portrait — formato do jogo
@@ -35,7 +39,25 @@ export default defineConfig({
         }
       : {}),
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // Dois grupos com o MESMO dispositivo e as mesmas regras (workers, retries):
+  // - visual: e2e/visual — Supabase SIMULADO no navegador (installSupabaseMock
+  //   intercepta toda chamada e aborta o desconhecido); dispensa o Supabase
+  //   local, então roda no job `e2e-visual` da CI, em paralelo;
+  // - stateful: o resto — backend real (salas, multiplayer) e os specs de
+  //   produção (pulados sem E2E_BASE_URL); job `integration`.
+  // Sem --project roda tudo (135 testes), como antes.
+  projects: [
+    {
+      name: "visual",
+      testMatch: /[\\/]e2e[\\/]visual[\\/].*\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "stateful",
+      testIgnore: /[\\/]e2e[\\/]visual[\\/]/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
   ...(process.env.E2E_BASE_URL
     ? {}
     : {

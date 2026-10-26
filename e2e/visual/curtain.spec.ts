@@ -60,7 +60,10 @@ test("cortina de fase: o toque não chega ao botão escondido e volta quando ela
     true,
   );
   await setStatus(page, "lobby");
-  await page.waitForTimeout(300);
+  // A volta só depois de o lobby estar NA TELA: com um sono fixo de 300 ms a
+  // 2ª virada às vezes chegava antes da 1ª e a sala ficava no lobby (4 de 10
+  // numa máquina mais lenta; 10 de 10 esperando o estado).
+  await expect(page.getByText("Sala de espera")).toBeVisible();
   await setStatus(page, "choosing");
   const t0 = Date.now();
   const overlay = page.locator('[data-phase-announcer="choosing"]');
