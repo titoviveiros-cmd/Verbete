@@ -39,17 +39,26 @@ export default defineConfig({
         }
       : {}),
   },
-  // Dois grupos com o MESMO dispositivo e as mesmas regras (workers, retries):
-  // - visual: e2e/visual — Supabase SIMULADO no navegador (installSupabaseMock
-  //   intercepta toda chamada e aborta o desconhecido); dispensa o Supabase
-  //   local, então roda no job `e2e-visual` da CI, em paralelo;
+  // Grupos com o MESMO dispositivo e as mesmas regras (workers, retries):
+  // - visual-screens / visual: e2e/visual — Supabase SIMULADO no navegador
+  //   (installSupabaseMock intercepta toda chamada e aborta o desconhecido);
+  //   dispensam o Supabase local e rodam em 2 máquinas no job `e2e-visual`.
+  //   O screens (47 testes, ~4,5 min) fica sozinho: o shard nativo reparte
+  //   por contagem com o arquivo inteiro num shard só e deixava 79 × 29
+  //   testes (10m10s × 1m58s). Spec novo em e2e/visual cai no `visual`;
   // - stateful: o resto — backend real (salas, multiplayer) e os specs de
   //   produção (pulados sem E2E_BASE_URL); job `integration`.
   // Sem --project roda tudo (135 testes), como antes.
   projects: [
     {
+      name: "visual-screens",
+      testMatch: /[\\/]e2e[\\/]visual[\\/]screens\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
       name: "visual",
       testMatch: /[\\/]e2e[\\/]visual[\\/].*\.spec\.ts$/,
+      testIgnore: /[\\/]e2e[\\/]visual[\\/]screens\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
