@@ -23,7 +23,10 @@ const SHOTS_DIR = process.env.SHOTS_DIR;
 async function writing(page: Page, word: string, w: number, h: number) {
   await page.setViewportSize({ width: w, height: h });
   const backend = roomBackend("writing") as MockBackend;
+  // a palavra chega pelo get_room_state E pela tabela words (no dev server o
+  // StrictMode relê a tabela; no build de produção vale a do get_room_state)
   backend.tables["words"] = [{ ...WORD, word }];
+  (backend.rpc["get_room_state"] as { word: unknown }).word = { ...WORD, word };
   await installSupabaseMock(page, backend);
   await page.addInitScript(
     (entries) => {
