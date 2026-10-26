@@ -2,10 +2,11 @@
 # build-and-test: lint + typecheck + unit + build (sem segredos).
 # integration: Supabase LOCAL (Docker) no runner com as migrations aplicadas
 # do zero — valida o motor SQL inteiro sem tocar produção e sem segredos.
-# e2e-visual: specs do Playwright com o Supabase simulado (sem Supabase local).
+# e2e-visual: specs do Playwright com o Supabase simulado (sem Supabase local),
+# em 2 máquinas: projeto visual-screens (só o screens) e projeto visual.
 # android: Gradle + checagens do APK (scripts/ci-android.mjs), sem segredos e
-# sem AAB. Os quatro jobs começam juntos: nenhum consome artefato de outro, e o
-# run só fica verde com os quatro verdes.
+# sem AAB. Todos os jobs começam juntos: nenhum consome artefato de outro, e o
+# run só fica verde com todos verdes.
 name: CI
 
 on:
@@ -86,9 +87,19 @@ jobs:
   # Mesmas regras de antes (workers 1, retries do CI). A URL é a padrão do
   # Supabase local, mas aqui NADA escuta nela: o que escapasse do mock
   # falharia em vez de tocar um banco.
+  # 2 máquinas, 1 worker em cada (2 workers na MESMA máquina flakaram na
+  # Fase 2), divididas por PROJETO: visual-screens (só o screens, ~4,5 min) e
+  # visual (todo o resto de e2e/visual — spec novo entra sozinho). O shard
+  # nativo repartia por contagem e deixava 79 × 29 testes (10m10s × 1m58s).
+  # fail-fast desligado: um lado vermelho não cancela o outro, e o run só
+  # fecha verde com os dois verdes.
   e2e-visual:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [visual-screens, visual]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -104,7 +115,7 @@ jobs:
       - name: Instala Chromium do Playwright
         run: npx playwright install --with-deps chromium
       - name: E2E Playwright visual (Supabase simulado, sem Supabase local)
-        run: npx playwright test --project=visual
+        run: npx playwright test --project=${{ matrix.project }}
         env:
           VITE_SUPABASE_URL: http://127.0.0.1:54321
           VITE_SUPABASE_PUBLISHABLE_KEY: e2e-visual-mock

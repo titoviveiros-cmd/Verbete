@@ -69,6 +69,24 @@ export default defineConfig(({ mode }) => {
         "@tanstack/react-query",
       ],
     },
+    // Só o dev server (o otimizador de dependências não entra no vite build):
+    // o stub de server function do TanStack Start só aparece depois da
+    // transformação do plugin, que a varredura inicial não roda — na 1ª rota
+    // que usa uma (ex.: /diario) o Vite achava estas dependências, reotimizava
+    // e RECARREGAVA a página no meio do teste ("Failed to fetch dynamically
+    // imported module": flaky do screens no CI 40261249870). `entries` com
+    // as rotas não resolve (testado); pré-otimizadas, a 1ª visita não recarrega.
+    optimizeDeps: {
+      include: [
+        "@tanstack/router-core",
+        "@tanstack/router-core/isServer",
+        "@tanstack/router-core/ssr/client",
+        "@tanstack/router-core/ssr/server",
+        "@tanstack/history",
+        "seroval",
+        "h3-v2",
+      ],
+    },
     // Fase 7 (perf): vendors estáveis em chunks próprios SÓ no client — como
     // cada deploy troca o hash do bundle e o auto-update força reload, sem o
     // split o jogador rebaixa ~230KB gz a cada deploy; com ele, só o código do
