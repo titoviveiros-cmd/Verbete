@@ -438,23 +438,12 @@ function HomePage() {
               </Link>
             )}
 
-            {/* Rodapé. Versão discreta (decisão do Tito, 26/10): o texto vem
-                pronto do build (lib/version-label) — produção só
-                "v{versionName}", teste interno com versionCode e SHA.
-                Nada de versão escrita aqui. O SHA completo segue na
-                meta verbete-build e no painel /admin/ops. */}
+            {/* Rodapé — a versão fica na última linha da página, abaixo de
+                Privacidade · Termos. */}
             <div className="text-center mt-1">
               <p className="text-[12px] font-bold text-muted-foreground">
                 4 a 12 jogadores · Conta opcional
               </p>
-              {APP_VERSION_LABEL && (
-                <p
-                  data-testid="app-version"
-                  className="mt-0.5 text-[11px] leading-4 font-medium text-muted-foreground whitespace-nowrap"
-                >
-                  {APP_VERSION_LABEL}
-                </p>
-              )}
             </div>
           </motion.div>
         ) : (
@@ -544,6 +533,20 @@ function HomePage() {
             Termos
           </Link>
         </p>
+        {/* Versão discreta (decisão do Tito, 26/10), só na Home: o texto vem
+            pronto do build (lib/version-label) — produção só
+            "v{versionName}", teste interno com versionCode e SHA. Nada de
+            versão escrita aqui. Na última linha: em 320x568 o fim da coluna
+            do menu já invade 12 px este bloco (anterior a esta rodada). O
+            SHA completo segue na meta verbete-build e no /admin/ops. */}
+        {APP_VERSION_LABEL && (
+          <p
+            data-testid="app-version"
+            className="mt-0.5 leading-4 font-medium whitespace-nowrap"
+          >
+            {APP_VERSION_LABEL}
+          </p>
+        )}
       </div>
 
       <AnimatePresence>
