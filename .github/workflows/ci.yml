@@ -73,7 +73,7 @@ jobs:
           echo "API=$SUPA_URL DB=$DB_URL"
           npm run test:integration
       - name: Instala Chromium do Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: E2E Playwright stateful (smoke + partida multiplayer, Supabase local)
         run: |
           STATUS=$(npx supabase status -o env)
@@ -113,7 +113,7 @@ jobs:
       - name: Instala dependências
         run: npm ci
       - name: Instala Chromium do Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: E2E Playwright visual (Supabase simulado, sem Supabase local)
         run: npx playwright test --project=${{ matrix.project }}
         env:
