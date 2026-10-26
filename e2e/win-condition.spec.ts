@@ -50,8 +50,12 @@ async function hostAndGuest(browser: Browser) {
   return { host, guest, code, close };
 }
 
-/** Atrasa a 1ª escrita de configuração do host e conta envios e respostas. */
-async function delayFirstConfigWrite(page: Page, ms: number) {
+/** Atrasa a 1ª escrita de configuração do host (ms fixos, ou até `delay`
+ *  resolver) e conta envios e respostas. */
+async function delayFirstConfigWrite(
+  page: Page,
+  delay: number | Promise<void>,
+) {
   const sent: string[] = [];
   let answered = 0;
   await page.route(
@@ -59,7 +63,10 @@ async function delayFirstConfigWrite(page: Page, ms: number) {
     async (route: Route) => {
       const i = sent.length;
       sent.push(route.request().postData() ?? "");
-      if (i === 0) await new Promise((r) => setTimeout(r, ms));
+      if (i === 0)
+        await (typeof delay === "number"
+          ? new Promise((r) => setTimeout(r, delay))
+          : delay);
       await route.continue();
     },
   );
@@ -161,13 +168,19 @@ test("toques múltiplos rápidos: no máximo 2 escritas e vale o último (5)", a
 }) => {
   const { host, guest, close } = await hostAndGuest(browser);
   try {
-    const net = await delayFirstConfigWrite(host, 1_500);
+    // A 1ª escrita fica em voo até o ÚLTIMO toque: em qualquer máquina os 5
+    // toques acontecem com ela pendente. Com 1,5 s fixos, um runner lento
+    // tocava depois da resposta e saíam 4 escritas (CI 40247645490, retry).
+    let tapsDone!: () => void;
+    const taps = new Promise<void>((r) => (tapsDone = r));
+    const net = await delayFirstConfigWrite(host, taps);
     await host.getByRole("button", { name: /^Rodadas/ }).click();
     for (const n of [5, 10, 15, 20, 5]) {
       await host
         .getByRole("button", { name: new RegExp(`^${n} rod\\.$`) })
         .click();
     }
+    tapsDone();
     await net.settle(2);
     expect(net.sent.length, JSON.stringify(net.sent)).toBeLessThanOrEqual(2);
     await expect(
