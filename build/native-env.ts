@@ -2,6 +2,11 @@
 // bundle fixo: configuração ausente ou errada aqui vira app natimorto na loja
 // com CI verde (Master Release Audit: MOB-01, VIR-03, RC-02).
 import { readFileSync } from "node:fs";
+import {
+  RELEASE_CHANNELS,
+  isReleaseChannel,
+  type ReleaseChannel,
+} from "../src/lib/version-label";
 
 const LOCAL_HOST_RE =
   /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\])$|\.local$|\.localhost$/i;
@@ -83,10 +88,39 @@ export function assertNativeEnv(env: Record<string, string | undefined>): void {
   }
 }
 
+/** Versão do app Android (fonte única: android/app/build.gradle). */
+export function readAndroidVersion(gradlePath: string): {
+  versionName: string;
+  versionCode: number;
+} {
+  const gradle = readFileSync(gradlePath, "utf8");
+  const code = gradle.match(/versionCode\s+(\d+)/);
+  if (!code) throw new Error(`versionCode não encontrado em ${gradlePath}`);
+  const name = gradle.match(/versionName\s+"([^"]+)"/);
+  if (!name) throw new Error(`versionName não encontrado em ${gradlePath}`);
+  return { versionName: name[1]!, versionCode: Number(code[1]) };
+}
+
 /** versionCode do app Android (fonte única: android/app/build.gradle). */
 export function readAndroidVersionCode(gradlePath: string): number {
-  const gradle = readFileSync(gradlePath, "utf8");
-  const m = gradle.match(/versionCode\s+(\d+)/);
-  if (!m) throw new Error(`versionCode não encontrado em ${gradlePath}`);
-  return Number(m[1]);
+  return readAndroidVersion(gradlePath).versionCode;
+}
+
+/**
+ * Canal do rodapé de versão, decidido no BUILD: o explícito
+ * (VITE_RELEASE_CHANNEL) ou o padrão — bundle nativo = teste interno (o
+ * fluxo de hoje), web = produção. O AAB de produção sai com
+ * VITE_RELEASE_CHANNEL=production. Valor desconhecido BLOQUEIA o build: um
+ * erro de digitação não pode virar rodapé errado na loja.
+ */
+export function resolveReleaseChannel(
+  explicit: string | undefined,
+  native: boolean,
+): ReleaseChannel {
+  const v = explicit?.trim();
+  if (!v) return native ? "internal" : "production";
+  if (isReleaseChannel(v)) return v;
+  throw new Error(
+    `VITE_RELEASE_CHANNEL inválido: "${v}" (use ${RELEASE_CHANNELS.join(", ")})`,
+  );
 }

@@ -1,4 +1,5 @@
 import { APP_URL } from "@/lib/app-url";
+import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -437,12 +438,23 @@ function HomePage() {
               </Link>
             )}
 
-            {/* Rodapé — sem a versão do build: ela fica na meta verbete-build
-                do HTML e no painel /admin/ops (área técnica). */}
+            {/* Rodapé. Versão discreta (decisão do Tito, 26/10): o texto vem
+                pronto do build (lib/version-label) — produção só
+                "v{versionName}", teste interno com versionCode e SHA.
+                Nada de versão escrita aqui. O SHA completo segue na
+                meta verbete-build e no painel /admin/ops. */}
             <div className="text-center mt-1">
               <p className="text-[12px] font-bold text-muted-foreground">
                 4 a 12 jogadores · Conta opcional
               </p>
+              {APP_VERSION_LABEL && (
+                <p
+                  data-testid="app-version"
+                  className="mt-0.5 text-[11px] leading-4 font-medium text-muted-foreground whitespace-nowrap"
+                >
+                  {APP_VERSION_LABEL}
+                </p>
+              )}
             </div>
           </motion.div>
         ) : (

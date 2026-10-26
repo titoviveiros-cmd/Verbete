@@ -1,11 +1,14 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertNativeEnv,
   jwtRole,
   nativeEnvProblems,
+  readAndroidVersion,
   readAndroidVersionCode,
+  resolveReleaseChannel,
 } from "../../../build/native-env";
 
 const ROOT = resolve(__dirname, "../../..");
@@ -94,5 +97,45 @@ describe("trava do build nativo", () => {
     expect(
       readAndroidVersionCode(resolve(ROOT, "android/app/build.gradle")),
     ).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("versão do app (rodapé da Home)", () => {
+  const GRADLE = resolve(ROOT, "android/app/build.gradle");
+
+  it("versionName e versionCode saem do build.gradle — a mesma fonte do APK", () => {
+    const gradle = readFileSync(GRADLE, "utf8");
+    const v = readAndroidVersion(GRADLE);
+    expect(v.versionName).toBe(gradle.match(/versionName\s+"([^"]+)"/)?.[1]);
+    expect(v.versionCode).toBe(
+      Number(gradle.match(/versionCode\s+(\d+)/)?.[1]),
+    );
+    expect(v.versionCode).toBe(readAndroidVersionCode(GRADLE));
+  });
+
+  it("FALHA sem versionName no build.gradle (não inventa versão)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "verbete-gradle-"));
+    const file = join(dir, "build.gradle");
+    writeFileSync(
+      file,
+      "android {\n  defaultConfig {\n    versionCode 7\n  }\n}\n",
+    );
+    expect(() => readAndroidVersion(file)).toThrow(/versionName/);
+  });
+
+  it("canal decidido no build: nativo = teste interno, web = produção", () => {
+    expect(resolveReleaseChannel(undefined, true)).toBe("internal");
+    expect(resolveReleaseChannel("", true)).toBe("internal");
+    expect(resolveReleaseChannel(undefined, false)).toBe("production");
+    expect(resolveReleaseChannel("production", true)).toBe("production");
+    expect(resolveReleaseChannel("preview", false)).toBe("preview");
+    expect(resolveReleaseChannel(" internal ", false)).toBe("internal");
+  });
+
+  it("canal desconhecido BLOQUEIA o build (erro de digitação ≠ rodapé errado)", () => {
+    expect(() => resolveReleaseChannel("prod", true)).toThrow(
+      /VITE_RELEASE_CHANNEL inválido/,
+    );
+    expect(() => resolveReleaseChannel("Production", false)).toThrow();
   });
 });
