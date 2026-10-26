@@ -324,7 +324,11 @@ export type Phase =
 /**
  * Backend com a sala congelada na fase pedida, vista pela Bia (host).
  * `guest`: a Bia vê como convidada (o Zé é o host). `voted`: na votação, o
- * voto dela já está registrado (cédula escolhida com o anel rosa).
+ * voto dela já está registrado (cédula escolhida com o anel rosa). `word`:
+ * troca a palavra da rodada nas DUAS fontes do app (get_room_state e a
+ * tabela words) — a sala relê get_room_state numa recarga tardia
+ * (pageshow/focus, realtime) e regrava a palavra; trocar só uma das fontes
+ * fazia o cartão voltar ao "rapapé".
  */
 export function roomBackend(
   phase: Phase,
@@ -333,8 +337,10 @@ export function roomBackend(
     guest?: boolean;
     voted?: boolean;
     longNames?: boolean;
+    word?: string;
   } = {},
 ): MockBackend {
+  const roundWord = opts.word ? { ...WORD, word: opts.word } : WORD;
   const now = Date.now();
   const inSecs = (s: number) => new Date(now + s * 1000).toISOString();
   const r3 = DEFS.filter((x) => x.round === 3);
@@ -421,7 +427,7 @@ export function roomBackend(
   };
   const allDefs = DEFS.map((x) => defRow(x, "revealed"));
   const allVotes = voteRows(() => true);
-  const word = wordId ? { ...WORD } : null;
+  const word = wordId ? { ...roundWord } : null;
   const roster = players(scores, ids, opts.longNames);
 
   return {
@@ -480,7 +486,7 @@ export function roomBackend(
       // O polling de saúde relê sala e jogadores direto das tabelas.
       rooms: [room as unknown as Record<string, Json>],
       players: roster as unknown as Array<Record<string, Json>>,
-      words: [WORD as unknown as Record<string, Json>],
+      words: [roundWord as unknown as Record<string, Json>],
       round_extensions: [],
       room_words: [],
       votes: allVotes as unknown as Array<Record<string, Json>>,
