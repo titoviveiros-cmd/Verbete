@@ -62,8 +62,16 @@ jobs:
         run: npm install -g npm@11
       - name: Instala dependências
         run: npm ci
+      # Imagens direto do ghcr.io (mesmos digests do public.ecr.aws, o padrão
+      # do CLI). No runner hospedado o ECR anônimo responde "toomanyrequests:
+      # Data limit exceeded" em ~4 de cada 5 runs (23 de 29 em 23–26/10) e o
+      # CLI só cai no ghcr.io depois de ~3,3 min de tentativas. É como o CI do
+      # próprio Supabase sobe o `supabase start`. Sem fallback: se o ghcr.io
+      # falhar, o passo falha (nada é pulado).
       - name: Sobe Supabase local (aplica migrations do zero)
         run: npx supabase start
+        env:
+          SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
       - name: Suíte de integração (identidade + rodada E2E)
         run: |
           STATUS=$(npx supabase status -o env)
