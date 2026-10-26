@@ -14,9 +14,15 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { cloudflare } from "@cloudflare/vite-plugin";
-import { assertNativeEnv, readAndroidVersionCode } from "./build/native-env";
+import {
+  assertNativeEnv,
+  readAndroidVersion,
+  resolveReleaseChannel,
+} from "./build/native-env";
 
 export default defineConfig(({ mode }) => {
+  // Fonte única da versão: android/app/build.gradle (a mesma do APK).
+  const appVersion = readAndroidVersion("android/app/build.gradle");
   // O prerender do shell SPA relança um vite preview que RECARREGA este
   // config sem repassar --mode capacitor. Persistimos a decisão numa env
   // (mesmo processo) para o reload interno manter os mesmos plugins —
@@ -27,9 +33,7 @@ export default defineConfig(({ mode }) => {
     // não tem servidor para completar env em runtime).
     assertNativeEnv(loadEnv(mode, process.cwd(), "VITE_"));
     // Versão do app para a trava remota de versão mínima (get_client_config).
-    process.env.VITE_NATIVE_VERSION_CODE = String(
-      readAndroidVersionCode("android/app/build.gradle"),
-    );
+    process.env.VITE_NATIVE_VERSION_CODE = String(appVersion.versionCode);
     // Rastreabilidade: o rodapé do app mostrava "v dev" (RC-02). O CI passa
     // o SHA; no build local usa o commit atual.
     if (!process.env.VITE_BUILD_ID) {
@@ -43,6 +47,14 @@ export default defineConfig(({ mode }) => {
     }
   }
   const isCapacitor = mode === "capacitor" || process.env.CAP_BUILD === "1";
+  // Rodapé de versão da Home (src/lib/version-label.ts): versionName sempre
+  // do build.gradle (sem override: nunca diverge do APK) e o canal decidido
+  // aqui, no build — nativo = teste interno por padrão, web = produção.
+  process.env.VITE_APP_VERSION_NAME = appVersion.versionName;
+  process.env.VITE_RELEASE_CHANNEL = resolveReleaseChannel(
+    process.env.VITE_RELEASE_CHANNEL,
+    isCapacitor,
+  );
   const isProd = process.env.NODE_ENV === "production";
   return {
     plugins: [

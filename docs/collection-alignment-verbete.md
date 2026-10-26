@@ -285,3 +285,7 @@ própria 8 · desktop 6 · mobile 6 · game feel 7 · prévia 7.
 **Versão no rodapé (decisão do Tito, 18/10):** o `v <sha>` saiu do rodapé
 público da Home (regra da coleção). O build segue na meta `verbete-build` do
 HTML (o auto-update usa) e aparece no painel `/admin/ops` (só admin).
+**Atualização 26/10:** volta uma linha discreta, decidida pelo **canal do
+build** (`src/lib/version-label.ts`): produção só `v{versionName}` (nada de
+infra no rodapé público); teste interno do Android com versionCode e SHA
+curto. versionName/versionCode vêm do `android/app/build.gradle`.

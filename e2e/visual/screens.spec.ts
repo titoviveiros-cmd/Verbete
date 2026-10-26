@@ -26,6 +26,21 @@ import {
   roomStorage,
   type Phase,
 } from "./fixtures";
+import {
+  readAndroidVersion,
+  resolveReleaseChannel,
+} from "../../build/native-env";
+import { versionLabel } from "../../src/lib/version-label";
+
+// Rodapé de versão da Home: o texto que o dev server deste teste monta com o
+// MESMO env (versionName do build.gradle, canal e SHA do build).
+const APP_VERSION = readAndroidVersion("android/app/build.gradle");
+const EXPECTED_VERSION_LABEL = versionLabel({
+  channel: resolveReleaseChannel(process.env.VITE_RELEASE_CHANNEL, false),
+  versionName: APP_VERSION.versionName,
+  versionCode: Number(process.env.VITE_NATIVE_VERSION_CODE) || null,
+  buildId: process.env.VITE_BUILD_ID,
+});
 
 const ALL_VIEWPORTS = [
   [360, 800],
@@ -358,6 +373,48 @@ async function checkScreen(page: Page, screen: Screen, w: number, h: number) {
   // Nenhum botão cortado na lateral nem coberto por algo flutuante
   // (barra de reações, chat, rodapé fixo). Depois da captura: rola a página.
   expect(await blockedButtons(page), "botão cortado/coberto").toEqual([]);
+
+  // Rodapé de versão (26/10): só na Home, com o texto que o build mandou,
+  // numa linha só, dentro da largura da tela e sem encostar em botão/link.
+  const version = page.getByTestId("app-version");
+  if (!screen.name.startsWith("home")) {
+    await expect(version, "versão fora da Home").toHaveCount(0);
+    return;
+  }
+  await expect(version, "versão na Home").toHaveText(
+    EXPECTED_VERSION_LABEL ?? "(sem versionName)",
+  );
+  const geo = await version.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const t = range.getBoundingClientRect();
+    const hits = [...document.querySelectorAll("button, a")]
+      .filter((b) => {
+        const q = b.getBoundingClientRect();
+        return (
+          q.width > 0 &&
+          q.height > 0 &&
+          q.left < t.right &&
+          q.right > t.left &&
+          q.top < t.bottom &&
+          q.bottom > t.top
+        );
+      })
+      .map((b) => (b.textContent ?? "").trim().slice(0, 30));
+    return {
+      lines: range.getClientRects().length,
+      left: Math.round(t.left),
+      right: Math.round(t.right),
+      width: window.innerWidth,
+      hits,
+    };
+  });
+  expect(geo.lines, "versão em mais de uma linha").toBe(1);
+  expect(
+    geo.left >= 0 && geo.right <= geo.width,
+    `versão fora da largura (${geo.left}–${geo.right} de ${geo.width})`,
+  ).toBe(true);
+  expect(geo.hits, "versão sobre botão/link").toEqual([]);
 }
 
 for (const screen of SCREENS) {

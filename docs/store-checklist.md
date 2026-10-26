@@ -44,7 +44,13 @@ no próprio build: `.env.capacitor` (versionado — só URL do Supabase, chave
 qualquer visitante). `vite build --mode capacitor` **falha** sem esses
 valores, com chave secreta/service_role ou com APP_URL local
 (`build/native-env.ts`), e embute o `versionCode` (trava remota de versão
-mínima) e o SHA do commit (rodapé do app). `scripts/smoke-native-bundle.mjs`
+mínima), o `versionName` e o SHA do commit (rodapé de versão da Home).
+O rodapé segue o **canal do build** (`VITE_RELEASE_CHANNEL`,
+`src/lib/version-label.ts`): o bundle nativo sai como **teste interno** por
+padrão (`Teste interno · v{versionName} ({versionCode}) · {sha}`); o AAB de
+produção sai com `VITE_RELEASE_CHANNEL=production` (rodapé só
+`v{versionName}`). Canal desconhecido bloqueia o build.
+`scripts/smoke-native-bundle.mjs`
 confere o bundle gerado. Antes do M1 o CI gerava APK/AAB "verde" que não
 conectava ao servidor.
 
@@ -102,8 +108,12 @@ IPv4/IPv6 do loopback).
    — **pendente: e-mail de contato real** (os `@verbete.app` da política
    não existem).
 6. Público-alvo: 13+ (evita exigências de apps infantis).
-7. Upload do AAB no trilho **Teste interno** primeiro → testar → promover
-   para Produção.
+7. Upload do AAB no trilho **Teste interno** primeiro → testar. Para a
+   **Produção**, gerar um AAB NOVO com `VITE_RELEASE_CHANNEL=production` e
+   `versionCode` maior (mesmo `versionName` quando aplicável): o AAB do teste
+   interno mostra "Teste interno" no rodapé e não deve ser promovido. O
+   input do canal no `android.yml` entra na rodada de produção (decisão do
+   Tito, 26/10).
 
 ## 3. App Links verificados (`/?join=` abre direto no app)
 
