@@ -5,13 +5,29 @@ import { supabase } from "@/integrations/supabase/client";
 // M1 o servidor RECUSA ações de jogador vindas da API sem sessão
 // (session_required) — então tentamos de novo antes de desistir.
 let inflight: Promise<boolean> | null = null;
+const pendingListeners = new Set<() => void>();
+
+function setInflight(p: Promise<boolean> | null): void {
+  inflight = p;
+  for (const l of pendingListeners) l();
+}
+
+/** Uma sessão está sendo aberta agora (boot ou ação): a identidade vem aí. */
+export function sessionPending(): boolean {
+  return inflight !== null;
+}
+
+export function onSessionPendingChange(cb: () => void): () => void {
+  pendingListeners.add(cb);
+  return () => pendingListeners.delete(cb);
+}
 
 export const SESSION_REQUIRED_MESSAGE =
   "Não conseguimos iniciar sua sessão de jogo. Confira a conexão e tente de novo.";
 
 export function ensureAnonSession(): Promise<boolean> {
   if (inflight) return inflight;
-  inflight = (async () => {
+  const opening = (async () => {
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt));
@@ -27,8 +43,9 @@ export function ensureAnonSession(): Promise<boolean> {
       }
       return false;
     } finally {
-      inflight = null; // permite nova tentativa na próxima ação
+      setInflight(null); // permite nova tentativa na próxima ação
     }
   })();
-  return inflight;
+  setInflight(opening);
+  return opening;
 }

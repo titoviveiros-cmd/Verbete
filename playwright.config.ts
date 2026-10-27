@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
-import { TERMS_VERSION } from "./src/lib/terms-consent";
+import {
+  TERMS_STORAGE_KEY,
+  TERMS_VERSION,
+  serializeTermsRecord,
+  withAcceptance,
+} from "./src/lib/terms-record";
 
 // E2E do Verbete — roda contra o dev server (localhost:5173).
 // Local: usa o Supabase do .env (salas de teste são efêmeras;
@@ -9,26 +14,36 @@ import { TERMS_VERSION } from "./src/lib/terms-consent";
 // em vez do dev server local — smoke pós-deploy sem subir nada.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 
-// Os testes partem de um aparelho que JÁ aceitou os Termos (o jogo é o que
+// Os testes partem de identidades que JÁ aceitaram os Termos (o jogo é o que
 // medem). O aceite em si tem specs próprios que começam do zero:
 // e2e/visual/terms-consent.spec.ts e e2e/terms-consent-flow.spec.ts.
-const termsAccepted = {
+// O aceite é por identidade (UID da sessão), então:
+// - visual: as duas sessões do supabase-mock (a do boot e a conta logada);
+// - stateful: a sessão anônima nasce no boot com UID aleatório — vai o
+//   registro antigo, sem identidade, que o app converte para a sessão
+//   ANÔNIMA na 1ª leitura (migração conservadora; conta não herda).
+const accepted = { version: TERMS_VERSION, at: "2026-10-26T00:00:00.000Z" };
+const acceptedDevice = (value: string) => ({
   cookies: [],
   origins: [
     {
       origin: new URL(baseURL).origin,
-      localStorage: [
-        {
-          name: "verbete:terms-accepted",
-          value: JSON.stringify({
-            version: TERMS_VERSION,
-            at: "2026-10-26T00:00:00.000Z",
-          }),
-        },
-      ],
+      localStorage: [{ name: TERMS_STORAGE_KEY, value }],
     },
   ],
-};
+});
+const visualAccepted = acceptedDevice(
+  serializeTermsRecord(
+    [
+      "00000000-0000-4000-8000-0000000000aa", // supabase-mock: sessão do boot
+      "00000000-0000-4000-8000-00000000b1a0", // fixtures USER_ID: conta logada
+    ].reduce((rec, uid) => withAcceptance(rec, uid, accepted), {
+      ids: {},
+      legacy: null,
+    }),
+  ),
+);
+const statefulAccepted = acceptedDevice(JSON.stringify(accepted));
 
 export default defineConfig({
   testDir: "e2e",
@@ -45,7 +60,6 @@ export default defineConfig({
   ],
   use: {
     baseURL,
-    storageState: termsAccepted,
     viewport: { width: 390, height: 844 }, // mobile portrait — formato do jogo
     trace: "retain-on-failure",
     // Nenhuma ação pode pendurar até o timeout do teste: em telas que
@@ -76,18 +90,18 @@ export default defineConfig({
     {
       name: "visual-screens",
       testMatch: /[\\/]e2e[\\/]visual[\\/]screens\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: visualAccepted },
     },
     {
       name: "visual",
       testMatch: /[\\/]e2e[\\/]visual[\\/].*\.spec\.ts$/,
       testIgnore: /[\\/]e2e[\\/]visual[\\/]screens\.spec\.ts$/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: visualAccepted },
     },
     {
       name: "stateful",
       testIgnore: /[\\/]e2e[\\/]visual[\\/]/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], storageState: statefulAccepted },
     },
   ],
   ...(process.env.E2E_BASE_URL

@@ -1,7 +1,8 @@
-// Caixa de aceite dos Termos (lib/terms-consent): só aparece enquanto este
-// aparelho não aceitou a versão atual. O aceite vale no clique de criar
-// conteúdo (Criar/Entrar/Enviar/Criar conta) com a caixa marcada; sem ela,
-// o envio não sai e a caixa recebe o foco com o aviso. Estado: hooks/use-terms-gate.
+// Caixa de aceite dos Termos (lib/terms-consent): só aparece enquanto a
+// identidade em vigor (sessão anônima ou conta) não aceitou a versão atual.
+// O aceite vale no clique de criar conteúdo (Criar/Entrar/Enviar/Criar conta/
+// palpite) com a caixa marcada; sem ela, o envio não sai e a caixa recebe o
+// foco com o aviso. Estado: hooks/use-terms-gate.
 import { useId } from "react";
 import { APP_URL } from "@/lib/app-url";
 import type { TermsGate } from "@/hooks/use-terms-gate";

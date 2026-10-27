@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { TERMS_VERSION, identityKey } from "../src/lib/terms-record";
 
 // Aceite dos Termos contra o backend REAL (Supabase local do CI): aparelhos
 // que NUNCA aceitaram (sem o storageState padrão do config). O host cria a
@@ -46,13 +47,29 @@ test("aceite real: host cria e convidado só entra com a caixa marcada", async (
     await expect(host.getByText("Conv T").first()).toBeVisible({
       timeout: 30_000,
     });
-    // o aceite ficou no aparelho de cada um (versão + data)
+    // o aceite ficou com a IDENTIDADE de cada um (a sessão anônima real de
+    // cada aparelho): versão + data, sem o UID nem token no registro
+    const uids: string[] = [];
     for (const p of [host, guest]) {
-      const rec = await p.evaluate(() =>
-        localStorage.getItem("verbete:terms-accepted"),
+      const { rec, uid } = await p.evaluate(() => {
+        const auth = Object.keys(localStorage).find((k) =>
+          /^sb-.+-auth-token$/.test(k),
+        );
+        return {
+          rec: localStorage.getItem("verbete:terms-accepted") ?? "{}",
+          uid: auth
+            ? (JSON.parse(localStorage.getItem(auth)!).user?.id as string)
+            : "",
+        };
+      });
+      expect(uid, "sessão anônima").toBeTruthy();
+      expect(JSON.parse(rec).ids?.[identityKey(uid)]?.version).toBe(
+        TERMS_VERSION,
       );
-      expect(JSON.parse(rec ?? "{}").version).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(rec).not.toContain(uid);
+      uids.push(uid);
     }
+    expect(uids[0], "cada aparelho, sua identidade").not.toBe(uids[1]);
   } finally {
     await hostCtx.close();
     await guestCtx.close();

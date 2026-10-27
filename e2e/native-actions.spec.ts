@@ -1,6 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
+import {
+  TERMS_STORAGE_KEY,
+  TERMS_VERSION,
+  serializeTermsRecord,
+  withAcceptance,
+} from "../src/lib/terms-record";
 
 // As 4 ações que dependem de função de servidor (P1 da RC Android 2.1.0), de
 // ponta a ponta, com uma conta DESCARTÁVEL criada aqui (nunca a do dono):
@@ -211,6 +217,17 @@ test("as 4 ações de servidor com conta descartável — conferidas no servidor
     await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [
       `sb-${REF}-auth-token`,
       JSON.stringify(session),
+    ] as const);
+    // A conta descartável parte de um aceite dos Termos (é por identidade; o
+    // caminho do aceite tem specs próprios) — aqui medem-se as server fns.
+    await page.addInitScript(([k, v]) => localStorage.setItem(k, v), [
+      TERMS_STORAGE_KEY,
+      serializeTermsRecord(
+        withAcceptance({ ids: {}, legacy: null }, uid, {
+          version: TERMS_VERSION,
+          at: new Date().toISOString(),
+        }),
+      ),
     ] as const);
     await expect
       .poll(async () => (await rows(`profiles?user_id=eq.${uid}`)).length, {

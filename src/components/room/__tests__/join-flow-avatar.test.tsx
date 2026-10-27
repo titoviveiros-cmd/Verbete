@@ -8,6 +8,10 @@ const room = vi.hoisted(() => ({ joinRoom: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/room", () => room);
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/components/Mascot", () => ({ Mascot: () => <div /> }));
+vi.mock(
+  "@/integrations/supabase/client",
+  async () => (await import("@/test/fake-auth")).supabaseModule,
+);
 vi.mock("@/lib/sound", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return Object.fromEntries(
@@ -20,21 +24,24 @@ vi.mock("@/lib/sound", async (importOriginal) => {
 
 import { JoinFlow } from "../JoinFlow";
 import { AVATARS, COLORS } from "@/lib/avatars";
+import { anon, fakeAuth } from "@/test/fake-auth";
 
 const join = async () => {
   render(<JoinFlow code="1234" roomId="sala" status="lobby" />);
   fireEvent.change(screen.getByPlaceholderText("Ex: Bia, Zé, Dudu..."), {
     target: { value: "Bia" },
   });
-  // aceite dos Termos (aparelho novo: localStorage limpo no beforeEach)
+  // aceite dos Termos (convidado novo: sessão anônima sem aceite)
   fireEvent.click(screen.getByRole("checkbox", { name: /Termos de Uso/ }));
   fireEvent.click(screen.getByText(/Entrar na sala/));
   await vi.waitFor(() => expect(room.joinRoom).toHaveBeenCalled());
   return (room.joinRoom.mock.calls[0] as unknown[])[4] as string;
 };
 
+let seq = 0;
 beforeEach(() => {
   localStorage.clear();
+  fakeAuth.reset(anon(`visita-${++seq}`));
   room.joinRoom.mockClear();
 });
 afterEach(() => cleanup());

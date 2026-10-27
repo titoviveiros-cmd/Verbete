@@ -16,6 +16,7 @@ import { AvatarGrid } from "@/components/AvatarGrid";
 import { setStored } from "@/lib/player-id";
 import { TermsConsent } from "@/components/TermsConsent";
 import { useTermsGate } from "@/hooks/use-terms-gate";
+import { assertTermsAccepted } from "@/lib/terms-consent";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -147,6 +148,11 @@ function ProfilePage() {
     const trimmed = name.trim().slice(0, 24);
     if (!trimmed) return;
     if (!terms.confirm()) return;
+    try {
+      await assertTermsAccepted(); // a conta da sessão no instante de salvar
+    } catch {
+      return; // sessão em vigor sem o aceite: a caixa aparece para ela
+    }
     await supabase
       .from("profiles")
       .update({ display_name: trimmed })

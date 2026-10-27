@@ -46,7 +46,7 @@ import { MesaSidebar } from "@/components/room/MesaSidebar";
 import { JoinFlow } from "@/components/room/JoinFlow";
 import { TermsConsent } from "@/components/TermsConsent";
 import { useTermsGate } from "@/hooks/use-terms-gate";
-import { hasAcceptedTerms } from "@/lib/terms-consent";
+import { useTermsAccepted } from "@/lib/terms-consent";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -422,12 +422,15 @@ function RoomPage() {
 
   // Auto-rejoin para o host se o registro de jogador sumiu
   const autoJoinTriedRef = useRef(false);
-  // Host sem o aceite dos Termos neste aparelho não volta sozinho: passa
-  // pelo JoinFlow (com a caixa). Decidido uma vez — sem duas entradas.
+  // Host cuja identidade (sessão em vigor) não aceitou os Termos não volta
+  // sozinho: passa pelo JoinFlow (com a caixa). Espera a identidade carregar
+  // (null) — decidido uma vez, sem duas entradas.
   const [hostNeedsConsent, setHostNeedsConsent] = useState(false);
+  const termsAccepted = useTermsAccepted();
   useEffect(() => {
     if (!room || !isHost || me || autoJoinTriedRef.current) return;
-    if (!hasAcceptedTerms()) {
+    if (termsAccepted === null) return;
+    if (!termsAccepted) {
       setHostNeedsConsent(true);
       return;
     }
@@ -439,7 +442,7 @@ function RoomPage() {
       console.error("auto-join host failed", e);
       autoJoinTriedRef.current = false;
     });
-  }, [room?.id, isHost, me, code, playerId]);
+  }, [room?.id, isHost, me, code, playerId, termsAccepted]);
 
   // === Host migration ===
   const migrateTriedRef = useRef<string | null>(null);
