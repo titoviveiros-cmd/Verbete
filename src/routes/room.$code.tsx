@@ -44,6 +44,9 @@ import { setMusicMood, stopMusic } from "@/lib/music";
 import { TopBar } from "@/components/room/TopBar";
 import { MesaSidebar } from "@/components/room/MesaSidebar";
 import { JoinFlow } from "@/components/room/JoinFlow";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
+import { useTermsAccepted } from "@/lib/terms-consent";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -419,8 +422,18 @@ function RoomPage() {
 
   // Auto-rejoin para o host se o registro de jogador sumiu
   const autoJoinTriedRef = useRef(false);
+  // Host cuja identidade (sessão em vigor) não aceitou os Termos não volta
+  // sozinho: passa pelo JoinFlow (com a caixa). Espera a identidade carregar
+  // (null) — decidido uma vez, sem duas entradas.
+  const [hostNeedsConsent, setHostNeedsConsent] = useState(false);
+  const termsAccepted = useTermsAccepted();
   useEffect(() => {
     if (!room || !isHost || me || autoJoinTriedRef.current) return;
+    if (termsAccepted === null) return;
+    if (!termsAccepted) {
+      setHostNeedsConsent(true);
+      return;
+    }
     autoJoinTriedRef.current = true;
     const nick = getStored<string>("nick", "Host");
     const avatar = getStored<string>("avatar", randomAvatar());
@@ -429,7 +442,7 @@ function RoomPage() {
       console.error("auto-join host failed", e);
       autoJoinTriedRef.current = false;
     });
-  }, [room?.id, isHost, me, code, playerId]);
+  }, [room?.id, isHost, me, code, playerId, termsAccepted]);
 
   // === Host migration ===
   const migrateTriedRef = useRef<string | null>(null);
@@ -473,6 +486,7 @@ function RoomPage() {
   // Kicked notice
   const wasInGameRef = useRef(false);
   const [kickedNotice, setKickedNotice] = useState(false);
+  const rejoinTerms = useTermsGate();
   useEffect(() => {
     if (!room) return;
     const inActivePhase = room.status !== "lobby" && room.status !== "finished";
@@ -527,6 +541,7 @@ function RoomPage() {
 
   if (kickedNotice) {
     const handleRejoin = async () => {
+      if (!rejoinTerms.confirm()) return;
       try {
         const nick = getStored<string>("nick", "Jogador");
         const avatar = getStored<string>("avatar", randomAvatar());
@@ -549,6 +564,7 @@ function RoomPage() {
           Você perdeu pontos por não enviar a tempo nas 3 tentativas. Você pode
           voltar à sala — seus pontos atuais são mantidos.
         </p>
+        <TermsConsent gate={rejoinTerms} className="w-full max-w-xs" />
         <div className="flex flex-col gap-2 w-full max-w-xs">
           <button
             onClick={handleRejoin}
@@ -588,7 +604,7 @@ function RoomPage() {
   }
 
   if (!me) {
-    if (isHost) {
+    if (isHost && !hostNeedsConsent) {
       return (
         <div className="mobile-shell items-center justify-center">
           <Mascot mood="thinking" />

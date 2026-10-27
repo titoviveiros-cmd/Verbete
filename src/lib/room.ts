@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
+import { assertTermsAccepted } from "./terms-consent";
 import { WRITING_BASE_SECS, writingPhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
 import { queueRoomConfig } from "./room-config-writer";
@@ -151,6 +152,7 @@ export async function createRoom(
   // Criação atômica (sala + jogador host) numa única RPC — o client não tem
   // permissão de escrita direta nas tabelas de jogo.
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
+  await assertTermsAccepted(); // o apelido já é conteúdo de usuário
   const cleanNick = sanitizeNickname(nickname);
   const callCreate = (pid: string) =>
     supabase.rpc("create_room_with_host", {
@@ -186,6 +188,8 @@ export async function joinRoom(
   color: string,
 ) {
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
+  // Toda entrada (Home, convite, volta do host, volta após remoção) passa aqui.
+  await assertTermsAccepted();
   // Leituras com "segunda via" (hedged): na medição de 2026-10-20 a
   // checagem de banimento travou 19,8 s e o host só viu o convidado
   // entrar 21,5 s depois. Mesma consulta, mesmo resultado.
@@ -224,6 +228,9 @@ export async function joinRoom(
       p_avatar: avatar,
       p_color: color,
     });
+  // De novo, colado na gravação: sala e banimento podem levar segundos, e
+  // outra aba pode ter trocado de conta nesse meio-tempo.
+  await assertTermsAccepted();
   let effectiveId = playerId;
   let { error: rpcErr } = await callRejoin(playerId);
   // S4: o id local pertence a outra identidade auth — gera um novo e
@@ -632,6 +639,7 @@ export async function submitDefinition(
   // mesmo com acento/maiúscula/separadores que sobreviveriam à normalização básica.
   // (A definição VERDADEIRA é inserida só pelo servidor, em
   // advance_writing_to_voting — o client nunca a envia.)
+  await assertTermsAccepted();
   const clean = sanitizeDefinition(text, 140, word);
   // Dedup de texto agora é 100% server-side (submit_definition devolve
   // reason 'duplicate_definition') — o client não lê mais as definições
@@ -1227,6 +1235,7 @@ export async function joinPublicRoom(
   color: string,
 ): Promise<Room> {
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
+  await assertTermsAccepted();
   const cleanNick = sanitizeNickname(nickname);
   const callJoin = (pid: string) =>
     supabase.rpc("join_public_room", {

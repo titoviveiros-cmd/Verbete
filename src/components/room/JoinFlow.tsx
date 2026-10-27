@@ -9,6 +9,8 @@ import { AvatarGrid } from "@/components/AvatarGrid";
 import { sanitizeNickname } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
 import { primeAudio, playUITap } from "@/lib/sound";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
 
 export function JoinFlow({
   code,
@@ -30,6 +32,8 @@ export function JoinFlow({
   const [color] = useState<string>(() => getStored("color", randomColor()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Convite por link e App Links chegam aqui sem passar pela Home.
+  const terms = useTermsGate();
 
   const inGame = status !== "lobby" && status !== "finished";
 
@@ -41,6 +45,7 @@ export function JoinFlow({
       setError("Escolha um apelido");
       return;
     }
+    if (!terms.confirm()) return;
     setBusy(true);
     try {
       setStored("nick", cleanNick);
@@ -157,6 +162,8 @@ export function JoinFlow({
             {error}
           </p>
         )}
+
+        <TermsConsent gate={terms} />
 
         <div className="flex gap-2">
           <button

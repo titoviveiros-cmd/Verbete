@@ -26,6 +26,9 @@ import { ServerFnResponseError } from "@/lib/server-fn-transport";
 import { burst, fireworks } from "@/lib/confetti";
 import { pushAchievement } from "@/components/AchievementToaster";
 import { TimerBar } from "@/components/room/shared";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
+import { assertTermsAccepted } from "@/lib/terms-consent";
 
 const DAILY_TIME_LIMIT = 60;
 
@@ -56,6 +59,8 @@ function DailyPage() {
   const fromProfile = search.from === "profile";
   const { user, loading } = useAuth();
   const submit = useServerFn(submitDailyAttempt);
+  // O palpite põe o nome da conta no ranking do dia: aceite antes do envio.
+  const terms = useTermsGate();
 
   const [data, setData] = useState<DailyChallenge | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -115,18 +120,33 @@ function DailyPage() {
     DAILY_TIME_LIMIT - Math.floor((tickNow - startedAt) / 1000),
   );
   const expired = remaining === 0;
+  // Tempo esgotado sem o aceite: o envio automático fica guardado como era
+  // no instante em que o tempo acabou (palpite e tempo) até o aceite — sem
+  // pontos a menos pela caixa e sem tempo extra para pensar.
+  const [held, setHeld] = useState<{
+    guess: string;
+    timeSeconds: number;
+  } | null>(null);
 
-  const onSubmit = async () => {
+  const onSubmit = async ({ auto = false, keyboard = false } = {}) => {
     if (busy) return;
     if (!guess.trim() && !expired) return;
+    const now = {
+      guess: guess.trim(),
+      timeSeconds: Math.min(600, Math.round((Date.now() - startedAt) / 1000)),
+    };
+    // Sem o aceite nada sai nem é gasto (sem tentativa nem pontos). No
+    // automático e no Enter o aviso aparece sem tirar o foco de quem digita
+    // (um espaço marcaria a caixa sem querer); o automático não volta sozinho.
+    if (!terms.confirm({ focus: !auto && !keyboard })) {
+      if (auto && now.guess) setHeld(now);
+      return;
+    }
+    const { guess: submittedGuess, timeSeconds } = held ?? now;
     setBusy(true);
     setSubmitError(null);
     try {
-      const timeSeconds = Math.min(
-        600,
-        Math.round((Date.now() - startedAt) / 1000),
-      );
-      const submittedGuess = guess.trim();
+      await assertTermsAccepted(); // a conta da sessão no instante do envio
       const res = await submit({
         data: { guess: submittedGuess, timeSeconds },
       });
@@ -184,7 +204,7 @@ function DailyPage() {
 
   useEffect(() => {
     if (expired && !alreadyDone && !busy && !submitError) {
-      onSubmit();
+      onSubmit({ auto: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expired, alreadyDone, busy, submitError]);
@@ -293,16 +313,18 @@ function DailyPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      if (!busy && guess.trim()) onSubmit();
+                      if (!busy && guess.trim()) onSubmit({ keyboard: true });
                     }
                   }}
+                  readOnly={!!held}
                   placeholder="Arrisque sua definição em poucas palavras... (Enter envia, Shift+Enter quebra linha)"
                   maxLength={200}
                   rows={3}
                   className="field px-4 py-3 text-base lg:text-lg resize-none"
                 />
+                <TermsConsent gate={terms} />
                 <button
-                  onClick={onSubmit}
+                  onClick={() => void onSubmit()}
                   disabled={busy || !guess.trim()}
                   className="btn-pop btn-gold text-xl py-4"
                 >

@@ -11,6 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Mascot } from "@/components/Mascot";
 import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
+import { acceptTermsFor } from "@/lib/terms-consent";
 import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/login")({
@@ -39,6 +42,9 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  // Só o cadastro por e-mail pede o aceite (cria o nome do ranking) — e
+  // sempre: quem cria a conta aceita, mesmo que o convidado já tivesse aceito.
+  const terms = useTermsGate({ always: true });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -87,10 +93,12 @@ function LoginPage() {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    // Criar conta cria o nome que aparece no ranking (conteúdo de usuário).
+    if (mode === "signup" && !terms.confirm()) return;
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -99,6 +107,10 @@ function LoginPage() {
           },
         });
         if (error) throw error;
+        // Conta nova de verdade (e-mail já cadastrado volta sem identidade):
+        // o aceite marcado aqui é dela — sem pedir de novo no 1º jogo.
+        if (data.user && data.user.identities?.length)
+          acceptTermsFor(data.user.id);
         setInfo("Confira seu email para confirmar a conta.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -117,6 +129,9 @@ function LoginPage() {
   // OAuth Google ATIVO (2026-08-02: provider configurado no Supabase via
   // Management API; client validado contra o Google). Apple continua oculto
   // até existir conta Apple Developer.
+  // Sem aceite aqui: conta existente só entra (Perfil, Suporte e Excluir
+  // conta seguem acessíveis). Se o Google criar a conta, o nome dele só
+  // aparece a outros no ranking — e pontuar (sala ou Diário) exige o aceite.
   const handleGoogle = async () => {
     setError(null);
     setBusy(true);
@@ -220,6 +235,7 @@ function LoginPage() {
           minLength={6}
           className="bg-input rounded-2xl px-4 py-3 font-display border border-white/10 outline-none focus:ring-4 focus:ring-pink/40"
         />
+        {mode === "signup" && <TermsConsent gate={terms} />}
         {error && (
           <p className="text-destructive text-sm text-center">{error}</p>
         )}

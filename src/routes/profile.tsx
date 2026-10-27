@@ -14,6 +14,9 @@ import { deleteAccount, resetMyStats } from "@/lib/account.functions";
 import { expectOk } from "@/lib/server-fn-transport";
 import { AvatarGrid } from "@/components/AvatarGrid";
 import { setStored } from "@/lib/player-id";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
+import { assertTermsAccepted } from "@/lib/terms-consent";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -69,6 +72,8 @@ function ProfilePage() {
   const [history, setHistory] = useState<Match[]>([]);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
+  // O nome aparece no ranking: sem o aceite deste aparelho, aceita aqui.
+  const terms = useTermsGate();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
   const [isAdmin, setIsAdmin] = useState(false);
@@ -142,6 +147,12 @@ function ProfilePage() {
     if (!user) return;
     const trimmed = name.trim().slice(0, 24);
     if (!trimmed) return;
+    if (!terms.confirm()) return;
+    try {
+      await assertTermsAccepted(); // a conta da sessão no instante de salvar
+    } catch {
+      return; // sessão em vigor sem o aceite: a caixa aparece para ela
+    }
     await supabase
       .from("profiles")
       .update({ display_name: trimmed })
@@ -247,17 +258,20 @@ function ProfilePage() {
           </div>
         )}
         {editing ? (
-          <div className="flex gap-2 justify-center mt-3">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={24}
-              className="bg-input rounded-xl px-3 py-2 font-display text-center border border-white/10"
-            />
-            <button onClick={saveName} className="btn-pop btn-gold text-sm">
-              Salvar
-            </button>
-          </div>
+          <>
+            <div className="flex gap-2 justify-center mt-3">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={24}
+                className="bg-input rounded-xl px-3 py-2 font-display text-center border border-white/10"
+              />
+              <button onClick={saveName} className="btn-pop btn-gold text-sm">
+                Salvar
+              </button>
+            </div>
+            <TermsConsent gate={terms} className="mt-2 max-w-sm mx-auto" />
+          </>
         ) : (
           <h1
             onClick={() => setEditing(true)}

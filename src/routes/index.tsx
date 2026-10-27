@@ -1,5 +1,7 @@
 import { APP_URL } from "@/lib/app-url";
 import { APP_VERSION_LABEL } from "@/lib/app-version";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -96,6 +98,8 @@ function HomePage() {
   }, []);
 
   const playerId = typeof window !== "undefined" ? getPlayerId() : "";
+  // Aceite dos Termos antes do 1º conteúdo (apelido) — Criar e Entrar.
+  const terms = useTermsGate();
 
   const persist = () => {
     setStored("nick", nick);
@@ -110,6 +114,7 @@ function HomePage() {
       setError("Escolha um apelido");
       return;
     }
+    if (!terms.confirm()) return;
     setBusy(true);
     try {
       persist();
@@ -139,6 +144,7 @@ function HomePage() {
       setError("Código de 4 dígitos");
       return;
     }
+    if (!terms.confirm()) return;
     setBusy(true);
     try {
       persist();
@@ -502,6 +508,8 @@ function HomePage() {
                   {error}
                 </p>
               )}
+
+              <TermsConsent gate={terms} />
 
               <div className="flex gap-2.5 pt-1">
                 <button

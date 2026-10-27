@@ -14,6 +14,7 @@ const KNOWN: ReadonlyArray<readonly [RegExp, string]> = [
   ],
   [/player_banned|banido/i, BANNED],
   [/session_required|sessão de jogo/i, SESSION_REQUIRED_MESSAGE],
+  [/aceite os Termos/i, "Para continuar, aceite os Termos de Uso."],
   [/sala pública/i, "Não foi possível encontrar uma sala pública."],
   [
     /failed to fetch|networkerror|network request failed|load failed/i,

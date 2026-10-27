@@ -29,6 +29,9 @@ import {
 } from "@/components/room/shared";
 import type { RoundExtension } from "@/hooks/use-room";
 import { scrollbarClip } from "@/lib/utils";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
+import { TermsRequiredError } from "@/lib/terms-consent";
 import {
   AUTO_DEF_WAIT_MS,
   autoDefKey,
@@ -142,6 +145,9 @@ export function WriteDefinition({
     : null;
   const autoKeyRef = useRef(autoKey);
   autoKeyRef.current = autoKey;
+  // Quem está na sala sem o aceite deste aparelho (entrou antes do aceite
+  // existir, revanche, outro aparelho) aceita aqui antes de enviar.
+  const terms = useTermsGate();
   const textRef = useRef(text);
   textRef.current = text;
   const sentRef = useRef(false);
@@ -342,9 +348,12 @@ export function WriteDefinition({
   // Escrita não escala com a sala (2026-10-25): base + 10 s; prorrogação fixa.
   const timerMax = writingTimerMax(activeExtension);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async ({ keyboard = false } = {}) => {
     if (!text.trim()) return;
     if (!me || !word) return;
+    // Enter: o aviso aparece sem tirar o foco do campo (um espaço digitado
+    // em seguida marcaria a caixa sem querer); no botão, o foco vai à caixa.
+    if (!terms.confirm({ focus: !keyboard })) return;
     void playSubmit();
     setSubmitted(true);
     try {
@@ -358,7 +367,12 @@ export function WriteDefinition({
     } catch (e) {
       console.error("submitDefinition failed", e);
       setSubmitted(false);
-      if (e instanceof DuplicateDefinitionError) {
+      // TermsRequiredError: a identidade da sessão não aceitou (trocou de
+      // conta entre a tela e o envio, ou ainda carregava no clique)
+      if (
+        e instanceof DuplicateDefinitionError ||
+        e instanceof TermsRequiredError
+      ) {
         toast.error(e.message);
       } else {
         toast.error("Não foi possível enviar sua definição. Tente novamente.");
@@ -599,7 +613,8 @@ export function WriteDefinition({
                       !e.nativeEvent.isComposing
                     ) {
                       e.preventDefault();
-                      if (text.trim().length >= 1) handleSubmit();
+                      if (text.trim().length >= 1)
+                        handleSubmit({ keyboard: true });
                     }
                   }}
                   rows={3}
@@ -648,6 +663,7 @@ export function WriteDefinition({
                     {pendingSentence(pending)}
                   </p>
                 )}
+                <TermsConsent gate={terms} />
                 {/* desktop e celular deitado: o Enviar segue no formulário */}
                 <div className="hidden lg:flex short:flex flex-col">
                   {sendButton}
