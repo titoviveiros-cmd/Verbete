@@ -180,7 +180,7 @@ function ProfilePage() {
       // resposta já chegou a ser o index.html do WebView — falso sucesso)
       expectOk(
         await runDelete(),
-        "Não foi possível excluir a conta — nada foi apagado. Tente novamente.",
+        "Não foi possível concluir a exclusão. Tente novamente em instantes.",
       );
       await supabase.auth.signOut();
       nav({ to: "/" });
@@ -466,7 +466,10 @@ function ProfilePage() {
               <h3 className="font-display text-xl">Excluir conta?</h3>
               <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
                 Vamos apagar permanentemente seu perfil, e-mail, estatísticas,
-                conquistas e histórico. Você não poderá desfazer.
+                conquistas e histórico. Você não poderá desfazer.{" "}
+                <Link to="/delete-account" className="underline">
+                  O que é apagado e o que fica
+                </Link>
               </p>
             </div>
             <label className="text-xs text-muted-foreground mt-2">
