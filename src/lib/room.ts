@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
+import { assertTermsAccepted } from "./terms-consent";
 import { WRITING_BASE_SECS, writingPhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
 import { queueRoomConfig } from "./room-config-writer";
@@ -150,6 +151,7 @@ export async function createRoom(
 ) {
   // Criação atômica (sala + jogador host) numa única RPC — o client não tem
   // permissão de escrita direta nas tabelas de jogo.
+  assertTermsAccepted(); // o apelido já é conteúdo de usuário
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   const cleanNick = sanitizeNickname(nickname);
   const callCreate = (pid: string) =>
@@ -185,6 +187,8 @@ export async function joinRoom(
   avatar: string,
   color: string,
 ) {
+  // Toda entrada (Home, convite, volta do host, volta após remoção) passa aqui.
+  assertTermsAccepted();
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   // Leituras com "segunda via" (hedged): na medição de 2026-10-20 a
   // checagem de banimento travou 19,8 s e o host só viu o convidado
@@ -632,6 +636,7 @@ export async function submitDefinition(
   // mesmo com acento/maiúscula/separadores que sobreviveriam à normalização básica.
   // (A definição VERDADEIRA é inserida só pelo servidor, em
   // advance_writing_to_voting — o client nunca a envia.)
+  assertTermsAccepted();
   const clean = sanitizeDefinition(text, 140, word);
   // Dedup de texto agora é 100% server-side (submit_definition devolve
   // reason 'duplicate_definition') — o client não lê mais as definições
@@ -1226,6 +1231,7 @@ export async function joinPublicRoom(
   avatar: string,
   color: string,
 ): Promise<Room> {
+  assertTermsAccepted();
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   const cleanNick = sanitizeNickname(nickname);
   const callJoin = (pid: string) =>

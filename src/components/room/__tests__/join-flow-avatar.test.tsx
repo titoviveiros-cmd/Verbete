@@ -26,6 +26,8 @@ const join = async () => {
   fireEvent.change(screen.getByPlaceholderText("Ex: Bia, Zé, Dudu..."), {
     target: { value: "Bia" },
   });
+  // aceite dos Termos (aparelho novo: localStorage limpo no beforeEach)
+  fireEvent.click(screen.getByRole("checkbox", { name: /Termos de Uso/ }));
   fireEvent.click(screen.getByText(/Entrar na sala/));
   await vi.waitFor(() => expect(room.joinRoom).toHaveBeenCalled());
   return (room.joinRoom.mock.calls[0] as unknown[])[4] as string;

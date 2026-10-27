@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Mascot } from "@/components/Mascot";
 import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
 import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/login")({
@@ -39,6 +41,7 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const terms = useTermsGate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -87,6 +90,8 @@ function LoginPage() {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    // Criar conta cria o nome que aparece no ranking (conteúdo de usuário).
+    if (mode === "signup" && !terms.confirm()) return;
     setBusy(true);
     try {
       if (mode === "signup") {
@@ -119,6 +124,8 @@ function LoginPage() {
   // até existir conta Apple Developer.
   const handleGoogle = async () => {
     setError(null);
+    // O Google pode criar a conta (nome no ranking): aceite antes.
+    if (!terms.confirm()) return;
     setBusy(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -153,6 +160,8 @@ function LoginPage() {
         Tenha seu ranking e histórico de partidas. Continua opcional jogar sem
         conta.
       </p>
+
+      <TermsConsent gate={terms} className="w-full max-w-sm" />
 
       <button
         onClick={handleGoogle}

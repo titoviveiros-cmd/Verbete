@@ -29,6 +29,8 @@ import {
 } from "@/components/room/shared";
 import type { RoundExtension } from "@/hooks/use-room";
 import { scrollbarClip } from "@/lib/utils";
+import { TermsConsent } from "@/components/TermsConsent";
+import { useTermsGate } from "@/hooks/use-terms-gate";
 import {
   AUTO_DEF_WAIT_MS,
   autoDefKey,
@@ -142,6 +144,9 @@ export function WriteDefinition({
     : null;
   const autoKeyRef = useRef(autoKey);
   autoKeyRef.current = autoKey;
+  // Quem está na sala sem o aceite deste aparelho (entrou antes do aceite
+  // existir, revanche, outro aparelho) aceita aqui antes de enviar.
+  const terms = useTermsGate();
   const textRef = useRef(text);
   textRef.current = text;
   const sentRef = useRef(false);
@@ -345,6 +350,7 @@ export function WriteDefinition({
   const handleSubmit = async () => {
     if (!text.trim()) return;
     if (!me || !word) return;
+    if (!terms.confirm()) return;
     void playSubmit();
     setSubmitted(true);
     try {
@@ -648,6 +654,7 @@ export function WriteDefinition({
                     {pendingSentence(pending)}
                   </p>
                 )}
+                <TermsConsent gate={terms} />
                 {/* desktop e celular deitado: o Enviar segue no formulário */}
                 <div className="hidden lg:flex short:flex flex-col">
                   {sendButton}

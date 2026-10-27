@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { TERMS_VERSION } from "./src/lib/terms-consent";
 
 // E2E do Verbete — roda contra o dev server (localhost:5173).
 // Local: usa o Supabase do .env (salas de teste são efêmeras;
@@ -7,6 +8,27 @@ import { defineConfig, devices } from "@playwright/test";
 // E2E_BASE_URL aponta a suíte para um deploy (ex.: produção no Cloudflare)
 // em vez do dev server local — smoke pós-deploy sem subir nada.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+
+// Os testes partem de um aparelho que JÁ aceitou os Termos (o jogo é o que
+// medem). O aceite em si tem specs próprios que começam do zero:
+// e2e/visual/terms-consent.spec.ts e e2e/terms-consent-flow.spec.ts.
+const termsAccepted = {
+  cookies: [],
+  origins: [
+    {
+      origin: new URL(baseURL).origin,
+      localStorage: [
+        {
+          name: "verbete:terms-accepted",
+          value: JSON.stringify({
+            version: TERMS_VERSION,
+            at: "2026-10-26T00:00:00.000Z",
+          }),
+        },
+      ],
+    },
+  ],
+};
 
 export default defineConfig({
   testDir: "e2e",
@@ -23,6 +45,7 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    storageState: termsAccepted,
     viewport: { width: 390, height: 844 }, // mobile portrait — formato do jogo
     trace: "retain-on-failure",
     // Nenhuma ação pode pendurar até o timeout do teste: em telas que
