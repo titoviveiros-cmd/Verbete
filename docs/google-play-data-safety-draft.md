@@ -24,15 +24,15 @@
 
 | Tipo (categoria do Play) | Coletado? | Compartilhado? | Obrigatório? | Finalidade | Processamento / retenção conhecida | Exclusão | Evidência | Certeza |
 |---|---|---|---|---|---|---|---|---|
-| **Info pessoal → Nome** (apelido; nome exibido; nome do Google) | Sim | Não (exibição aos jogadores da sala e no ranking é a função do app) | Apelido: obrigatório para jogar; nome do Google: opcional | Funcionalidade, gestão da conta | apelido fica nas salas **sem prazo**; perfil até excluir | perfil sim; apelido nas salas **não** (pedido por e-mail) | `players.nickname`, `profiles.display_name`, `handle_new_user` | COMPROVADO (classificação da exibição pública: DEPENDE DO PROPRIETÁRIO) |
+| **Info pessoal → Nome** (apelido; nome exibido; nome do Google) | Sim | Não (exibição aos jogadores da sala e no ranking é a função do app) | Apelido: obrigatório para jogar; nome do Google: opcional | Funcionalidade, gestão da conta | apelido nas salas até 30 dias após o encerramento da sala; perfil até excluir (convidado: 30 dias sem uso) | perfil sim; apelido nas salas **não** (pedido por e-mail) | `players.nickname`, `profiles.display_name`, `handle_new_user` | COMPROVADO (classificação da exibição pública: DEPENDE DO PROPRIETÁRIO) |
 | **Info pessoal → E-mail** | Sim, só com conta | Não | Opcional | Gestão da conta, login | até excluir a conta | sim | `login.tsx` (signUp/OAuth), Supabase Auth | COMPROVADO |
-| **Info pessoal → IDs de usuário** (UUID da sessão/conta) | Sim — sessão anônima criada no boot | Não | Obrigatório | Funcionalidade, segurança (autoria das ações), prevenção de abuso | sessão anônima **sem prazo**; UUID fica em `players.user_id` e nas denúncias após excluir | conta sim; UUID residual nas salas/denúncias não | `__root.tsx:268-272`, `20260720120000:25` | COMPROVADO |
+| **Info pessoal → IDs de usuário** (UUID da sessão/conta) | Sim — sessão anônima criada no boot | Não | Obrigatório | Funcionalidade, segurança (autoria das ações), prevenção de abuso | sessão anônima apagada após 30 dias sem uso; UUID fica em `players.user_id` (até a sala sair) e nas denúncias (até 180 dias após a resolução) | conta sim; UUID residual nas salas/denúncias não | `__root.tsx:268-272`, `20260720120000:25` | COMPROVADO |
 | **Info pessoal → Outras** (foto de perfil do Google, em metadados do login) | Provável, só com login Google | Não | Opcional | Login | junto da conta | sim (com a conta) | padrão do provedor Google no Supabase Auth; o app não lê a foto | NÃO VERIFICADO |
-| **Atividade no app → Interações** (partidas, votos, pontuação, XP, conquistas, histórico) | Sim | Não | Obrigatório para jogar | Funcionalidade, ranking | progresso até excluir; votos/pontuação nas salas **sem prazo** | progresso sim; salas não | `user_stats`, `match_history`, `votes`, `players.score` | COMPROVADO |
-| **Atividade no app → Outro conteúdo gerado pelo usuário** (definições, palpites do Desafio) | Sim | Enviado ao Google Gemini para julgamento — prestador de serviço **ou** compartilhamento, conforme o plano | Obrigatório para jogar | Funcionalidade (bônus 🧠, Desafio), moderação | definições da última partida por sala **sem prazo**; palpites até excluir | palpites sim; definições não | `score-similarity`, `daily.functions.ts`, `_shared/semantic.ts` | COMPROVADO (classificação: DEPENDE DO PROPRIETÁRIO §4) |
-| **Mensagens → Outras mensagens no app** (chat) | **Não desde 20/10/2026** (chat removido); mensagens anteriores guardadas | Não | — | — | antigas sem prazo | não (pedido por e-mail) | `room.ts` (chat removido), `room_messages` | COMPROVADO |
+| **Atividade no app → Interações** (partidas, votos, pontuação, XP, conquistas, histórico) | Sim | Não | Obrigatório para jogar | Funcionalidade, ranking | progresso até excluir (convidado: 30 dias sem uso); votos/pontuação nas salas até 30 dias após o encerramento | progresso sim; salas não | `user_stats`, `match_history`, `votes`, `players.score` | COMPROVADO |
+| **Atividade no app → Outro conteúdo gerado pelo usuário** (definições, palpites do Desafio) | Sim | Enviado ao Google Gemini para julgamento — prestador de serviço **ou** compartilhamento, conforme o plano | Obrigatório para jogar | Funcionalidade (bônus 🧠, Desafio), moderação | definições da última partida por sala até 30 dias após o encerramento; palpites até excluir (convidado: 30 dias sem uso) | palpites sim; definições não | `score-similarity`, `daily.functions.ts`, `_shared/semantic.ts` | COMPROVADO (classificação: DEPENDE DO PROPRIETÁRIO §4) |
+| **Mensagens → Outras mensagens no app** (chat) | **Não desde 20/10/2026** (chat removido); mensagens anteriores guardadas | Não | — | — | antigas: saem com a sala (30 dias após o encerramento) | não (pedido por e-mail) | `room.ts` (chat removido), `room_messages` | COMPROVADO |
 | **Info e desempenho do app → Registros de falhas / Diagnóstico** | Sim (mensagem, stack, rota e versão; hashes de sessão/sala) | Não | Obrigatório (automático) | Análise/estabilidade | **30 dias** (limpeza automática) | automática | `src/lib/ops.ts`, `ops_events` | COMPROVADO |
-| **IDs do dispositivo ou outros** (código de jogador gerado na instalação) | Sim | Não | Obrigatório | Funcionalidade, prevenção de abuso (banimento por aparelho) | nas salas, denúncias e banimentos **sem prazo** | não automaticamente | `src/lib/player-id.ts`, `banned_players` | COMPROVADO |
+| **IDs do dispositivo ou outros** (código de jogador gerado na instalação) | Sim | Não | Obrigatório | Funcionalidade, prevenção de abuso (banimento por aparelho) | salas: 30 dias após o encerramento; denúncias: 180 dias após a resolução (pendentes ficam); banimentos: sem prazo | não automaticamente | `src/lib/player-id.ts`, `banned_players` | COMPROVADO |
 | Localização (aprox./precisa) | Não (o app não deriva localização; provedores registram IP nos próprios logs) | — | — | — | logs dos provedores: prazos deles | — | permissões só INTERNET e VIBRATE | COMPROVADO (logs de IP dos provedores: NÃO VERIFICADO) |
 | Financeiro, saúde, fotos/vídeos, áudio, arquivos, agenda, contatos, navegação, apps instalados, histórico de busca | Não | — | — | — | — | — | `AndroidManifest.xml`; nenhum SDK que colete | COMPROVADO |
 
@@ -74,9 +74,10 @@
 1. Publicar o site com `/delete-account` (deploy autorizado) e só então usar a
    URL no campo de exclusão.
 2. Confirmar o plano da API Gemini (§4).
-3. Decidir a retenção das salas e das sessões anônimas
-   (`docs/exclusao-de-conta.md` §6) — o formulário pergunta se os dados são
-   apagados e a Política precisa do prazo.
+3. Retenção DECIDIDA e implementada na Rodada 2B
+   (`docs/retencao-e-privacidade-tecnica.md`) — **só vale depois de aplicar a
+   migration `20261027200000` em produção**; até lá, os prazos novos não são
+   verdade.
 4. Idade: público-alvo pretendido decidido (13 anos ou mais); responder o
    IARC de forma factual e aceitar a classificação resultante, que pode ser
    diferente do público-alvo.

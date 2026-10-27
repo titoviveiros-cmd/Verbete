@@ -8,6 +8,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
 
 import { useEffect } from "react";
@@ -17,7 +18,12 @@ import { ensureAnonSession } from "@/lib/auth-session";
 import { installNativeHandlers } from "@/lib/native";
 import { MotionConfig } from "framer-motion";
 import { installOpsCapture } from "@/lib/ops";
-import { blockIosPinchZoom, VIEWPORT_CONTENT } from "@/lib/viewport";
+import {
+  blockIosPinchZoom,
+  isReadingPath,
+  PAGE_ZOOM_ATTR,
+  VIEWPORT_CONTENT,
+} from "@/lib/viewport";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AchievementToaster } from "@/components/AchievementToaster";
@@ -232,6 +238,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 );
 
 function RootShell({ children }: { children: React.ReactNode }) {
+  // Páginas de leitura liberam o zoom (ver viewport.ts) — já no SSR.
+  const reading = useRouterState({
+    select: (s) => isReadingPath(s.location.pathname),
+  });
   return (
     // className/colorScheme: padrão claro; o THEME_BOOT_SCRIPT ajusta antes
     // da hidratação (por isso suppressHydrationWarning).
@@ -240,6 +250,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
       className="light"
       style={{ colorScheme: "light" }}
       suppressHydrationWarning
+      {...(reading ? { [PAGE_ZOOM_ATTR]: "" } : {})}
     >
       <head>
         <HeadContent />

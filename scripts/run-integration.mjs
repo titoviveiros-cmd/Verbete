@@ -22,6 +22,7 @@ const SUITES = [
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
   "test-native-auth-callback.mjs",
+  "test-data-retention.mjs",
   "test-rollback.mjs",
   "test-probe-local.mjs",
 ];

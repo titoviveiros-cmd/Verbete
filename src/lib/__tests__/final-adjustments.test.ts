@@ -8,7 +8,14 @@ import {
   MIN_PLAYERS,
   startButtonLabel,
 } from "@/lib/game-rules";
-import { blockIosPinchZoom, VIEWPORT_CONTENT } from "@/lib/viewport";
+import {
+  blockIosPinchZoom,
+  isReadingPath,
+  PAGE_ZOOM_ATTR,
+  READING_PATHS,
+  READING_VIEWPORT_CONTENT,
+  VIEWPORT_CONTENT,
+} from "@/lib/viewport";
 
 // Ajustes finais do 2º playtest (2026-10-20): mínimo de 4 participantes,
 // escala fixa de jogo (sem zoom) — sem mexer em scoring, bots ou Revelação.
@@ -106,6 +113,31 @@ describe("escala fixa de jogo (sem zoom)", () => {
   it("CSS: sem pinça e sem duplo toque, mas a rolagem (pan) continua", () => {
     const css = readFileSync(join(__dirname, "../../styles.css"), "utf8");
     expect(css).toMatch(/html\s*\{\s*touch-action:\s*pan-x pan-y;\s*\}/);
+    // só as páginas de leitura liberam (atributo posto por allowPageZoom)
+    expect(css).toMatch(/html\[data-page-zoom\]\s*\{\s*touch-action:\s*auto;\s*\}/);
+  });
+
+  it("páginas de leitura: viewport com zoom e só elas declaram (Rodada 2B)", () => {
+    expect(READING_VIEWPORT_CONTENT).not.toMatch(/user-scalable|maximum-scale|minimum-scale/);
+    for (const part of ["width=device-width", "initial-scale=1", "viewport-fit=cover"])
+      expect(READING_VIEWPORT_CONTENT).toContain(part);
+    const routes = join(__dirname, "../../routes");
+    const reading = ["privacy", "terms", "support", "delete-account"];
+    for (const f of readdirSync(routes).filter((x) => x.endsWith(".tsx"))) {
+      const src = readFileSync(join(routes, f), "utf8");
+      const isReading = reading.includes(f.replace(/\.tsx$/, ""));
+      expect(src.includes("READING_VIEWPORT,"), f).toBe(isReading);
+    }
+    expect([...READING_PATHS].sort()).toEqual(reading.map((r) => "/" + r).sort());
+    for (const p of ["/privacy", "/terms/", "/support", "/delete-account"])
+      expect(isReadingPath(p), p).toBe(true);
+    for (const p of ["/", "/room/1234", "/daily", "/profile", "/login", "/privacy-x", "/download"])
+      expect(isReadingPath(p), p).toBe(false);
+    const root = readFileSync(join(routes, "__root.tsx"), "utf8");
+    expect(root).toContain("isReadingPath(s.location.pathname)");
+    expect(root).toContain('[PAGE_ZOOM_ATTR]: ""');
+    const cap = readFileSync(join(__dirname, "../../../capacitor.config.ts"), "utf8");
+    expect(cap).toMatch(/zoomEnabled:\s*true/);
   });
 
   it("Safari iOS: a pinça (gesturestart/gesturechange) é barrada e o bloqueio se desfaz", () => {
@@ -116,6 +148,15 @@ describe("escala fixa de jogo (sem zoom)", () => {
     const ch = new Event("gesturechange", { cancelable: true });
     document.dispatchEvent(ch);
     expect(ch.defaultPrevented).toBe(true);
+    // página de leitura (Rodada 2B): com o atributo, a pinça passa
+    document.documentElement.setAttribute(PAGE_ZOOM_ATTR, "");
+    const legal = new Event("gesturestart", { cancelable: true });
+    document.dispatchEvent(legal);
+    expect(legal.defaultPrevented).toBe(false);
+    document.documentElement.removeAttribute(PAGE_ZOOM_ATTR);
+    const back = new Event("gesturechange", { cancelable: true });
+    document.dispatchEvent(back);
+    expect(back.defaultPrevented).toBe(true);
     undo();
     const after = new Event("gesturestart", { cancelable: true });
     document.dispatchEvent(after);

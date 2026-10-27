@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CONTACT_EMAIL, contactMailto } from "@/lib/legal";
+import { READING_VIEWPORT } from "@/lib/viewport";
 
 export const Route = createFileRoute("/support")({
   head: () => ({
     meta: [
       { title: "Suporte — Verbete" },
+      // Página de leitura: zoom livre (ver lib/viewport.ts).
+      READING_VIEWPORT,
       {
         name: "description",
         content:

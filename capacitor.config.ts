@@ -20,6 +20,10 @@ const config: CapacitorConfig = {
   android: {
     backgroundColor: "#fbf3e3",
     allowMixedContent: false,
+    // Pinça no WebView (Rodada 2B): só as páginas de leitura a usam; as de
+    // jogo seguem barradas pelo viewport (user-scalable=no) e pelo
+    // touch-action — ver src/lib/viewport.ts.
+    zoomEnabled: true,
   },
   plugins: {
     SplashScreen: {

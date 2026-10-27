@@ -14,6 +14,7 @@ import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
 import { TermsConsent } from "@/components/TermsConsent";
 import { useTermsGate } from "@/hooks/use-terms-gate";
 import { acceptTermsFor } from "@/lib/terms-consent";
+import { signupDisplayName } from "@/lib/display-name";
 import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/login")({
@@ -103,7 +104,8 @@ function LoginPage() {
           password,
           options: {
             emailRedirectTo: getAuthRedirectUrl(),
-            data: { display_name: displayName || email.split("@")[0] },
+            // Sem nome escolhido o banco usa "Jogador" (nunca o e-mail).
+            data: { display_name: signupDisplayName(displayName, email) },
           },
         });
         if (error) throw error;

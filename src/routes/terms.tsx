@@ -1,15 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CONTACT_EMAIL } from "@/lib/legal";
+import { READING_VIEWPORT } from "@/lib/viewport";
 
 // A data de "Última atualização" É a versão aceita (TERMS_VERSION em
 // src/lib/terms-record.ts; terms-consent.test.ts exige as duas juntas).
 // Mudou a data = todo aparelho aceita de novo antes do próximo conteúdo.
-// Sem prazo de retenção inventado: a licença vale enquanto o conteúdo
-// estiver guardado (retenção das salas = decisão pendente do proprietário).
+// Sem prazo de retenção no texto: a licença vale enquanto o conteúdo
+// estiver guardado (prazos na Política; mudar só a Política não muda
+// TERMS_VERSION).
 export const Route = createFileRoute("/terms")({
   head: () => ({
     meta: [
       { title: "Termos de Uso — Verbete" },
+      // Página de leitura: zoom livre (ver lib/viewport.ts).
+      READING_VIEWPORT,
       {
         name: "description",
         content:

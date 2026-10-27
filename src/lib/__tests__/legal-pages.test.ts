@@ -222,3 +222,43 @@ describe("Termos 2026-10-27 — o que a política de UGC exige", () => {
       expect(p).toMatch(fact);
   });
 });
+
+// Rodada 2B: os prazos só aparecem porque estão implementados e provados
+// (migration 20261027200000 + scripts/test-data-retention.mjs). Mudar um
+// prazo exige mudar a migration, a suíte e este teste juntos.
+describe("retenção — Política e Excluir conta dizem os prazos implementados", () => {
+  it("Política: salas 30 d, convidado 30 d sem uso, denúncias 180 d, bans sem apagamento", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/apagada automaticamente 30 dias depois do encerramento/);
+    expect(p).toMatch(/Sala em andamento nunca é apagada/);
+    expect(p).toMatch(/depois de 30 dias sem uso/);
+    expect(p).toMatch(/apagada automaticamente 180 dias depois da resolução/);
+    expect(p).toMatch(/a pendente fica até ser analisada/);
+    expect(p).toMatch(/não é apagado automaticamente/);
+    expect(p).not.toMatch(/sem apagamento automático hoje/);
+    expect(p).not.toMatch(/registros das salas não são apagados/);
+  });
+
+  it("Política: nome exibido nunca é o e-mail nem o nome do Google", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/aparece como “Jogador”/);
+    expect(p).toMatch(/nunca usamos o nome do Google nem a parte do e-mail/);
+    expect(p).not.toMatch(/se não houver, com a parte do e-mail/);
+  });
+
+  it("Excluir conta: salas 30 d, denúncias 180 d, convidado 30 d", () => {
+    const d = read(ROUTES.deleteAccount);
+    expect(d).toMatch(/apagados automaticamente 30 dias depois que a sala é encerrada/);
+    expect(d).toMatch(/apagada 180 dias depois da resolução/);
+    expect(d).toMatch(/30 dias sem uso/);
+    expect(d).not.toMatch(/não são apagados automaticamente/);
+  });
+
+  it("a migration de retenção tem os mesmos prazos", () => {
+    const m = read("supabase/migrations/20261027200000_data_retention.sql");
+    expect(m.match(/now\(\) - interval '30 days'/g)).toHaveLength(2);
+    expect(m.match(/now\(\) - interval '180 days'/g)).toHaveLength(1);
+    expect(m).not.toMatch(/DELETE FROM public\.banned_players/);
+    expect(read("scripts/run-integration.mjs")).toMatch(/test-data-retention\.mjs/);
+  });
+});
