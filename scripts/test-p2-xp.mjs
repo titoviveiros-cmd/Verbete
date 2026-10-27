@@ -478,12 +478,24 @@ try {
     ).rows;
     const NATURAL = ["advance_scoreboard_to_next_round_or_finished", "finish_reveal"];
     const OPERATIONAL = ["cleanup_zombie_rooms"];
+    // Retenção (Rodada 2B): só LEEM status = 'finished' (filtro/trigger do
+    // finished_at) — nunca encerram sala; conferido logo abaixo.
+    const READS_ONLY = ["retention_purge_rooms", "rooms_track_finished_at"];
     const names = fns.map((f) => f.fn);
     check(
-      "todo caminho para 'finished' está classificado (natural: finish_reveal, advance_scoreboard…; limpeza: cleanup_zombie_rooms)",
-      same(names, [...NATURAL, ...OPERATIONAL].sort()),
+      "todo caminho para 'finished' está classificado (natural: finish_reveal, advance_scoreboard…; limpeza: cleanup_zombie_rooms; só leitura: retenção)",
+      same(names, [...NATURAL, ...OPERATIONAL, ...READS_ONLY].sort()),
       names.join(", "),
     );
+    const writers = (
+      await db.query(
+        `SELECT p.proname AS fn FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname = ANY($1)
+            AND p.prosrc ~* '(SET|,)\\s*status\\s*=\\s*''finished'''`,
+        [READS_ONLY],
+      )
+    ).rows.map((r) => r.fn);
+    check("as funções da retenção nunca põem status = 'finished'", writers.length === 0, writers.join(", "));
     const cz = fns.find((f) => f.fn === "cleanup_zombie_rooms");
     check("limpeza grava o motivo em TODA regra que encerra", cz?.sets > 0 && cz?.marks === cz?.sets, `encerra=${cz?.sets} marca=${cz?.marks}`);
     check(
