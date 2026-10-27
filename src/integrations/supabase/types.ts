@@ -622,6 +622,7 @@ export type Database = {
           current_round: number;
           current_word_id: string | null;
           finish_reason: string | null;
+          finished_at: string | null;
           host_id: string;
           id: string;
           mode: string;
@@ -645,6 +646,7 @@ export type Database = {
           current_round?: number;
           current_word_id?: string | null;
           finish_reason?: string | null;
+          finished_at?: string | null;
           host_id: string;
           id?: string;
           mode?: string;
@@ -667,6 +669,7 @@ export type Database = {
           current_round?: number;
           current_word_id?: string | null;
           finish_reason?: string | null;
+          finished_at?: string | null;
           host_id?: string;
           id?: string;
           mode?: string;
@@ -1111,6 +1114,7 @@ export type Database = {
           current_round: number;
           current_word_id: string | null;
           finish_reason: string | null;
+          finished_at: string | null;
           host_id: string;
           id: string;
           mode: string;
@@ -1266,6 +1270,7 @@ export type Database = {
           current_round: number;
           current_word_id: string | null;
           finish_reason: string | null;
+          finished_at: string | null;
           host_id: string;
           id: string;
           mode: string;
@@ -1330,6 +1335,13 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string };
         Returns: Json;
       };
+      retention_anon_candidates: {
+        Args: { p_cutoff: string; p_limit?: number; p_only?: string };
+        Returns: string[];
+      };
+      retention_purge_anon_users: { Args: { p_limit?: number }; Returns: Json };
+      retention_purge_reports: { Args: { p_limit?: number }; Returns: Json };
+      retention_purge_rooms: { Args: { p_limit?: number }; Returns: Json };
       retry_round_judgments: {
         Args: Record<PropertyKey, never>;
         Returns: Json;
@@ -1340,6 +1352,10 @@ export type Database = {
         Returns: string;
       };
       room_pause_due: { Args: { p_room_id: string }; Returns: boolean };
+      run_data_retention: {
+        Args: { p_anon?: number; p_reports?: number; p_rooms?: number };
+        Returns: Json;
+      };
       send_reaction: {
         Args: { p_emoji: string; p_player_id: string; p_room_id: string };
         Returns: Json;
@@ -1376,6 +1392,7 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string; p_state?: string };
         Returns: Json;
       };
+      writing_phase_secs: { Args: { p_base: number }; Returns: number };
       xp_to_level: { Args: { p_xp: number }; Returns: number };
     };
     Enums: {
