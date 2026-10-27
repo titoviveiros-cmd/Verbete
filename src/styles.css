@@ -1145,6 +1145,10 @@ button:disabled,
 html {
   touch-action: pan-x pan-y;
 }
+/* Páginas de leitura (Rodada 2B): zoom livre — ver allowPageZoom. */
+html[data-page-zoom] {
+  touch-action: auto;
+}
 
 /* ===== Rodapé da sala: só a barra de reações =====
    Com o chat removido e a barra compacta (playtest 2026-10-20), a única peça

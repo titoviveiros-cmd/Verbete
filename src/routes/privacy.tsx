@@ -1,16 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { APP_HOST } from "@/lib/app-url";
 import { CONTACT_EMAIL } from "@/lib/legal";
+import { READING_VIEWPORT } from "@/lib/viewport";
 
 // Só o comportamento COMPROVADO no código (auditoria da rodada 2A,
 // 27/10/2026 — docs/exclusao-de-conta.md e
-// docs/google-play-data-safety-draft.md). Pendente do proprietário e por isso
-// fora daqui: identidade formal do controlador, prazo de retenção das salas,
-// plano da API Gemini e prazo de atendimento dos pedidos.
+// docs/google-play-data-safety-draft.md). Prazos de retenção da rodada 2B
+// (salas 30 d, convidado 30 d sem uso, denúncias 180 d após a resolução):
+// migration 20261027200000 + scripts/test-data-retention.mjs — publicar este
+// texto só DEPOIS de aplicar a migration. Pendente do proprietário e por isso
+// fora daqui: identidade formal do controlador, plano da API Gemini e prazo
+// de atendimento dos pedidos.
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
       { title: "Política de Privacidade — Verbete" },
+      // Página de leitura: zoom livre (ver lib/viewport.ts).
+      READING_VIEWPORT,
       {
         name: "description",
         content:
@@ -82,9 +88,10 @@ function PrivacyPage() {
               <strong>Conta (opcional):</strong> e-mail e senha, ou o login com
               Google — nesse caso o Google nos informa seu nome, e-mail e foto
               de perfil, que ficam no serviço de contas (o jogo não exibe a
-              foto). O nome exibido começa com o nome informado no cadastro ou,
-              se não houver, com a parte do e-mail antes do @; você pode
-              trocá-lo no Perfil.
+              foto). O nome exibido é o que você informar no cadastro; sem nome,
+              aparece como “Jogador” — nunca usamos o nome do Google nem a parte
+              do e-mail antes do @. Contas mais antigas podem ter recebido essa
+              parte do e-mail como nome; você pode trocá-lo no Perfil.
             </li>
             <li>
               <strong>No aparelho:</strong> apelido, avatar, cor, tema e o
@@ -174,10 +181,12 @@ function PrivacyPage() {
             Apelidos, definições, votos e reações ficam guardados com o registro
             da sala. Quando uma sala começa uma nova partida, as definições e os
             votos da anterior são apagados; os da última partida continuam
-            guardados, e hoje os registros das salas não são apagados
-            automaticamente. O chat das salas foi desativado em outubro de 2026;
-            mensagens enviadas antes disso continuam guardadas com as salas. Não
-            publicamos esse conteúdo fora do jogo.
+            guardados até a sala ser apagada. Uma sala encerrada é apagada
+            automaticamente 30 dias depois do encerramento (e da última
+            atividade nela), com apelidos, definições, votos, reações e as
+            mensagens antigas. O chat das salas foi desativado em outubro de
+            2026. Sala em andamento nunca é apagada. Não publicamos esse
+            conteúdo fora do jogo.
           </p>
         </section>
 
@@ -186,9 +195,13 @@ function PrivacyPage() {
           <p>
             Uma denúncia guarda o trecho ou o apelido denunciado, a sala, a
             rodada e os identificadores de quem denunciou e de quem foi
-            denunciado. Um banimento guarda o identificador do aparelho e/ou da
-            conta, o motivo e o prazo. Só a moderação tem acesso, e esses
-            registros não são apagados automaticamente.
+            denunciado — esse retrato continua mesmo depois que a sala é
+            apagada. Uma denúncia resolvida ou descartada é apagada
+            automaticamente 180 dias depois da resolução; a pendente fica até
+            ser analisada. Um banimento guarda o identificador do aparelho e/ou
+            da conta, o motivo e o prazo, e não é apagado automaticamente: o
+            temporário deixa de valer no fim do prazo; o permanente continua
+            valendo. Só a moderação tem acesso a esses registros.
           </p>
         </section>
 
@@ -196,11 +209,14 @@ function PrivacyPage() {
           <h2 className="font-display text-lg mb-1">Por quanto tempo</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              Sessão, conta, perfil e progresso: até você excluir. Sessões de
-              convidado sem uso não são apagadas automaticamente.
+              Conta, perfil e progresso: até você excluir. Sessão de convidado
+              (sem conta): apagada automaticamente, com o perfil e o progresso
+              dela, depois de 30 dias sem uso.
             </li>
+            <li>Salas: 30 dias depois de encerradas.</li>
             <li>
-              Salas, denúncias e banimentos: sem apagamento automático hoje.
+              Denúncias: 180 dias depois de resolvidas ou descartadas; as
+              pendentes, até a análise. Banimentos: sem apagamento automático.
             </li>
             <li>
               Presença na mesa: 2 dias. Registros de erro e saúde: 30 dias.

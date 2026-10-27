@@ -83,6 +83,10 @@
   `verbete-ops-health`, `verbete-judge-retry`.
 - **J) Prazo real de retenção:** nenhum para salas, denúncias, banimentos e
   sessões anônimas; 30 dias para telemetria; 2 dias para presença.
+  **Atualização Rodada 2B (migration `20261027200000`, ainda NÃO aplicada em
+  produção):** salas encerradas 30 dias; convidados sem uso 30 dias;
+  denúncias resolvidas/descartadas 180 dias após `resolved_at`; banimentos
+  sem apagamento. Detalhes: `docs/retencao-e-privacidade-tecnica.md`.
 - **K) Exclusão parcial:** **antes** desta rodada os erros das etapas 1–2
   eram ignorados (o login era apagado mesmo assim; `daily_attempts` e
   `user_achievements` podiam sobrar órfãs com o `user_id`) e, se o
@@ -113,13 +117,13 @@
 |---|---|---|
 | P1 | Textos prometiam "só o apelido" | corrigido nos textos |
 | P1 | Exclusão parcial silenciosa (erros ignorados) | corrigido em código + 8 testes |
-| P1 | Cadastro sem nome (e, pelo código, todo cadastro via Google) recebe como nome exibido a parte do e-mail antes do @ (`handle_new_user`), que aparece no ranking público e é legível por qualquer sessão (`profiles authenticated read`) | **PARADO: exige migration** (trigger usar "Jogador" ou o nome do Google). Divulgado na Política. Comportamento do Google em produção NÃO VERIFICADO |
-| P2 | Sessões anônimas (auth.users + perfil + stats) nunca expiram; cada navegador/limpeza cria outra; abrir `/privacy` ou `/delete-account` também cria | decisão de retenção (migration/cron) |
-| P2 | Salas sem prazo | seção 6 |
+| P1 | Cadastro sem nome (e, pelo código, todo cadastro via Google) recebe como nome exibido a parte do e-mail antes do @ (`handle_new_user`), que aparece no ranking público e é legível por qualquer sessão (`profiles authenticated read`) | **Rodada 2B:** migration `20261027200100` + `src/lib/display-name.ts` ("Jogador"; nome do Google não usado); contas existentes: só diagnóstico (`scripts/diagnose-display-name.sql`) |
+| P2 | Sessões anônimas (auth.users + perfil + stats) nunca expiram; cada navegador/limpeza cria outra; abrir `/privacy` ou `/delete-account` também cria | **Rodada 2B:** apagadas após 30 dias sem uso |
+| P2 | Salas sem prazo | **Rodada 2B:** 30 dias após o encerramento |
 | P2 | `user_roles` do admin não é apagado | só afeta o administrador |
 | P2 | Servidor não confere avatar contra a lista (corta em 16 caracteres) nem filtra apelido (corta em 24) | denúncia de jogador desta rodada cobre o apelido |
 
-## 6. Retenção das salas — opções (NÃO implementado; decisão do proprietário)
+## 6. Retenção das salas — opções (histórico da 2A; DECIDIDO 27/10: B, 30 dias — implementado na Rodada 2B)
 
 **Estado real:** salas nunca são apagadas; terminam como `finished`. Junto
 ficam `players`, `definitions` e `votes` da última partida, todas as

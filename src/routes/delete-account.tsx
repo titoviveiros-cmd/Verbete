@@ -6,17 +6,21 @@ import {
   DELETE_ACCOUNT_PATH,
   contactMailto,
 } from "@/lib/legal";
+import { READING_VIEWPORT } from "@/lib/viewport";
 
 // Página pública de exclusão de conta (Google Play: recurso web para pedir a
 // exclusão sem reinstalar o app). Sem login e sem JavaScript obrigatório: o
 // conteúdo sai no HTML do servidor. O que é apagado e o que fica segue o
 // comportamento REAL (src/lib/account-deletion.ts, docs/exclusao-de-conta.md)
-// — mudar um sem o outro é mentir para o jogador. Nenhum prazo é prometido:
-// não há limpeza automática das salas nem prazo de atendimento definido.
+// — mudar um sem o outro é mentir para o jogador. Prazos de retenção = os da
+// migration 20261027200000 (provados em scripts/test-data-retention.mjs);
+// prazo de atendimento dos pedidos: nenhum definido.
 export const Route = createFileRoute("/delete-account")({
   head: () => ({
     meta: [
       { title: "Excluir conta — Verbete" },
+      // Página de leitura: zoom livre (ver lib/viewport.ts).
+      READING_VIEWPORT,
       {
         name: "description",
         content:
@@ -78,7 +82,8 @@ function DeleteAccountPage() {
           <p className="mt-2">
             Joga como convidado, sem conta? A sessão de convidado também pode
             ser excluída no Perfil, no mesmo aparelho ou navegador, com os
-            mesmos efeitos.
+            mesmos efeitos. Sem isso, ela é apagada automaticamente depois de 30
+            dias sem uso.
           </p>
         </section>
 
@@ -129,14 +134,16 @@ function DeleteAccountPage() {
               e a cor usados ali, a pontuação, as definições, os votos e as
               reações da última partida de cada sala, com identificadores
               técnicos — o código de jogador do aparelho e o código interno da
-              sessão ou da conta, que deixa de corresponder a uma conta. Hoje
-              esses registros das salas não são apagados automaticamente.
+              sessão ou da conta, que deixa de corresponder a uma conta. Esses
+              registros são apagados automaticamente 30 dias depois que a sala é
+              encerrada.
             </li>
             <li>
               <strong>Moderação:</strong> denúncias feitas por você ou sobre
               você continuam no registro de moderação (com o trecho denunciado,
-              o apelido e esses identificadores). Um banimento continua valendo
-              para o aparelho, conferido a cada entrada em sala.
+              o apelido e esses identificadores); a resolvida ou descartada é
+              apagada 180 dias depois da resolução. Um banimento continua
+              valendo para o aparelho, conferido a cada entrada em sala.
             </li>
             <li>
               <strong>Registros técnicos:</strong> eventos de erro e de saúde do
