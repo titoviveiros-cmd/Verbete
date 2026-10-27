@@ -134,3 +134,5 @@ guarda removida derruba pelo menos uma verificação.
 | P2 | Convidado apagado com a página aberta há > 30 dias: no próximo uso o refresh falha e o app abre outra sessão de convidado (XP de convidado perdido) | esperado pela regra |
 | P2 | `players.user_id` de conta apagada segue nas salas até a sala sair (≤ 30 dias depois do fim) | coberto pela retenção das salas |
 | P2 | Volume da primeira execução em produção desconhecido (limites por hora seguram) | acompanhar `ops_heartbeat`/`ops_events` |
+| P2 | `zoomEnabled: true` no WebView: o jogo depende do viewport + `touch-action` para não ampliar (provado no Chromium, não no aparelho) | validar no próximo AAB (pinça e duplo toque numa partida; pinça na Política) |
+| corrigido | CASCADE `definitions → votes` sem índice em `votes.definition_id` (varredura de `votes` por definição apagada) | índice `idx_votes_definition_id` na mesma migration |
