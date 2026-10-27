@@ -93,6 +93,10 @@ BEFORE INSERT OR UPDATE OF status ON public.rooms
 FOR EACH ROW
 EXECUTE FUNCTION public.rooms_track_finished_at();
 
+-- Apagar a sala apaga as definições, e cada uma dispara o CASCADE para
+-- votes(definition_id) — sem índice, uma varredura de votes por definição.
+CREATE INDEX IF NOT EXISTS idx_votes_definition_id ON public.votes (definition_id);
+
 CREATE INDEX IF NOT EXISTS reports_resolved_at_idx
   ON public.reports (resolved_at) WHERE status IN ('resolved', 'dismissed');
 

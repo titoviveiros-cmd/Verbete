@@ -19,6 +19,7 @@ DELETE FROM public.ops_heartbeat WHERE job = 'data_retention';
 DROP TRIGGER IF EXISTS rooms_track_finished_at ON public.rooms;
 DROP FUNCTION IF EXISTS public.rooms_track_finished_at();
 DROP INDEX IF EXISTS public.reports_resolved_at_idx;
+DROP INDEX IF EXISTS public.idx_votes_definition_id;
 DROP INDEX IF EXISTS public.rooms_finished_at_idx;
 ALTER TABLE public.rooms DROP CONSTRAINT IF EXISTS rooms_finished_at_check;
 ALTER TABLE public.rooms DROP COLUMN IF EXISTS finished_at;
