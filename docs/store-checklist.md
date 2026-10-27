@@ -107,7 +107,12 @@ IPv4/IPv6 do loopback).
    conta, https://jogo.verbete.workers.dev/delete-account. Contato oficial:
    `titoviveiros@hotmail.com` (decisão do Tito, 26/10) — **gate: teste de
    recebimento ainda não documentado**.
-6. Público-alvo: 13+ (evita exigências de apps infantis).
+6. Público-alvo pretendido: **13 anos ou mais** (decisão do Tito,
+   27/10/2026; não declarar a faixa de 9–12 anos). A classificação
+   indicativa será a atribuída pela IARC/ClassInd e poderá ser diferente da
+   faixa de público-alvo (por exemplo, "10 anos") — responder o IARC de forma
+   factual, sem buscar resultado, e aceitar a classificação resultante. As
+   páginas públicas falam só do público-alvo, nunca de classificação.
 7. Upload do AAB no trilho **Teste interno** primeiro → testar. Para a
    **Produção**, gerar um AAB NOVO com `VITE_RELEASE_CHANNEL=production` e
    `versionCode` maior (mesmo `versionName` quando aplicável): o AAB do teste

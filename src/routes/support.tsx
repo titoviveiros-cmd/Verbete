@@ -66,8 +66,8 @@ const FAQ: { q: string; a: string }[] = [
     a: "Sim, totalmente gratuito, sem anúncios e sem compras no app.",
   },
   {
-    q: "Qual a idade indicada?",
-    a: "O Verbete é indicado para maiores de 13 anos. As definições são escritas pelos próprios jogadores; há filtros automáticos, denúncia e moderação.",
+    q: "Para qual idade o Verbete é feito?",
+    a: "O Verbete é destinado a pessoas com 13 anos ou mais. As definições são escritas pelos próprios jogadores; há filtros automáticos, denúncia e moderação.",
   },
 ];
 

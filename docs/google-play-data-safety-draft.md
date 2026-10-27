@@ -18,7 +18,7 @@
 | Dados de conta: o app permite criar conta? | Sim (e-mail/senha e Google); conta é opcional | COMPROVADO |
 | Compartilhamento com terceiros | Nenhum, se Supabase, Cloudflare e Google (Gemini) contarem como **prestadores de serviço**; o Gemini depende do plano (ver §4) | DEPENDE DO PROPRIETÁRIO |
 | Revisão de segurança independente | Não | COMPROVADO (nenhuma registrada) |
-| Política de Famílias | Só se o público-alvo incluir crianças — decisão de idade pendente | DEPENDE DO PROPRIETÁRIO |
+| Política de Famílias | Não se aplica: público-alvo pretendido = 13 anos ou mais (decisão de 27/10/2026), sem a faixa de 9–12; a classificação indicativa virá do IARC/ClassInd e pode diferir | DECIDIDO (preencher só na rodada do Console) |
 
 ## 2. Por tipo de dado
 
@@ -77,7 +77,9 @@
 3. Decidir a retenção das salas e das sessões anônimas
    (`docs/exclusao-de-conta.md` §6) — o formulário pergunta se os dados são
    apagados e a Política precisa do prazo.
-4. Decidir idade mínima × recomendação (público-alvo, Famílias, IARC).
+4. Idade: público-alvo pretendido decidido (13 anos ou mais); responder o
+   IARC de forma factual e aceitar a classificação resultante, que pode ser
+   diferente do público-alvo.
 5. Teste de recebimento do e-mail oficial (gate do contato).
 6. `android:allowBackup="true"`: o backup automático do Android pode copiar o
    armazenamento do WebView (código de jogador, sessão) para o backup do

@@ -157,7 +157,20 @@ describe("fatos do Suporte, Download e idade", () => {
     for (const [name, path] of Object.entries(ROUTES))
       expect(read(path), name).not.toMatch(/12\+/);
     for (const path of [ROUTES.terms, ROUTES.privacy, ROUTES.support])
-      expect(read(path), path).toMatch(/13 anos/);
+      expect(read(path), path).toMatch(/13 anos ou mais/);
+  });
+
+  it("idade: público-alvo 13 anos ou mais, sem faixa que exclua quem tem 13 e sem classificação inventada", () => {
+    // Decisão do proprietário (27/10/2026): público-alvo = 13 anos ou mais.
+    // A classificação indicativa será a do IARC/ClassInd — as páginas não
+    // podem afirmar nenhuma.
+    for (const [name, path] of Object.entries(ROUTES)) {
+      const src = read(path);
+      expect(src, name).not.toMatch(/maiores de 1[0-9]|1[0-9]\+/);
+      expect(src, name).not.toMatch(
+        /classifica[çc][ãa]o (indicativa|et[áa]ria)/i,
+      );
+    }
   });
 
   it("chat removido (20/10/2026) não aparece como recurso ativo", () => {

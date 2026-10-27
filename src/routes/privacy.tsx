@@ -228,8 +228,8 @@ function PrivacyPage() {
         <section>
           <h2 className="font-display text-lg mb-1">Crianças</h2>
           <p>
-            O Verbete é indicado para maiores de 13 anos. Não criamos perfis
-            publicitários e não pedimos dados pessoais sensíveis.
+            O Verbete é destinado a pessoas com 13 anos ou mais. Não criamos
+            perfis publicitários e não pedimos dados pessoais sensíveis.
           </p>
         </section>
 

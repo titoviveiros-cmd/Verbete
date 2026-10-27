@@ -4,7 +4,7 @@
 > na rodada 2A (branch `compliance/play-legal-data`): `/terms` passou para a
 > versão **27 de outubro de 2026** (`TERMS_VERSION = "2026-10-27"`). O texto
 > continua sujeito à **aprovação do Tito** no PR. Nada aqui inventa o
-> responsável pelos dados, o prazo de retenção ou a idade mínima.
+> responsável pelos dados ou o prazo de retenção.
 
 ## O que o aceite já resolve (PR #26)
 
@@ -25,7 +25,7 @@
 | 3 | Inteligência artificial | **aplicado** — Gemini cria as definições dos bots e julga semelhança/Desafio; textos enviados sem identificadores; conteúdo da IA também é denunciável |
 | 4 | Licença do conteúdo | **aplicado sem prazo** — guardar, exibir, processar (inclusive IA), moderar, "enquanto estiver guardado"; o **prazo** depende da retenção das salas (pendente) |
 | 5 | Aceitação | **aplicado** — caixa de aceite e novo aceite a cada revisão relevante |
-| 6 | Idade | **pendente do dono** — mantido "Recomendado para 13 anos ou mais"; o Suporte deixou de dizer 12+ (Opção A: idade mínima de 13; Opção B: 13+ só recomendação) |
+| 6 | Idade | **decidido (27/10/2026)** — público-alvo pretendido de 13 anos ou mais, escrito assim em Termos, Política e Suporte (sem "maiores de 13", sem 12+); a classificação indicativa será a do IARC/ClassInd e não aparece nas páginas |
 | 7 | Contato | **aplicado** — `titoviveiros@hotmail.com` (gate: teste de recebimento pendente) |
 | 8 | Chat removido | **aplicado** — Termos e Suporte sem chat; a Política diz que o chat foi desativado e que mensagens antigas seguem guardadas |
 
@@ -33,5 +33,4 @@
 
 - identidade formal do responsável (controlador) — não citada;
 - prazo de retenção das salas (e, com ele, o prazo da licença);
-- idade mínima × recomendação;
 - lei aplicável/foro (não incluídos — decisão nova, não estava no texto).
