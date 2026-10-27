@@ -9,6 +9,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { listPendingReports, resolveReport } from "@/lib/moderation.functions";
+import { isPlayerReport, playerReasonLabel } from "@/lib/report-player-reasons";
 import { Mascot } from "@/components/Mascot";
 
 export const Route = createFileRoute("/admin/reports")({
@@ -163,8 +164,10 @@ function AdminReportsPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {r.reason} · sala {r.room_code ?? "?"} · rodada{" "}
-                    {r.round ?? "?"}
+                    {isPlayerReport(r)
+                      ? `jogador · ${playerReasonLabel(r.reason)}`
+                      : `definição · ${r.reason}`}{" "}
+                    · sala {r.room_code ?? "?"} · rodada {r.round ?? "?"}
                   </p>
                   <p className="font-display text-sm mt-0.5 truncate">
                     👤 {r.offender_nickname ?? r.offender_player_id.slice(0, 8)}

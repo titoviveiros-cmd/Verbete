@@ -20,6 +20,7 @@ import {
   type NivelFilter,
 } from "@/lib/room";
 import { AvatarBubble } from "@/components/AvatarBubble";
+import { ReportPlayerButton } from "@/components/room/ReportPlayerButton";
 import { Mascot } from "@/components/Mascot";
 import { roomInviteUrl } from "@/lib/app-url";
 import { shareInvite } from "@/lib/share";
@@ -210,9 +211,10 @@ export function Lobby({
           )}
 
           <div className="panel p-3 flex flex-col shrink-0">
-            <h3 className="eyebrow mb-2 px-1">
-              Jogadores ({players.length}/12)
-            </h3>
+            <div className="flex items-center justify-between gap-2 mb-2 px-1">
+              <h3 className="eyebrow">Jogadores ({players.length}/12)</h3>
+              <ReportPlayerButton players={players} meId={playerId} />
+            </div>
             <div className="grid grid-cols-4 lg:grid-cols-6 gap-x-2 gap-y-3 content-start pt-1 px-1">
               {[...players]
                 .sort((a, b) => {

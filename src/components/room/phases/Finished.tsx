@@ -13,6 +13,7 @@ import {
 import { Mascot } from "@/components/Mascot";
 import { Confetti } from "@/components/Confetti";
 import { Scoreboard } from "@/components/room/phases/Scoreboard";
+import { ReportPlayerButton } from "@/components/room/ReportPlayerButton";
 import { useAuth } from "@/hooks/use-auth";
 import { pushAchievement } from "@/components/AchievementToaster";
 import { hapticBigWin, hapticSuccess } from "@/lib/sound";
@@ -630,6 +631,11 @@ export function Finished({
           )}
 
           <FunStats players={players} history={history} />
+          <ReportPlayerButton
+            players={players}
+            meId={playerId}
+            className="self-center mt-2"
+          />
         </div>
       </div>
 
