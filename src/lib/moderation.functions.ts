@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { fileReport, ReportInput } from "@/lib/report-definition";
+import { filePlayerReport, PlayerReportInput } from "@/lib/report-player";
 
 // ============================================================
 // Reportar uma definição inadequada (lógica em report-definition.ts)
@@ -12,6 +13,16 @@ export const reportDefinition = createServerFn({ method: "POST" })
   .validator((input) => ReportInput.parse(input))
   .handler(({ data, context }) =>
     fileReport(supabaseAdmin, context.userId, data),
+  );
+
+// ============================================================
+// Reportar um jogador — apelido/comportamento (lógica em report-player.ts)
+// ============================================================
+export const reportPlayer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input) => PlayerReportInput.parse(input))
+  .handler(({ data, context }) =>
+    filePlayerReport(supabaseAdmin, context.userId, data),
   );
 
 // ============================================================

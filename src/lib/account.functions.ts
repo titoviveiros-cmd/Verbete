@@ -1,46 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { deleteAccountData } from "@/lib/account-deletion";
 
 /**
- * Deleta a conta do usuário autenticado.
- * - Apaga histórico de partidas, perfil, stats, conquistas e tentativas
- *   diárias (a política de privacidade e o /support descrevem exatamente
- *   isto — manter os três alinhados).
- * - Remove o registro em auth.users (logout automático na próxima sessão).
- * - Nas salas jogadas fica só o apelido da partida (players.user_id passa a
- *   apontar para um usuário inexistente).
+ * Deleta a conta do usuário autenticado (lógica e o que fica nas salas em
+ * account-deletion.ts; /privacy, /delete-account e /support descrevem
+ * exatamente isto — manter alinhados).
  *
- * Apple App Store Guideline 5.1.1(v) exige que apps com criação de conta
- * ofereçam exclusão in-app desde 2022.
+ * Apple App Store Guideline 5.1.1(v) e Google Play exigem exclusão in-app
+ * para apps com criação de conta.
  */
 export const deleteAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { userId } = context;
-
-    // 1) Histórico de partidas
-    await supabaseAdmin.from("match_history").delete().eq("user_id", userId);
-
-    // 2) Remove dados pessoais explícitos
-    await Promise.all([
-      supabaseAdmin.from("daily_attempts").delete().eq("user_id", userId),
-      supabaseAdmin.from("user_achievements").delete().eq("user_id", userId),
-      supabaseAdmin.from("user_stats").delete().eq("user_id", userId),
-      supabaseAdmin.from("profiles").delete().eq("user_id", userId),
-    ]);
-
-    // 3) Remove a conta de autenticação
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
-    if (error) {
-      console.error("[deleteAccount] auth.admin.deleteUser failed", error);
-      throw new Error(
-        "Não foi possível excluir a conta. Tente novamente em instantes.",
-      );
-    }
-
-    return { ok: true as const };
-  });
+  .handler(({ context }) => deleteAccountData(supabaseAdmin, context.userId));
 
 /**
  * Zera as estatísticas do usuário autenticado, mantendo a conta e o perfil.

@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { VerbeteTile, verbeteWordmarkStyle } from "@/components/VerbeteLogo";
+import { contactMailto } from "@/lib/legal";
 
+// O app Android está só em TESTE INTERNO na Play (por convite); produção na
+// loja não autorizada — nada aqui pode dizer que ele já está disponível.
 export const Route = createFileRoute("/download")({
   head: () => ({
     meta: [
@@ -8,7 +11,7 @@ export const Route = createFileRoute("/download")({
       {
         name: "description",
         content:
-          "Verbete: jogo de palavras multiplayer kawaii. Jogue agora no navegador ou baixe em breve na App Store.",
+          "Verbete: jogo de palavras multiplayer kawaii. Jogue agora no navegador; o app Android está em teste.",
       },
       { property: "og:title", content: "Baixe o Verbete" },
       {
@@ -35,13 +38,13 @@ const FEATURES = [
   },
   {
     icon: "🏆",
-    title: "Ranking diário",
-    desc: "Compita no desafio do dia e suba no ranking nacional.",
+    title: "Desafio e ranking",
+    desc: "Arrisque o significado no Desafio Diário e suba no ranking.",
   },
   {
     icon: "🛡️",
     title: "Comunidade segura",
-    desc: "Moderação ativa, reports e bans para manter o jogo saudável.",
+    desc: "Denúncia de definições e de jogadores, com moderação e banimentos.",
   },
 ];
 
@@ -112,27 +115,30 @@ function DownloadPage() {
       </section>
 
       <section className="rounded-2xl bg-card border border-border p-5 flex flex-col gap-2 mb-8">
-        <h2 className="font-display text-xl">
-          Quer ser beta tester no iPhone?
-        </h2>
+        <h2 className="font-display text-xl">Quer testar o app Android?</h2>
         <p className="text-sm text-muted-foreground">
-          Em breve abriremos o TestFlight. Avise se quiser receber o convite.
+          O app Verbete para Android ainda não está aberto na Google Play: está
+          em teste, só por convite. Peça o seu por e-mail.
         </p>
         <a
-          href="mailto:contato@verbete.app?subject=Quero%20ser%20beta%20tester%20do%20Verbete"
+          href={contactMailto("Quero testar o Verbete no Android")}
           className="rounded-full bg-secondary text-secondary-foreground font-semibold py-2.5 text-center mt-2 hover:opacity-90 transition"
         >
-          Quero ser beta tester
+          Quero testar no Android
         </a>
       </section>
 
-      <footer className="text-center text-xs text-muted-foreground pb-8 flex gap-3 justify-center">
+      <footer className="text-center text-xs text-muted-foreground pb-8 flex flex-wrap gap-3 justify-center">
         <Link to="/privacy" className="hover:text-foreground">
           Privacidade
         </Link>
-        <span>·</span>
+        <span aria-hidden>·</span>
         <Link to="/terms" className="hover:text-foreground">
           Termos
+        </Link>
+        <span aria-hidden>·</span>
+        <Link to="/support" className="hover:text-foreground">
+          Suporte
         </Link>
       </footer>
     </div>

@@ -1,6 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { APP_HOST } from "@/lib/app-url";
+import { CONTACT_EMAIL } from "@/lib/legal";
 
+// Só o comportamento COMPROVADO no código (auditoria da rodada 2A,
+// 27/10/2026 — docs/exclusao-de-conta.md e
+// docs/google-play-data-safety-draft.md). Pendente do proprietário e por isso
+// fora daqui: identidade formal do controlador, prazo de retenção das salas,
+// plano da API Gemini e prazo de atendimento dos pedidos.
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
@@ -8,13 +14,21 @@ export const Route = createFileRoute("/privacy")({
       {
         name: "description",
         content:
-          "Política de privacidade do Verbete: quais dados coletamos, como usamos e como você pode pedir remoção.",
+          "Política de privacidade do Verbete: quais dados coletamos, como usamos, por quanto tempo guardamos e como pedir a exclusão.",
       },
       { name: "robots", content: "index,follow" },
     ],
   }),
   component: PrivacyPage,
 });
+
+function Mail() {
+  return (
+    <a className="underline break-all" href={`mailto:${CONTACT_EMAIL}`}>
+      {CONTACT_EMAIL}
+    </a>
+  );
+}
 
 function PrivacyPage() {
   return (
@@ -28,7 +42,7 @@ function PrivacyPage() {
         </Link>
         <h1 className="font-display text-3xl mt-2">Política de Privacidade</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Última atualização: 3 de outubro de 2026
+          Última atualização: 27 de outubro de 2026
         </p>
       </header>
 
@@ -38,7 +52,8 @@ function PrivacyPage() {
           <p>
             Verbete é um jogo multiplayer de palavras. Esta política descreve
             como tratamos os dados de quem joga em <strong>{APP_HOST}</strong> e
-            no app Verbete para Android.
+            no app Verbete para Android. Para qualquer assunto sobre seus dados,
+            escreva para <Mail />.
           </p>
         </section>
 
@@ -46,39 +61,86 @@ function PrivacyPage() {
           <h2 className="font-display text-lg mb-1">O que coletamos</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <strong>Sem conta:</strong> apelido, avatar e cor escolhidos por
-              você, mais o que você faz na partida: significados inventados,
-              votos, mensagens do chat da sala e reações. Para identificar seu
-              aparelho na sala criamos uma sessão anônima (um identificador
-              aleatório, sem nome nem e-mail).
+              <strong>Sessão (todos, com ou sem conta):</strong> ao abrir o
+              jogo, criamos uma sessão anônima — um identificador aleatório, sem
+              nome nem e-mail — guardada no aparelho para reconhecer você nas
+              próximas visitas, mais um código de jogador gerado no aparelho.
+              Junto com a sessão, o servidor cria um perfil e estatísticas em
+              branco.
             </li>
             <li>
-              <strong>Com conta:</strong> e-mail, identificador de autenticação,
-              estatísticas e histórico de partidas, conquistas e os palpites do
-              desafio diário. Se você entrar com o Google, recebemos do Google
-              seu nome e e-mail.
+              <strong>Na sala:</strong> o apelido, o avatar e a cor que você
+              escolhe, as definições que inventa, seus votos, reações e
+              pontuação.
             </li>
             <li>
-              <strong>Técnico:</strong> dados mínimos para a partida funcionar
-              em tempo real (id de sala, horários dos eventos) e registros de
-              erro e de saúde do jogo com identificadores embaralhados (sem
-              nome, e-mail ou IP), guardados por 30 dias.
+              <strong>Progresso:</strong> nome exibido, estatísticas, XP, nível,
+              conquistas, histórico de partidas e os palpites do Desafio Diário
+              ficam ligados à sua sessão de convidado ou à sua conta.
+            </li>
+            <li>
+              <strong>Conta (opcional):</strong> e-mail e senha, ou o login com
+              Google — nesse caso o Google nos informa seu nome, e-mail e foto
+              de perfil, que ficam no serviço de contas (o jogo não exibe a
+              foto). O nome exibido começa com o nome informado no cadastro ou,
+              se não houver, com a parte do e-mail antes do @; você pode
+              trocá-lo no Perfil.
+            </li>
+            <li>
+              <strong>No aparelho:</strong> apelido, avatar, cor, tema e o
+              registro de que você aceitou os Termos ficam salvos só no aparelho
+              ou navegador.
+            </li>
+            <li>
+              <strong>Técnico:</strong> dados para a partida funcionar em tempo
+              real (sala, horários dos eventos, presença na mesa) e registros de
+              erro e de saúde do jogo (mensagem do erro, página e versão do
+              app), sem nome, e-mail ou IP.
             </li>
           </ul>
           <p className="mt-2">
             Não coletamos localização, contatos, fotos, câmera ou microfone. O
-            app pede só acesso à internet e à vibração do aparelho.
+            app pede só acesso à internet e à vibração do aparelho. Não há
+            anúncios, nem ferramentas de publicidade ou de análise de terceiros.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg mb-1">Quem vê o quê</h2>
+          <p>
+            Os jogadores da sua sala veem seu apelido, avatar, cor, pontuação,
+            definições e reações. O ranking é público: quem tem pontos aparece
+            nele com o nome exibido, o avatar, a cor e as estatísticas. Outros
+            jogadores também conseguem ler o nome exibido, o avatar e a cor do
+            seu perfil. E-mail, palpites do Desafio Diário e denúncias não são
+            mostrados a outros jogadores.
           </p>
         </section>
 
         <section>
           <h2 className="font-display text-lg mb-1">Como usamos</h2>
           <p>
-            Para rodar a partida em tempo real, exibir placares, manter ranking,
-            gerar as definições dos bots, avaliar por inteligência artificial a
-            semelhança entre definições (bônus 🧠 e desafio diário) e prevenir
-            abuso. Não vendemos seus dados. Não exibimos anúncios nem usamos
-            publicidade comportamental.
+            Para rodar a partida em tempo real, calcular placares, manter o
+            ranking e o progresso, gerar as definições dos bots, avaliar por
+            inteligência artificial a semelhança entre definições (bônus 🧠 e
+            Desafio Diário), moderar denúncias e corrigir erros. Não vendemos
+            seus dados.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg mb-1">
+            Inteligência artificial (Google Gemini)
+          </h2>
+          <p>
+            Enviamos ao Gemini, do Google: a palavra da rodada, a definição
+            verdadeira e os textos das definições da rodada, inclusive as
+            escritas pelos jogadores, para avaliar quais chegaram perto da
+            verdadeira; o seu palpite do Desafio Diário, para avaliá-lo; e, para
+            criar as definições dos bots, a palavra, a definição verdadeira e
+            definições anteriores dos próprios bots. Não enviamos nome, apelido,
+            e-mail nem identificadores de conta, sessão ou jogador. Não escreva
+            dados pessoais nas definições e nos palpites.
           </p>
         </section>
 
@@ -93,61 +155,104 @@ function PrivacyPage() {
               <strong>Cloudflare:</strong> hospedagem do site e do servidor web.
             </li>
             <li>
-              <strong>Google (Gemini):</strong> recebe a palavra da rodada, a
-              definição verdadeira e os textos escritos pelos jogadores
-              (definições inventadas e palpites do desafio diário) para gerar as
-              definições dos bots e avaliar semelhanças. Não enviamos nome,
-              e-mail nem identificadores de conta.
+              <strong>Google:</strong> o Gemini (acima); o login com Google, se
+              você escolher; e as fontes do jogo, carregadas dos servidores do
+              Google, que recebem o endereço IP do seu aparelho.
+            </li>
+          </ul>
+          <p className="mt-2">
+            Esses provedores podem tratar dados em servidores fora do Brasil e
+            mantêm registros próprios de acesso (que podem incluir o IP), pelos
+            prazos de cada um. Todo o tráfego entre o jogo e eles é
+            criptografado (HTTPS).
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg mb-1">Conteúdo das salas</h2>
+          <p>
+            Apelidos, definições, votos e reações ficam guardados com o registro
+            da sala. Quando uma sala começa uma nova partida, as definições e os
+            votos da anterior são apagados; os da última partida continuam
+            guardados, e hoje os registros das salas não são apagados
+            automaticamente. O chat das salas foi desativado em outubro de 2026;
+            mensagens enviadas antes disso continuam guardadas com as salas. Não
+            publicamos esse conteúdo fora do jogo.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg mb-1">Denúncias e moderação</h2>
+          <p>
+            Uma denúncia guarda o trecho ou o apelido denunciado, a sala, a
+            rodada e os identificadores de quem denunciou e de quem foi
+            denunciado. Um banimento guarda o identificador do aparelho e/ou da
+            conta, o motivo e o prazo. Só a moderação tem acesso, e esses
+            registros não são apagados automaticamente.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg mb-1">Por quanto tempo</h2>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              Sessão, conta, perfil e progresso: até você excluir. Sessões de
+              convidado sem uso não são apagadas automaticamente.
             </li>
             <li>
-              <strong>Google (login e fontes):</strong> o login com Google, se
-              você escolher; e as fontes do jogo, carregadas dos servidores do
-              Google (que recebem o endereço IP do seu aparelho).
+              Salas, denúncias e banimentos: sem apagamento automático hoje.
+            </li>
+            <li>
+              Presença na mesa: 2 dias. Registros de erro e saúde: 30 dias.
             </li>
           </ul>
         </section>
 
         <section>
-          <h2 className="font-display text-lg mb-1">Conteúdo de jogo</h2>
+          <h2 className="font-display text-lg mb-1">Exclusão da conta</h2>
           <p>
-            Os significados que você inventa e as mensagens do chat são
-            mostrados aos outros jogadores da sua sala e ficam guardados com o
-            registro da sala. Não publicamos esse conteúdo fora do jogo.
+            No jogo: Perfil → Zona de perigo → Excluir. Apagamos a conta e o
+            acesso a ela (e-mail, senha ou vínculo com o Google), o perfil, as
+            estatísticas, as conquistas, o histórico de partidas e os palpites
+            do Desafio Diário. Permanecem os registros das salas (apelido,
+            definições, votos e identificadores técnicos), as denúncias e os
+            banimentos, e os registros técnicos acima. Sem o app, peça por{" "}
+            <Mail /> — detalhes em{" "}
+            <Link to="/delete-account" className="underline">
+              Excluir conta
+            </Link>
+            .
           </p>
         </section>
 
         <section>
           <h2 className="font-display text-lg mb-1">Crianças</h2>
           <p>
-            Verbete é indicado para 13+. Não criamos perfis publicitários e não
-            pedimos dados pessoais sensíveis.
+            O Verbete é destinado a pessoas com 13 anos ou mais. Não criamos
+            perfis publicitários e não pedimos dados pessoais sensíveis.
           </p>
         </section>
 
         <section>
           <h2 className="font-display text-lg mb-1">Seus direitos (LGPD)</h2>
           <p>
-            Você pode pedir acesso, correção, exportação ou exclusão dos seus
-            dados a qualquer momento entrando em contato pelo e-mail{" "}
-            <a className="underline" href="mailto:privacy@verbete.app">
-              privacy@verbete.app
-            </a>
-            . Você também pode excluir a conta direto no jogo (Perfil → Zona de
-            perigo → Excluir conta): apagamos sua conta, e-mail, perfil,
-            estatísticas, conquistas, histórico de partidas e tentativas do
-            desafio diário. Nas salas em que você jogou fica só o apelido usado
-            naquela partida, sem vínculo com a conta.
+            Você pode pedir confirmação do tratamento, acesso, correção,
+            exportação ou exclusão dos seus dados e informações sobre com quem
+            eles são compartilhados, escrevendo para <Mail />.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg mb-1">Mudanças</h2>
+          <p>
+            Quando esta política mudar, a data no topo da página muda junto.
           </p>
         </section>
 
         <section>
           <h2 className="font-display text-lg mb-1">Contato</h2>
           <p>
-            Dúvidas?{" "}
-            <a className="underline" href="mailto:privacy@verbete.app">
-              privacy@verbete.app
-            </a>
-            .
+            Dúvidas? <Mail />.
           </p>
         </section>
       </article>

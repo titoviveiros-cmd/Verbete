@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { CONTACT_EMAIL, contactMailto } from "@/lib/legal";
 
 export const Route = createFileRoute("/support")({
   head: () => ({
@@ -7,7 +8,7 @@ export const Route = createFileRoute("/support")({
       {
         name: "description",
         content:
-          "Central de ajuda do Verbete: perguntas frequentes, contato e como reportar problemas.",
+          "Central de ajuda do Verbete: perguntas frequentes, contato, exclusão de conta e como reportar problemas.",
       },
       { property: "og:title", content: "Suporte — Verbete" },
       {
@@ -20,6 +21,9 @@ export const Route = createFileRoute("/support")({
   component: SupportPage,
 });
 
+// Fatos conferidos no código (27/10/2026): 4 a 12 jogadores contando bots
+// (start_game_min_4_players; Lobby "n/12"), login só por e-mail ou Google
+// (/login), um palpite por hora no Desafio, sem anúncios nem compras.
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Como crio uma sala?",
@@ -27,23 +31,31 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Preciso criar conta para jogar?",
-    a: "Não. O modo convidado funciona sem cadastro. Mas com login (Apple ou Google) seu histórico, conquistas e estatísticas ficam salvos entre dispositivos.",
+    a: "Não. Dá para jogar como convidado, sem cadastro. Com uma conta (e-mail ou Google), seu histórico, conquistas e estatísticas ficam salvos e você pode entrar em outros aparelhos.",
   },
   {
     q: "Quantos jogadores cabem numa sala?",
-    a: "Até 8 jogadores por sala. Há também o modo vs. Bots para jogar sozinho.",
+    a: "De 4 a 12 por sala, contando os bots: o dono da sala pode completar a mesa com bots — e até jogar só com eles.",
   },
   {
     q: "Como funciona a pontuação?",
-    a: "Você ganha pontos acertando a definição verdadeira e ainda mais pontos quando outro jogador vota na sua definição inventada.",
+    a: "Você ganha pontos votando na definição verdadeira e a cada jogador que cai na definição que você inventou. Uma inventada que chega muito perto da verdadeira ganha o bônus 🧠.",
+  },
+  {
+    q: "O que é o Desafio Diário?",
+    a: "Uma palavra rara para você adivinhar o significado. Vale um palpite por hora; a inteligência artificial avalia o quanto o palpite chegou perto.",
   },
   {
     q: "Encontrei uma definição ofensiva. O que faço?",
-    a: "Toque no 🚩 ao lado da definição na fase de votação. Nossa equipe revisa todos os reports e bane jogadores que violam as regras.",
+    a: "Toque na bandeira 🚩 no canto da cédula, na votação. A moderação revisa as denúncias e pode banir quem viola os Termos de Uso.",
+  },
+  {
+    q: "Como denuncio um apelido ou um jogador?",
+    a: 'Na sala de espera ou no fim da partida, toque em "Denunciar jogador", escolha quem e o motivo. O dono da sala também pode remover jogadores.',
   },
   {
     q: "Como excluo minha conta?",
-    a: 'Acesse seu Perfil → Zona de perigo → "Excluir conta". A ação é permanente: apagamos sua conta, perfil, estatísticas, conquistas e histórico de partidas. Nas salas em que você jogou fica só o apelido usado na partida, sem vínculo com a conta.',
+    a: 'No Perfil → Zona de perigo → "Excluir". A ação é permanente: apagamos a conta, o perfil, as estatísticas, as conquistas, o histórico de partidas e os palpites do Desafio. Nas salas em que você jogou ficam o apelido, as definições da partida e identificadores técnicos. Sem o app, veja a página Excluir conta (link abaixo).',
   },
   {
     q: "Posso jogar offline?",
@@ -51,11 +63,11 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "O jogo é gratuito?",
-    a: "Sim, totalmente gratuito. Sem anúncios invasivos e sem mecânicas pay-to-win.",
+    a: "Sim, totalmente gratuito, sem anúncios e sem compras no app.",
   },
   {
-    q: "Qual a classificação etária?",
-    a: "12+. As definições são escritas pelos próprios jogadores e podem conter humor adulto — temos filtros e moderação ativa.",
+    q: "Para qual idade o Verbete é feito?",
+    a: "O Verbete é destinado a pessoas com 13 anos ou mais. As definições são escritas pelos próprios jogadores; há filtros automáticos, denúncia e moderação.",
   },
 ];
 
@@ -77,13 +89,27 @@ function SupportPage() {
 
       <section className="sticker p-4 mb-6">
         <h2 className="font-display text-lg mb-2">📧 Fale com a gente</h2>
-        <p className="text-sm mb-3">Resposta em até 48h úteis.</p>
+        <p className="text-sm mb-3">
+          Escreva para o e-mail abaixo; a resposta chega por ele.
+        </p>
         <a
-          href="mailto:contato@verbete.app?subject=Suporte%20Verbete"
-          className="btn-pop btn-gold inline-block"
+          href={contactMailto("Suporte Verbete")}
+          className="btn-pop btn-gold inline-block max-w-full break-all"
         >
-          contato@verbete.app
+          {CONTACT_EMAIL}
         </a>
+      </section>
+
+      <section className="sticker p-4 mb-6">
+        <h2 className="font-display text-lg mb-2">🗑️ Excluir conta</h2>
+        <p className="text-sm text-muted-foreground">
+          Pelo Perfil do app ou do site, ou por e-mail, sem precisar do app. O
+          que é apagado e o que fica:{" "}
+          <Link to="/delete-account" className="underline text-foreground">
+            Excluir conta
+          </Link>
+          .
+        </p>
       </section>
 
       <section className="mb-6">
@@ -108,9 +134,9 @@ function SupportPage() {
       <section className="sticker p-4">
         <h2 className="font-display text-lg mb-2">🐛 Reportar um bug</h2>
         <p className="text-sm text-muted-foreground">
-          Inclua na mensagem: modelo do aparelho, versão do iOS, código da sala
-          (se aplicável) e o que você estava fazendo quando o problema
-          aconteceu. Prints ajudam muito.
+          Inclua na mensagem: modelo do aparelho, versão do sistema (Android ou
+          o navegador que você usa), código da sala (se aplicável) e o que você
+          estava fazendo quando o problema aconteceu. Prints ajudam muito.
         </p>
       </section>
 
@@ -118,8 +144,11 @@ function SupportPage() {
         <Link to="/privacy" className="underline mr-3">
           Privacidade
         </Link>
-        <Link to="/terms" className="underline">
+        <Link to="/terms" className="underline mr-3">
           Termos
+        </Link>
+        <Link to="/delete-account" className="underline">
+          Excluir conta
         </Link>
       </footer>
     </div>

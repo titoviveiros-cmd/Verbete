@@ -5,7 +5,9 @@
 //
 // TERMS_VERSION = data da "Última atualização" de /terms (um teste amarra
 // as duas): revisão material dos Termos → data nova → novo aceite.
-export const TERMS_VERSION = "2026-05-18";
+// 2026-10-27: conteúdo proibido completo, denúncia de jogador, moderação,
+// IA e licença (rodada 2A da conformidade Google Play). Anterior: 2026-05-18.
+export const TERMS_VERSION = "2026-10-27";
 export const TERMS_STORAGE_KEY = "verbete:terms-accepted";
 /** Identidades lembradas por aparelho (cada logout abre uma anônima nova). */
 const MAX_IDENTITIES = 20;

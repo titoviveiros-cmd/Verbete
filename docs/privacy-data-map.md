@@ -28,3 +28,14 @@
 | Permissões do app Android | INTERNET | INTERNET + VIBRATE (normal, sem prompt) |
 | Chat/blefes sem TTL | gap | **segue gap** (M2): retenção das salas é decisão de produto |
 | E-mail de contato | `privacy@verbete.app` (domínio inexistente) | **pendente do dono**: definir e-mail real |
+
+## Atualização da rodada 2A (2026-10-27)
+
+- Contato oficial: `titoviveiros@hotmail.com` (decisão do Tito, 26/10) em
+  `/privacy`, `/terms`, `/support`, `/download` e `/delete-account`
+  (constante única em `src/lib/legal.ts`). Gate: teste de recebimento
+  pendente.
+- Mapa atualizado e auditado contra as migrations: `docs/exclusao-de-conta.md`
+  (exclusão, o que fica, retenção) e `docs/google-play-data-safety-draft.md`
+  (formulário do Play, SDKs, Gemini). As linhas "Chat/blefes" e "Exclusão"
+  acima estão superadas por esses dois documentos.
