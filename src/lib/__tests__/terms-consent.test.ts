@@ -155,12 +155,20 @@ describe("aceite dos Termos — versão e persistência", () => {
 
   it("registro corrompido ou forjado pela metade não vale", async () => {
     fakeAuth.reset(anon(A));
+    // a versão EM VIGOR: o que reprova é a forma do registro, não a data
+    const { TERMS_VERSION } = await fresh();
     for (const raw of [
       "{quebrado",
       JSON.stringify({ ok: true }),
-      JSON.stringify("2026-05-18"),
-      JSON.stringify({ ids: { [identityKey(A)]: { version: 20260518 } } }),
-      JSON.stringify({ ids: { [A]: { version: "2026-05-18", at: "x" } } }),
+      JSON.stringify(TERMS_VERSION),
+      JSON.stringify({
+        ids: {
+          [identityKey(A)]: {
+            version: Number(TERMS_VERSION.replaceAll("-", "")),
+          },
+        },
+      }),
+      JSON.stringify({ ids: { [A]: { version: TERMS_VERSION, at: "x" } } }),
     ]) {
       localStorage.setItem(KEY, raw);
       expect((await fresh()).hasAcceptedTerms(), raw).toBe(false);

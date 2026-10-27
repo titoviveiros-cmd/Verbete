@@ -714,6 +714,41 @@ test("E: revisão dos Termos (versão nova) pede o aceite de novo", async ({
   await expect(consent(page)).not.toBeChecked();
 });
 
+test("E2: quem aceitou os Termos de 18/05/2026 aceita a revisão de 27/10/2026 uma vez, antes do próximo conteúdo", async ({
+  page,
+  browser,
+}) => {
+  expect(TERMS_VERSION).toBe("2026-10-27");
+  const log = await installSupabaseMock(page, homeBackend(false));
+  await seed(page, { [KEY]: acceptedFor([BOOT_ID], "2026-05-18") });
+  await page.goto("/");
+  const nick = await openHomeForm(page, /Criar sala/);
+  await nick.fill("Bia");
+  await expect(consent(page)).toBeVisible();
+  await expect(consent(page)).not.toBeChecked();
+  await page.getByRole("button", { name: /Criar!/ }).click();
+  await expect(page.getByText(ALERT)).toBeVisible();
+  await page.waitForTimeout(400); // nada pendente sai depois do aviso
+  expect(calls(log, "create_room_with_host"), "sem o novo aceite").toBe(0);
+  expect((await entryOf(page, BOOT_ID))?.version).toBe("2026-05-18");
+  await consent(page).check();
+  await page.getByRole("button", { name: /Criar!/ }).click();
+  await expect
+    .poll(() => calls(log, "create_room_with_host"), { timeout: 10_000 })
+    .toBeGreaterThan(0);
+  expect((await entryOf(page, BOOT_ID))?.version).toBe("2026-10-27");
+  // uma vez só: reabrir o app (mesmo armazenamento) não pede de novo
+  const ctx = await browser.newContext({
+    storageState: await page.context().storageState(),
+  });
+  const again = await ctx.newPage();
+  await installSupabaseMock(again, homeBackend(false));
+  await again.goto("/");
+  await openHomeForm(again, /Criar sala/);
+  await expect(consent(again)).toHaveCount(0);
+  await ctx.close();
+});
+
 test("acessibilidade (WCAG 2.1 AA) da caixa, normal e com o aviso", async ({
   page,
 }) => {
