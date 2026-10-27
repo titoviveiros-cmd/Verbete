@@ -15,6 +15,7 @@ export function signupDisplayName(
   if (!name || name.includes("@")) return undefined;
   const mail = email.trim().toLowerCase();
   const lower = name.toLowerCase();
-  if (mail && (lower === mail || lower === mail.split("@")[0])) return undefined;
+  if (mail && (lower === mail || lower === mail.split("@")[0]))
+    return undefined;
   return name;
 }

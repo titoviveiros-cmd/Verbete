@@ -185,7 +185,8 @@ function PrivacyPage() {
             automaticamente 30 dias depois do encerramento (e da última
             atividade nela), com apelidos, definições, votos, reações e as
             mensagens antigas. O chat das salas foi desativado em outubro de
-            2026. Sala em andamento nunca é apagada. Não publicamos esse conteúdo fora do jogo.
+            2026. Sala em andamento nunca é apagada. Não publicamos esse
+            conteúdo fora do jogo.
           </p>
         </section>
 
@@ -194,13 +195,13 @@ function PrivacyPage() {
           <p>
             Uma denúncia guarda o trecho ou o apelido denunciado, a sala, a
             rodada e os identificadores de quem denunciou e de quem foi
-            denunciado — esse retrato continua mesmo depois que a sala é apagada.
-            Uma denúncia resolvida ou descartada é apagada automaticamente 180
-            dias depois da resolução; a pendente fica até ser analisada. Um
-            banimento guarda o identificador do aparelho e/ou da conta, o motivo
-            e o prazo, e não é apagado automaticamente: o temporário deixa de
-            valer no fim do prazo; o permanente continua valendo. Só a moderação
-            tem acesso a esses registros.
+            denunciado — esse retrato continua mesmo depois que a sala é
+            apagada. Uma denúncia resolvida ou descartada é apagada
+            automaticamente 180 dias depois da resolução; a pendente fica até
+            ser analisada. Um banimento guarda o identificador do aparelho e/ou
+            da conta, o motivo e o prazo, e não é apagado automaticamente: o
+            temporário deixa de valer no fim do prazo; o permanente continua
+            valendo. Só a moderação tem acesso a esses registros.
           </p>
         </section>
 

@@ -248,7 +248,9 @@ describe("retenção — Política e Excluir conta dizem os prazos implementados
 
   it("Excluir conta: salas 30 d, denúncias 180 d, convidado 30 d", () => {
     const d = read(ROUTES.deleteAccount);
-    expect(d).toMatch(/apagados automaticamente 30 dias depois que a sala é encerrada/);
+    expect(d).toMatch(
+      /apagados automaticamente 30 dias depois que a sala é encerrada/,
+    );
     expect(d).toMatch(/apagada 180 dias depois da resolução/);
     expect(d).toMatch(/30 dias sem uso/);
     expect(d).not.toMatch(/não são apagados automaticamente/);
@@ -259,6 +261,8 @@ describe("retenção — Política e Excluir conta dizem os prazos implementados
     expect(m.match(/now\(\) - interval '30 days'/g)).toHaveLength(2);
     expect(m.match(/now\(\) - interval '180 days'/g)).toHaveLength(1);
     expect(m).not.toMatch(/DELETE FROM public\.banned_players/);
-    expect(read("scripts/run-integration.mjs")).toMatch(/test-data-retention\.mjs/);
+    expect(read("scripts/run-integration.mjs")).toMatch(
+      /test-data-retention\.mjs/,
+    );
   });
 });

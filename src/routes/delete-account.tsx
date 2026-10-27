@@ -82,8 +82,8 @@ function DeleteAccountPage() {
           <p className="mt-2">
             Joga como convidado, sem conta? A sessão de convidado também pode
             ser excluída no Perfil, no mesmo aparelho ou navegador, com os
-            mesmos efeitos. Sem isso, ela é apagada automaticamente depois de
-            30 dias sem uso.
+            mesmos efeitos. Sem isso, ela é apagada automaticamente depois de 30
+            dias sem uso.
           </p>
         </section>
 
@@ -135,8 +135,8 @@ function DeleteAccountPage() {
               reações da última partida de cada sala, com identificadores
               técnicos — o código de jogador do aparelho e o código interno da
               sessão ou da conta, que deixa de corresponder a uma conta. Esses
-              registros são apagados automaticamente 30 dias depois que a sala
-              é encerrada.
+              registros são apagados automaticamente 30 dias depois que a sala é
+              encerrada.
             </li>
             <li>
               <strong>Moderação:</strong> denúncias feitas por você ou sobre

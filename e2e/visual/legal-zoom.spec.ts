@@ -116,7 +116,11 @@ test("navegar entre páginas de leitura mantém o zoom liberado", async ({
   test.setTimeout(60_000);
   await openReading(page, "/privacy", /Política de Privacidade/);
   await page.evaluate(() => {
-    (document.querySelector('main a[href="/delete-account"], a[href="/delete-account"]') as HTMLElement).click();
+    (
+      document.querySelector(
+        'main a[href="/delete-account"], a[href="/delete-account"]',
+      ) as HTMLElement
+    ).click();
   });
   await expect(page).toHaveURL(/\/delete-account$/);
   await expect(

@@ -24,7 +24,9 @@ describe("signupDisplayName", () => {
   });
 
   it("nome escolhido passa, aparado e com no máximo 24 caracteres", () => {
-    expect(signupDisplayName("  Mestre Verbete ", EMAIL)).toBe("Mestre Verbete");
+    expect(signupDisplayName("  Mestre Verbete ", EMAIL)).toBe(
+      "Mestre Verbete",
+    );
     expect(signupDisplayName("Maria", EMAIL)).toBe("Maria");
     expect(signupDisplayName("x".repeat(40), EMAIL)).toBe("x".repeat(24));
   });
