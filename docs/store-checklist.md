@@ -98,15 +98,15 @@ IPv4/IPv6 do loopback).
      Playwright nas telas de votação/revelação/pódio).
 4. Classificação etária (questionário IARC): sem violência; interação entre
    usuários ON (chat) → provavelmente L/Everyone 10+ por "interação".
-5. Segurança dos dados: coleta e-mail (opcional, login), identificadores
-   anônimos (sessão anônima), conteúdo do jogo (definições, chat, palpites
-   do diário — compartilhados com o Google Gemini para bots e julgamento de
-   semelhança), registros de erro anônimos; dados criptografados em
-   trânsito; exclusão de conta no próprio app; sem anúncios. Permissões do
-   app: internet e vibração (normal, sem prompt). Link da política (texto
-   alinhado em 03/10): https://jogo.verbete.workers.dev/privacy
-   — **pendente: e-mail de contato real** (os `@verbete.app` da política
-   não existem).
+5. Segurança dos dados: rascunho completo, por tipo de dado e com o nível
+   de certeza, em `docs/google-play-data-safety-draft.md` (rodada 2A,
+   27/10/2026 — o chat foi removido em 20/10; o Gemini recebe definições e
+   palpites sem identificadores). Permissões do app: internet e vibração
+   (normal, sem prompt). Links (publicar o site antes):
+   https://jogo.verbete.workers.dev/privacy e, para o campo de exclusão de
+   conta, https://jogo.verbete.workers.dev/delete-account. Contato oficial:
+   `titoviveiros@hotmail.com` (decisão do Tito, 26/10) — **gate: teste de
+   recebimento ainda não documentado**.
 6. Público-alvo: 13+ (evita exigências de apps infantis).
 7. Upload do AAB no trilho **Teste interno** primeiro → testar. Para a
    **Produção**, gerar um AAB NOVO com `VITE_RELEASE_CHANNEL=production` e

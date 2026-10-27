@@ -1,36 +1,37 @@
-# Termos de Uso — revisão pendente (aprovação do Tito)
+# Termos de Uso — revisão (situação em 27/10/2026)
 
-> Registrado em 26/10/2026, na rodada do aceite explícito (branch
-> `compliance/play-ugc-consent`). O texto de `/terms` **não** foi alterado:
-> esta é só a lista do que a política de conteúdo gerado por usuários (UGC) do
-> Google Play e a auditoria de prontidão apontaram. Nada aqui inventa o
-> responsável pelos dados, o prazo de retenção ou o e-mail de contato.
+> Lista criada em 26/10/2026 (rodada do aceite explícito, PR #26) e aplicada
+> na rodada 2A (branch `compliance/play-legal-data`): `/terms` passou para a
+> versão **27 de outubro de 2026** (`TERMS_VERSION = "2026-10-27"`). O texto
+> continua sujeito à **aprovação do Tito** no PR. Nada aqui inventa o
+> responsável pelos dados, o prazo de retenção ou a idade mínima.
 
-## O que o aceite desta rodada já resolve
+## O que o aceite já resolve (PR #26)
 
 - Aceite **explícito** (caixa desmarcada + links) antes de criar apelido,
-  definição ou nome da conta — não vale mais "ao usar você concorda".
+  definição, nome da conta ou palpite — por identidade da sessão.
 - A versão aceita é a data da "Última atualização" de `/terms`
-  (`TERMS_VERSION` em `src/lib/terms-consent.ts`; um teste exige que as duas
-  andem juntas). **Mudar a data = todos aceitam de novo.**
+  (`TERMS_VERSION` em `src/lib/terms-record.ts`; um teste exige que as duas
+  andem juntas). **Mudar a data = todos aceitam de novo** — com a versão
+  2026-10-27, quem aceitou a de 18/05/2026 aceita uma vez antes do próximo
+  conteúdo (teste visual "E2").
 
-## O que os Termos de 18/05/2026 ainda precisam (proposta)
+## Situação de cada item
 
-| # | Tema | Hoje | Proposta (texto a aprovar) |
-|---|---|---|---|
-| 1 | Conteúdo proibido | discriminação, sexual envolvendo menores, ameaças/assédio, spam/automação/bugs, acesso indevido | incluir: conteúdo sexual explícito (qualquer), discurso de ódio, violência gráfica ou incitação, incentivo a automutilação, atividades ilegais, dados pessoais de terceiros, personificação, golpes e links |
-| 2 | Denúncia e moderação | "filtros automáticos" e "podemos remover/banir" | descrever a 🚩 (denúncia de definição, inclusive as dos bots), a análise humana, as sanções (remoção, banimento temporário ou definitivo por conta e/ou aparelho) e como contestar |
-| 3 | Inteligência artificial | não citada | definições e palpites processados pelo Google Gemini (bots e julgamento de semelhança); conteúdo gerado por IA também pode ser denunciado |
-| 4 | Licença do conteúdo (§4) | só "enquanto a partida ocorre" | alinhar com o que acontece: fica guardado com o registro da sala e passa pela IA — o **prazo** depende da decisão de retenção (pendente do dono) |
-| 5 | Aceitação (§1) | "ao usar você concorda" | citar o aceite pela caixa e o novo aceite a cada revisão relevante |
-| 6 | Idade (§2) | "recomendado para 13+" | decidir se 13+ é exigência (afeta o questionário de público-alvo do Play) |
-| 7 | Contato (§8) | `hello@verbete.app` (domínio sem MX: não recebe) | trocar quando o dono indicar um e-mail real |
-| 8 | Funções que saíram | — | conferir menções a chat (removido em 20/10) também na Política de Privacidade |
+| # | Tema | Situação |
+|---|---|---|
+| 1 | Conteúdo proibido | **aplicado** — sexual explícito, menores, ódio, ameaças/assédio, violência gráfica/incitação, automutilação, atividades ilícitas, dados de terceiros, personificação, golpes, spam, links, bugs/automação, acesso indevido |
+| 2 | Denúncia e moderação | **aplicado** — 🚩 das cédulas (inclusive bots), "Denunciar jogador" (novo), filtros, remoção pelo dono da sala, banimento por prazo ou definitivo (aparelho e/ou conta), contestação pelo e-mail |
+| 3 | Inteligência artificial | **aplicado** — Gemini cria as definições dos bots e julga semelhança/Desafio; textos enviados sem identificadores; conteúdo da IA também é denunciável |
+| 4 | Licença do conteúdo | **aplicado sem prazo** — guardar, exibir, processar (inclusive IA), moderar, "enquanto estiver guardado"; o **prazo** depende da retenção das salas (pendente) |
+| 5 | Aceitação | **aplicado** — caixa de aceite e novo aceite a cada revisão relevante |
+| 6 | Idade | **pendente do dono** — mantido "Recomendado para 13 anos ou mais"; o Suporte deixou de dizer 12+ (Opção A: idade mínima de 13; Opção B: 13+ só recomendação) |
+| 7 | Contato | **aplicado** — `titoviveiros@hotmail.com` (gate: teste de recebimento pendente) |
+| 8 | Chat removido | **aplicado** — Termos e Suporte sem chat; a Política diz que o chat foi desativado e que mensagens antigas seguem guardadas |
 
-## Como aplicar quando aprovado
+## Ainda depende do proprietário
 
-1. O dono aprova o texto (e define idade, retenção e contato).
-2. Um PR troca `src/routes/terms.tsx`, a data "Última atualização" e
-   `TERMS_VERSION` (o teste de versão falha se só um dos dois mudar).
-3. Depois do deploy, todos os aparelhos aceitam a nova versão uma vez, no
-   próximo conteúdo que criarem.
+- identidade formal do responsável (controlador) — não citada;
+- prazo de retenção das salas (e, com ele, o prazo da licença);
+- idade mínima × recomendação;
+- lei aplicável/foro (não incluídos — decisão nova, não estava no texto).
