@@ -160,14 +160,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         {
           property: "og:image:alt",
           content:
-            "Verbete: a marca V, o Livro Mascote e cédulas de votação na noite roxa — Invente. Engane. Descubra a verdade.",
+            "Verbete: a marca V com o livro aberto, o Livro Mascote e cédulas de votação sobre fundo creme — Invente. Engane. Descubra a verdade.",
         },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:image", content: `${APP_URL}/${SOCIAL_IMAGE}` },
         {
           name: "twitter:image:alt",
           content:
-            "Verbete: a marca V, o Livro Mascote e cédulas de votação na noite roxa — Invente. Engane. Descubra a verdade.",
+            "Verbete: a marca V com o livro aberto, o Livro Mascote e cédulas de votação sobre fundo creme — Invente. Engane. Descubra a verdade.",
         },
         { property: "og:site_name", content: "Verbete" },
         { property: "og:locale", content: "pt_BR" },
