@@ -19,7 +19,8 @@ if (images.length === 0) {
   );
   process.exit(1);
 }
-const OUT = resolve(process.cwd(), "resources", "social-preview-sim.png");
+// SIM_OUT troca o arquivo de saída (ex.: comparativo de uma rodada).
+const OUT = resolve(process.cwd(), process.env.SIM_OUT ?? "resources/social-preview-sim.png");
 mkdirSync(resolve(process.cwd(), "resources"), { recursive: true });
 
 const TITLE = "Verbete: blefe com palavras raras";

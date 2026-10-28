@@ -61,5 +61,31 @@ describe(`public/${SOCIAL_IMAGE}`, () => {
 
   it("a prévia antiga segue em public/ (links e caches que ainda apontam para ela)", () => {
     expect(existsSync(resolve(ROOT, "public/og-verbete.jpg"))).toBe(true);
+    expect(
+      existsSync(resolve(ROOT, "public/verbete-social-v2-1200x630.jpg")),
+    ).toBe(true);
+  });
+
+  it("é a v3 do tema claro (28/10/2026), e o texto alternativo descreve a arte nova", () => {
+    expect(SOCIAL_IMAGE).toBe("verbete-social-v3-1200x630.jpg");
+    const root = readFileSync(resolve(ROOT, "src/routes/__root.tsx"), "utf8");
+    expect(root).not.toMatch(/noite roxa/);
+    expect(root.match(/fundo creme/g)?.length).toBe(2); // og:image:alt e twitter:image:alt
+  });
+
+  it("é JPEG RGB (3 componentes, sem transparência)", () => {
+    let i = 2;
+    let comps = 0;
+    while (i + 9 < jpg.length) {
+      if (jpg[i] !== 0xff) break;
+      const m = jpg.readUInt8(i + 1);
+      const len = jpg.readUInt16BE(i + 2);
+      if (m >= 0xc0 && m <= 0xc3) {
+        comps = jpg.readUInt8(i + 9);
+        break;
+      }
+      i += 2 + len;
+    }
+    expect(comps).toBe(3);
   });
 });
