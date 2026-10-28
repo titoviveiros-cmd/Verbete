@@ -192,11 +192,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           rel: "stylesheet",
           href: "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap",
         },
-        { rel: "icon", type: "image/png", href: "/favicon.png" },
+        {
+          rel: "icon",
+          type: "image/png",
+          sizes: "64x64",
+          href: "/favicon.png",
+        },
+        // Ícone da Tela de Início do iPhone: arte oficial (icon-512 da Play),
+        // nome versionado para o Safari não reaproveitar o "V" cinza genérico
+        // que ele gerava enquanto os PNGs não existiam (404 até 28/10/2026).
+        // /apple-touch-icon.png segue no ar (URL que o Safari tenta sozinho).
         {
           rel: "apple-touch-icon",
           sizes: "180x180",
-          href: "/apple-touch-icon.png",
+          href: "/apple-touch-icon-verbete-v1.png",
         },
         { rel: "manifest", href: "/manifest.webmanifest" },
       ],
