@@ -106,6 +106,16 @@ export function isSemanticMatch(score: number): boolean {
   return score >= SEMANTIC_THRESHOLD;
 }
 
+/**
+ * "🤏 Quase lá!" do multiplayer (2.1.4): nota de NEAR_MISS_MIN até abaixo do
+ * corte. Só um aviso privado ao autor — sem bônus; o corte do bônus não muda.
+ */
+export const NEAR_MISS_MIN = 50;
+
+export function nearMissIds(scores: ReadonlyMap<string, number>): string[] {
+  return [...scores].filter(([, s]) => s >= NEAR_MISS_MIN && s < SEMANTIC_THRESHOLD).map(([id]) => id);
+}
+
 export function parseDailyScore(content: string): number | null {
   return parseJudgeScores(content, new Set([DAILY_ID]))?.get(DAILY_ID) ?? null;
 }

@@ -9,6 +9,7 @@ import {
   submitDefinition,
   applyWritingTimeoutOrAdvance,
   DuplicateDefinitionError,
+  DefinitionRejectedError,
   type Definition,
   type Player,
   type Room,
@@ -18,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Mascot } from "@/components/Mascot";
 import { playSubmit, playUITap } from "@/lib/sound";
 import { writingTimerMax } from "@/lib/game-times";
+import { DEFINITION_ISSUE_MESSAGE, definitionIssue } from "@/lib/text-filter";
 import { shuffleAdvanceDelayMs } from "@/lib/transition-floor";
 import { PHASE_ANNOUNCER_TOTAL_MS } from "@/components/room/PhaseAnnouncer";
 import {
@@ -61,6 +63,9 @@ export function WriteDefinition({
   isDeputy: boolean;
 }) {
   const [text, setText] = useState("");
+  // Aviso discreto do filtro (2.1.4): palavra da rodada, palavrão ou link —
+  // o texto fica no campo, sem modal e sem parar o cronômetro.
+  const [warning, setWarning] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -351,6 +356,11 @@ export function WriteDefinition({
   const handleSubmit = async ({ keyboard = false } = {}) => {
     if (!text.trim()) return;
     if (!me || !word) return;
+    const issue = definitionIssue(text, word.word);
+    if (issue) {
+      setWarning(DEFINITION_ISSUE_MESSAGE[issue]);
+      return;
+    }
     // Enter: o aviso aparece sem tirar o foco do campo (um espaço digitado
     // em seguida marcaria a caixa sem querer); no botão, o foco vai à caixa.
     if (!terms.confirm({ focus: !keyboard })) return;
@@ -367,6 +377,10 @@ export function WriteDefinition({
     } catch (e) {
       console.error("submitDefinition failed", e);
       setSubmitted(false);
+      if (e instanceof DefinitionRejectedError) {
+        setWarning(e.message);
+        return;
+      }
       // TermsRequiredError: a identidade da sessão não aceitou (trocou de
       // conta entre a tela e o envio, ou ainda carregava no clique)
       if (
@@ -605,7 +619,10 @@ export function WriteDefinition({
                 <textarea
                   id="definition"
                   value={text}
-                  onChange={(e) => setText(e.target.value.slice(0, 140))}
+                  onChange={(e) => {
+                    setText(e.target.value.slice(0, 140));
+                    if (warning) setWarning(null);
+                  }}
                   onKeyDown={(e) => {
                     if (
                       e.key === "Enter" &&
@@ -621,6 +638,16 @@ export function WriteDefinition({
                   placeholder="escreva sua definicao mirabolante..."
                   className="field w-full min-h-[118px] lg:min-h-[150px] px-4 py-4 font-body text-base lg:text-lg leading-relaxed resize-none"
                 />
+
+                {warning && (
+                  <p
+                    role="alert"
+                    data-testid="definition-warning"
+                    className="text-sm font-bold text-pink px-1"
+                  >
+                    {warning}
+                  </p>
+                )}
 
                 <div className="flex justify-between text-xs font-bold text-muted-foreground tabular-nums px-1">
                   <span

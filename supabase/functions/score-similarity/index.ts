@@ -7,7 +7,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
-import { JUDGE_BUDGET, judgeCandidates } from "../_shared/semantic.ts";
+import { JUDGE_BUDGET, judgeCandidates, nearMissIds } from "../_shared/semantic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -204,6 +204,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // "🤏 Quase lá!" (2.1.4): nota 50–79 vira só uma marca privada ao autor,
+    // sem bônus. Falhou ao gravar? Só aviso: o julgamento e o +3 já valem.
+    const nearMiss = nearMissIds(judged.scores);
+    let nearMissError: string | undefined;
+    if (nearMiss.length > 0) {
+      const { error } = await admin.rpc("apply_similarity_near_miss", {
+        p_room_id: roomId,
+        p_round: round,
+        p_definition_ids: nearMiss,
+      });
+      if (error) {
+        nearMissError = error.code ?? "rpc_error";
+        console.warn("apply_similarity_near_miss failed", error.code, error.message);
+      }
+    }
+
     // Julgada: marca a rodada AGORA (2026-10-24). Antes só o reenvio do banco
     // marcava, no minuto seguinte — e na última rodada a partida já tinha
     // acabado: o cron registrava desistência (room_finished) de um julgamento
@@ -222,6 +238,8 @@ Deno.serve(async (req) => {
         fn: "score-similarity",
         candidates: candidates.length,
         matched: matches.length,
+        near_miss: nearMiss.length,
+        ...(nearMissError ? { near_miss_error: nearMissError } : {}),
         max_score: Math.max(-1, ...judged.scores.values()),
         attempts: judged.attempts,
         tries: tries.join(","),

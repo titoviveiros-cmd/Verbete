@@ -9,6 +9,8 @@ import { clearRoomOptimistic } from "./transition-floor";
 import { nudgeRoundSync } from "./sync-nudge";
 import {
   sanitizeDefinition,
+  definitionIssue,
+  DEFINITION_ISSUE_MESSAGE,
   sanitizeNickname,
   humanizeMeaning,
   textSimilarity,
@@ -610,6 +612,14 @@ export async function chooseWord(
     clearRoomOptimistic();
 }
 
+/** Definição recusada pelo filtro (2.1.4): aviso discreto, texto mantido. */
+export class DefinitionRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DefinitionRejectedError";
+  }
+}
+
 export class DuplicateDefinitionError extends Error {
   constructor(
     message = "Já existe uma definição igual a essa nesta rodada. Reescreva com suas próprias palavras.",
@@ -640,7 +650,11 @@ export async function submitDefinition(
   // (A definição VERDADEIRA é inserida só pelo servidor, em
   // advance_writing_to_voting — o client nunca a envia.)
   await assertTermsAccepted();
-  const clean = sanitizeDefinition(text, 140, word);
+  // 2.1.4: nada é mascarado — palavra da rodada, palavrão ou link recusam o
+  // envio (o texto fica no campo para corrigir); o servidor confere de novo.
+  const issue = definitionIssue(text, word);
+  if (issue) throw new DefinitionRejectedError(DEFINITION_ISSUE_MESSAGE[issue]);
+  const clean = sanitizeDefinition(text, 140);
   // Dedup de texto agora é 100% server-side (submit_definition devolve
   // reason 'duplicate_definition') — o client não lê mais as definições
   // da rodada (Fase 1/S1).
@@ -677,6 +691,13 @@ export async function submitDefinition(
     if (data && (data as any).ok === false) {
       if ((data as any).reason === "duplicate_definition")
         throw new DuplicateDefinitionError();
+      const reason = (data as { reason?: string }).reason;
+      if (reason === "masked_text")
+        throw new DefinitionRejectedError("⚠️ Reescreva sem asteriscos.");
+      if (reason === "reveals_word")
+        throw new DefinitionRejectedError(
+          DEFINITION_ISSUE_MESSAGE.reveals_word,
+        );
       if ((data as any).reason === "too_similar")
         throw new DuplicateDefinitionError(
           "✋ Ficou muito parecida com outra definição desta rodada — muda umas palavras!",

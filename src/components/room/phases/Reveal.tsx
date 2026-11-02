@@ -371,21 +371,31 @@ function RevealImpl({
   // Bônus 🧠 "chegou perto da verdade": o juiz de IA pontua segundos após a
   // virada — re-consulta get_room_reveal para o badge +3 entrar ao vivo.
   const [nearTruthIds, setNearTruthIds] = useState<Set<string>>(new Set());
+  // "🤏 Quase lá!" (nota 50–79 do mesmo juiz, sem bônus): marca privada que só
+  // o servidor entrega, e só ao autor; chega no mesmo ritmo do +3.
+  const [myNearMiss, setMyNearMiss] = useState(false);
   useEffect(() => {
     setNearTruthIds(new Set());
+    setMyNearMiss(false);
     let alive = true;
     let tries = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const fetchNear = async () => {
       tries++;
       const { supabase } = await import("@/integrations/supabase/client");
-      const { data } = await supabase.rpc("get_room_reveal", {
-        p_room_id: room.id,
-      });
+      const [{ data }, near] = await Promise.all([
+        supabase.rpc("get_room_reveal", { p_room_id: room.id }),
+        // Servidor sem a função (antes da migration) = erro = sem aviso.
+        supabase.rpc("get_my_near_miss", {
+          p_room_id: room.id,
+          p_player_id: myId,
+        }),
+      ]);
       if (!alive) return;
       const ids: string[] =
         (data as { near_truth_ids?: string[] } | null)?.near_truth_ids ?? [];
       if (ids.length > 0) setNearTruthIds(new Set(ids));
+      if (near.data === true) setMyNearMiss(true);
       // A lista é da SALA inteira (bug da sala 7879): consulta até o fim.
       if (tries < 18) timer = setTimeout(fetchNear, 2000);
     };
@@ -394,7 +404,7 @@ function RevealImpl({
       alive = false;
       if (timer) clearTimeout(timer);
     };
-  }, [room.id, room.current_round]);
+  }, [room.id, room.current_round, myId]);
   // Chip de quem acertou = TOTAL da rodada (pedido 2026-07-21): +3 do acerto,
   // +3 se o próprio blefe foi quase-verdade e +1 por voto no próprio blefe.
   const roundExtraByPlayer = useMemo(() => {
@@ -720,6 +730,16 @@ function RevealImpl({
                           <span className="whitespace-nowrap font-bold">
                             +3 pts
                           </span>
+                        </motion.p>
+                      )}
+                      {mine && myNearMiss && !nearTruthIds.has(d.id) && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          data-testid="near-miss"
+                          className="mt-2 text-[12px] font-display text-muted-foreground"
+                        >
+                          🤏 Quase lá! Faltou precisão.
                         </motion.p>
                       )}
                       {dVoters.length > 0 && (

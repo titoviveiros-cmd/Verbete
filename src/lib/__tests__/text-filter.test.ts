@@ -5,6 +5,8 @@ import {
   sanitizeNickname,
   humanizeMeaning,
   wellFormedDefinition,
+  revealsWord,
+  definitionIssue,
 } from "@/lib/text-filter";
 
 describe("normalizeForGame", () => {
@@ -27,49 +29,76 @@ describe("sanitizeNickname", () => {
   });
 });
 
-describe("sanitizeDefinition", () => {
+describe("sanitizeDefinition (2.1.4: só normalização, nunca mascara)", () => {
   it("normaliza, colapsa espaços e corta no tamanho", () => {
     expect(sanitizeDefinition("  Livro   Antigo  ")).toBe("livro antigo");
     expect(sanitizeDefinition("x".repeat(200)).length).toBeLessThanOrEqual(140);
   });
-  it("substitui links", () => {
-    expect(sanitizeDefinition("veja https://x.com/abc agora")).toBe(
-      "veja [link] agora",
+  it("remove invisíveis e nunca insere asteriscos", () => {
+    expect(sanitizeDefinition("pes​soa que guia")).toBe("pessoa que guia");
+    expect(sanitizeDefinition("que PORRA é essa")).not.toContain("*");
+    expect(sanitizeDefinition("veja https://x.com agora")).not.toContain(
+      "[link]",
     );
   });
-  it("censura palavrões com asteriscos", () => {
-    expect(sanitizeDefinition("que PORRA é essa")).toBe("que ***** e essa");
-  });
+});
 
-  describe("anti-cola da palavra da rodada", () => {
-    it("ocorrência direta (com acento/maiúscula) vira ***", () => {
-      const out = sanitizeDefinition("é a FAZEDA mesmo", 140, "fazeda");
-      expect(out).not.toContain("fazeda");
-      expect(out).toContain("***");
-    });
-    it("palavra separada por pontos é detectada", () => {
-      const out = sanitizeDefinition("f.a.z.e.d.a demais", 140, "fazeda");
-      expect(out.replace(/[^a-z0-9]/g, "")).not.toContain("fazeda");
-      expect(out).toContain("***");
-    });
-    it("zero-width não disfarça a palavra", () => {
-      const out = sanitizeDefinition("fa​zeda pura", 140, "fazeda");
-      expect(out).not.toContain("fazeda");
-    });
-    it("plural/raiz é pego (pindaíbas ~ pindaíba)", () => {
-      const out = sanitizeDefinition(
-        "são as pindaibas do sertão",
-        140,
-        "pindaíba",
-      );
-      expect(out).not.toContain("pindaiba");
-      expect(out).toContain("***");
-    });
-    it("texto inocente passa intacto", () => {
-      expect(sanitizeDefinition("livro antigo e volumoso", 140, "fazeda")).toBe(
-        "livro antigo e volumoso",
-      );
-    });
+describe("revealsWord (anti-cola sem falso positivo)", () => {
+  it("sala 5873: 'ciceronear' revela 'cicerone' (derivada que começa pela palavra)", () => {
+    expect(
+      revealsWord("pessoa responsável por ciceronear, coordenar", "cicerone"),
+    ).toBe(true);
+  });
+  it.each([
+    ["é a FAZEDA mesmo", "fazeda"],
+    ["f.a.z.e.d.a demais", "fazeda"],
+    ["fa-ze-da pura", "fazeda"],
+    ["f a z e d a pura", "fazeda"],
+    ["fa​zeda pura", "fazeda"],
+    ["são as pindaíbas do sertão", "pindaíba"],
+    ["Rapapé total", "rapapé"],
+    ["um ad hoc qualquer", "ad hoc"],
+  ])("pega a tentativa: %s", (t, w) => {
+    expect(revealsWord(t, w)).toBe(true);
+  });
+  it.each([
+    ["peixe amarelo e grande", "mar"],
+    ["pessoa responsavel por guiar visitantes", "guia"],
+    ["o ato de liderar outras pessoas", "lider"],
+    ["tecido grosso usado nas velas", "teci"],
+    ["cerimonia de mesuras na corte", "rapapé"],
+    ["tecido de ab usado em velas", "ab"],
+    ["marido ciumento", "mar"],
+    ["carroça de madeira", "carro"],
+  ])("não acusa texto legítimo: %s", (t, w) => {
+    expect(revealsWord(t, w)).toBe(false);
+  });
+});
+
+describe("definitionIssue (recusa clara em vez de mascarar)", () => {
+  it("palavra da rodada, palavrão e link", () => {
+    expect(definitionIssue("um cicerone de museu", "cicerone")).toBe(
+      "reveals_word",
+    );
+    expect(definitionIssue("que porra é essa", "cicerone")).toBe(
+      "blocked_word",
+    );
+    expect(definitionIssue("veja https://x.com", "cicerone")).toBe("link");
+    expect(definitionIssue("veja www.x.com", "cicerone")).toBe("link");
+  });
+  it("texto legítimo com acento e pontuação passa", () => {
+    expect(
+      definitionIssue(
+        "guia de turistas; conduz visitas, explica tudo!",
+        "cicerone",
+      ),
+    ).toBeNull();
+    expect(definitionIssue("pessoa que guia", "cicerone")).toBeNull();
+  });
+  it("chamado repetido não fica preso no estado do regex de link", () => {
+    expect(definitionIssue("veja https://x.com", "zz")).toBe("link");
+    expect(definitionIssue("veja https://x.com", "zz")).toBe("link");
+    expect(definitionIssue("texto normal", "zz")).toBeNull();
   });
 });
 
