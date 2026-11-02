@@ -1156,6 +1156,10 @@ export type Database = {
         }[];
       };
       get_my_daily_review: { Args: Record<PropertyKey, never>; Returns: Json };
+      get_my_near_miss: {
+        Args: { p_player_id: string; p_room_id: string };
+        Returns: boolean;
+      };
       get_or_create_daily_challenge: {
         Args: { p_date?: string };
         Returns: Json;

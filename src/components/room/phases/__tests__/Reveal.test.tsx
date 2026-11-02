@@ -248,6 +248,74 @@ describe("verdade primeiro", () => {
     rpc.mockResolvedValue({ data: { near_truth_ids: [] } });
   });
 
+  // 2.1.4: nota 50–79 → aviso privado, sem bônus. O servidor só responde
+  // true ao autor; a tela ainda o mostra só no cartão do próprio blefe.
+  const nearMissRpc = (mine: boolean | null, near: string[] = []) =>
+    rpc.mockImplementation((async (name: string) =>
+      name === "get_my_near_miss"
+        ? { data: mine }
+        : { data: { near_truth_ids: near } }) as never);
+
+  it("🤏 'Quase lá! Faltou precisão.' só no MEU blefe, sem ponto extra", async () => {
+    nearMissRpc(true);
+    mount();
+    await tick(12_000);
+    const tags = region().querySelectorAll('[data-testid="near-miss"]');
+    expect(tags).toHaveLength(1);
+    expect(tags[0]!.textContent).toBe("🤏 Quase lá! Faltou precisão.");
+    expect(tags[0]!.closest("li")!.textContent).toContain("canoa indígena");
+    expect(region().querySelectorAll('[data-near-truth="1"]')).toHaveLength(0);
+    expect(
+      rpc.mock.calls.some(
+        (c) =>
+          (c as unknown[])[0] === "get_my_near_miss" &&
+          (c as unknown[])[1] &&
+          ((c as unknown[])[1] as { p_player_id: string }).p_player_id ===
+            "p_me",
+      ),
+    ).toBe(true);
+    rpc.mockReset();
+    rpc.mockResolvedValue({ data: { near_truth_ids: [] } });
+  });
+
+  it("🤏 nada quando o servidor não marca, falha (null) ou o blefe ganhou o +3", async () => {
+    for (const [mine, near] of [
+      [false, []],
+      [null, []],
+      [true, ["dC"]],
+    ] as const) {
+      nearMissRpc(mine, [...near]);
+      const r = mount();
+      await tick(12_000);
+      expect(
+        region().querySelectorAll('[data-testid="near-miss"]'),
+      ).toHaveLength(0);
+      r.unmount();
+    }
+    rpc.mockReset();
+    rpc.mockResolvedValue({ data: { near_truth_ids: [] } });
+  });
+
+  it("🤏 julgamento atrasado: o aviso entra quando o servidor passa a marcar", async () => {
+    let judged = false;
+    rpc.mockImplementation((async (name: string) =>
+      name === "get_my_near_miss"
+        ? { data: judged }
+        : { data: { near_truth_ids: [] } }) as never);
+    mount();
+    await tick(6_000);
+    expect(region().querySelectorAll('[data-testid="near-miss"]')).toHaveLength(
+      0,
+    );
+    judged = true;
+    await tick(6_000);
+    expect(region().querySelectorAll('[data-testid="near-miss"]')).toHaveLength(
+      1,
+    );
+    rpc.mockReset();
+    rpc.mockResolvedValue({ data: { near_truth_ids: [] } });
+  });
+
   it("card da verdade mostra a letra da cédula verdadeira (definitions.letter)", async () => {
     mount();
     await tick(600);
@@ -435,7 +503,11 @@ describe("contagem e avanço", () => {
     mount();
     await tick(25_000);
     expect(
-      rpc.mock.calls.every((c) => (c as unknown[])[0] === "get_room_reveal"),
+      rpc.mock.calls.every((c) =>
+        ["get_room_reveal", "get_my_near_miss"].includes(
+          (c as unknown[])[0] as string,
+        ),
+      ),
     ).toBe(true);
     expect(advance).toHaveBeenCalledTimes(1);
   });

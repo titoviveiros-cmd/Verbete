@@ -25,57 +25,116 @@ export function normalizeForGame(input: string): string {
     .toLowerCase();
 }
 
-// Anti-trapaça nível 2: detecta a palavra-alvo "colada" dentro do texto
-// mesmo após normalização — cobre acento+maiúscula, separadores invisíveis
-// (zero-width, espaços extras, pontuação no meio: "fa-ze-da", "f.a.z.e.d.a").
-function leaksWord(normalizedText: string, normalizedWord: string): boolean {
+const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g;
+
+// Palavras do texto (normalizado) com os disfarces desfeitos: pontuação no
+// meio cola as partes ("fa-ze-da", "f.a.z.e.d.a" → "fazeda") e sequências de
+// letras soltas também ("f a z e d a" → "fazeda"). Espaço entre palavras de
+// verdade continua separando.
+function revealTokens(text: string): string[] {
+  const glued = normalizeForGame(text.replace(INVISIBLE_RE, "")).replace(
+    /[^a-z0-9\s]+/g,
+    "",
+  );
+  const out: string[] = [];
+  let run = "";
+  for (const t of glued.split(/\s+/).filter(Boolean)) {
+    if (t.length === 1) {
+      run += t;
+      continue;
+    }
+    if (run) out.push(run);
+    run = "";
+    out.push(t);
+  }
+  if (run) out.push(run);
+  return out;
+}
+
+/**
+ * A definição revela a palavra da rodada? (2.1.4 — nada é mascarado: quem
+ * cola a palavra é avisado e corrige.) Vale a palavra inteira como palavra do
+ * texto (com plural), mesmo disfarçada por acento, maiúscula, pontuação,
+ * espaços entre letras ou caracteres invisíveis — e, para palavras de 6+
+ * letras, as derivadas que COMEÇAM pela palavra inteira ("cicerone" →
+ * "ciceronear", sala 5873). NÃO vale: trecho dentro de outra palavra ("mar"
+ * em "amarelo"), raiz parecida ("guia" × "guiar") nem conjugação de outro
+ * verbo. Espelhado no servidor (public.definition_reveals_word).
+ */
+export function revealsWord(text: string, word: string): boolean {
+  const target = revealTokens(word);
+  if (!target.length || target.join("").length < 3) return false;
+  const toks = revealTokens(text);
+  if (target.length > 1) {
+    for (let i = 0; i + target.length <= toks.length; i++)
+      if (target.every((t, j) => toks[i + j] === t)) return true;
+    return false;
+  }
+  const w = target[0]!;
+  return toks.some(
+    (t) =>
+      t === w ||
+      t === `${w}s` ||
+      t === `${w}es` ||
+      (w.length >= 6 && t.startsWith(w)),
+  );
+}
+
+// Regra antiga, mais estrita (substring/raiz), só para DESCARTAR texto de
+// IA/reserva em definitionShapeIssue — idêntica à da edge dos bots
+// (paridade testada); falso positivo ali só troca uma sugestão. Para texto
+// de jogador vale revealsWord (sem falso positivo por trecho ou raiz).
+function leaksWordStrict(
+  normalizedText: string,
+  normalizedWord: string,
+): boolean {
   if (!normalizedWord || normalizedWord.length < 3) return false;
-  // 1) substring direta
   if (normalizedText.includes(normalizedWord)) return true;
-  // 2) só letras/dígitos: remove qualquer separador entre os caracteres da palavra
   const letters = normalizedText.replace(/[^a-z0-9]/g, "");
   if (letters.includes(normalizedWord)) return true;
-  // 3) mesma raiz (pluralização simples / sufixos curtos)
   if (normalizedWord.length >= 5) {
     const root = normalizedWord.slice(0, normalizedWord.length - 1);
-    const rootRe = new RegExp(`\\b${root}\\w{0,3}\\b`);
-    if (rootRe.test(normalizedText)) return true;
+    if (new RegExp(`\\b${root}\\w{0,3}\\b`).test(normalizedText)) return true;
   }
   return false;
 }
 
-// Aceita opcionalmente a palavra da rodada para censurar tentativas de "colar a resposta".
-// Mantém retrocompatibilidade — quando word=undefined funciona igual à versão anterior.
-export function sanitizeDefinition(
-  input: string,
-  maxLen = 140,
+export type DefinitionIssue = "reveals_word" | "blocked_word" | "link";
+
+/** Motivo para recusar (sem alterar) a definição de um jogador, ou null. */
+export function definitionIssue(
+  text: string,
   word?: string,
-): string {
-  // Remove caracteres de controle e zero-width que poderiam disfarçar a palavra-alvo.
-  let t = input
-    .replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "")
+): DefinitionIssue | null {
+  if (word && revealsWord(text, word)) return "reveals_word";
+  if (LINK_RE.test(text) || /\bwww\./i.test(text)) {
+    LINK_RE.lastIndex = 0;
+    return "link";
+  }
+  LINK_RE.lastIndex = 0;
+  const plain = normalizeForGame(text.replace(INVISIBLE_RE, ""));
+  for (const b of BLOCKED)
+    if (new RegExp(`\\b${b}\\w*`).test(plain)) return "blocked_word";
+  return null;
+}
+
+export const DEFINITION_ISSUE_MESSAGE: Record<DefinitionIssue, string> = {
+  reveals_word: "⚠️ Não vale usar a palavra da rodada!",
+  blocked_word: "⚠️ Sem palavrão na definição!",
+  link: "⚠️ Sem links na definição!",
+};
+
+// Só normalização técnica (2.1.4): invisíveis e espaços extras saem, tamanho
+// máximo, minúsculas sem acento (grafia neutra da votação). NUNCA mascara —
+// texto que revela a palavra, tem palavrão ou link é recusado antes do envio
+// (definitionIssue) e no servidor (submit_definition).
+export function sanitizeDefinition(input: string, maxLen = 140): string {
+  const t = input
+    .replace(INVISIBLE_RE, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLen);
-  t = t.replace(LINK_RE, "[link]");
-  for (const word of BLOCKED) {
-    const re = new RegExp(`\\b${word}\\w*`, "gi");
-    t = t.replace(re, (m) => "*".repeat(m.length));
-  }
-  const normalized = normalizeForGame(t);
-  if (word) {
-    const nw = normalizeForGame(word.trim());
-    if (leaksWord(normalized, nw)) {
-      // Substitui qualquer ocorrência (incluindo formas separadas) por ***
-      // 1) substring direta
-      let cleaned = normalized.split(nw).join("***");
-      // 2) ocorrências separadas por pontuação/espaço — reescreve como ***
-      const sep = nw.split("").join("[\\s\\-._]?");
-      cleaned = cleaned.replace(new RegExp(sep, "g"), "***");
-      return cleaned;
-    }
-  }
-  return normalized;
+  return normalizeForGame(t);
 }
 
 // Remove "etiquetas" típicas de dicionário no início do significado
@@ -188,7 +247,7 @@ function balancedParens(s: string): boolean {
 /**
  * Código da regra de forma violada (SHAPE_RULES) ou null quando o texto está
  * bem formado. `word` = palavra da rodada (R7, com a mesma regra de
- * leaksWord: rejeita em vez de mascarar).
+ * leaksWordStrict: rejeita em vez de mascarar).
  */
 export function definitionShapeIssue(
   text: string,
@@ -242,21 +301,23 @@ export function definitionShapeIssue(
       return "chars";
     }
   }
-  if (word && leaksWord(flat, normalizeForGame(word.trim()))) return "word";
+  if (word && leaksWordStrict(flat, normalizeForGame(word.trim())))
+    return "word";
   return null;
 }
 
 /**
  * Texto da IA ou de reserva pronto para a mesa (sanitizado), ou null quando
- * está quebrado — antes OU depois de sanitizar: máscara de palavrão ("*"),
- * link ("[link]") ou a palavra da rodada também descartam, em vez de virar
+ * está quebrado — antes OU depois de sanitizar — ou quando seria recusado de
+ * um jogador (palavra da rodada, palavrão, link): descarta em vez de virar
  * cédula/sugestão mascarada.
  */
 export function wellFormedDefinition(
   raw: string,
   word?: string,
 ): string | null {
+  if (definitionIssue(raw, word)) return null;
   if (definitionShapeIssue(raw, word ?? "")) return null;
-  const clean = sanitizeDefinition(raw, 140, word);
+  const clean = sanitizeDefinition(raw, 140);
   return definitionShapeIssue(clean, word ?? "") ? null : clean;
 }

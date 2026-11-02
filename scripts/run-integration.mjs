@@ -23,6 +23,8 @@ const SUITES = [
   "test-bot-votes.mjs",
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
+  "test-definition-filter.mjs",
+  "test-near-miss.mjs",
   "test-rollback.mjs",
   "test-probe-local.mjs",
 ];

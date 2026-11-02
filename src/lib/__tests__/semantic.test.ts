@@ -8,6 +8,8 @@ import {
   SEMANTIC_THRESHOLD,
   dailyMessages,
   isSemanticMatch,
+  NEAR_MISS_MIN,
+  nearMissIds,
   judgeCandidates,
   judgeMessages,
   parseDailyScore,
@@ -168,6 +170,59 @@ describe("leitura das respostas do modelo", () => {
     // formato antigo (só ids aprovados) não vale mais: sem nota, sem bônus
     expect(parseJudgeScores('{"matches":["a"]}', ids)).toBeNull();
     expect(parseJudgeScores("lixo", ids)).toBeNull();
+  });
+});
+
+describe("🤏 'Quase lá' do multiplayer (2.1.4)", () => {
+  it("faixa 50–79: limites 49/50/79/80, sem tocar no corte do bônus", () => {
+    expect(NEAR_MISS_MIN).toBe(50);
+    expect(SEMANTIC_THRESHOLD).toBe(80);
+    const scores = new Map([
+      ["s0", 0],
+      ["s49", 49],
+      ["s50", 50],
+      ["s65", 65],
+      ["s79", 79],
+      ["s80", 80],
+      ["s100", 100],
+    ]);
+    expect(nearMissIds(scores)).toEqual(["s50", "s65", "s79"]);
+    // disjunto do bônus: nenhuma candidata recebe os dois
+    for (const id of nearMissIds(scores))
+      expect(isSemanticMatch(scores.get(id)!)).toBe(false);
+  });
+
+  it("falha da IA não vira 'quase': sem notas, sem marca", async () => {
+    expect(nearMissIds(new Map())).toEqual([]);
+    const fetchFn = vi.fn(async () => new Response("boom", { status: 503 }));
+    const r = await judgeCandidates({
+      fetchFn,
+      apiKey: "k",
+      word: "w",
+      truth: "t",
+      candidates: [{ id: "a", text: "x" }],
+      timeoutMs: 50,
+      retries: 0,
+      deadlineMs: 100,
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("a edge grava a marca depois do bônus e falha dela não derruba o julgamento", () => {
+    const src = readFileSync(
+      "supabase/functions/score-similarity/index.ts",
+      "utf8",
+    );
+    const bonus = src.indexOf('rpc("apply_similarity_bonus"');
+    const near = src.indexOf('rpc("apply_similarity_near_miss"');
+    const judgedAt = src.indexOf("judged_at: new Date()");
+    expect(bonus).toBeGreaterThan(0);
+    expect(near).toBeGreaterThan(bonus);
+    expect(judgedAt).toBeGreaterThan(near);
+    expect(src).toContain("nearMissIds(judged.scores)");
+    // a falha da marca não tem return: segue para judged_at e sucesso
+    const block = src.slice(near, judgedAt);
+    expect(block).not.toContain("return json");
   });
 });
 

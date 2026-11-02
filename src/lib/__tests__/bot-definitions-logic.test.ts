@@ -23,7 +23,7 @@ import {
 import type { ChatResult } from "../../../supabase/functions/_shared/ai.ts";
 import { RESERVE_DEFINITIONS } from "../../../supabase/functions/bot-definitions-v2/reserves.ts";
 import * as client from "../text-filter";
-import { sanitizeDefinition } from "../text-filter";
+import { sanitizeDefinition, wellFormedDefinition } from "../text-filter";
 
 const okChat: ChatResult = { ok: true, content: "", attempts: 1 };
 
@@ -212,12 +212,11 @@ describe("pipeline completo da edge (modelo → filtros → evento)", () => {
     });
   });
 
-  it("conteúdo inadequado vindo da IA é mascarado antes de virar cédula", () => {
+  it("conteúdo inadequado vindo da IA é descartado (2.1.4: nada vira cédula mascarada)", () => {
     const fromModel =
       "lugar onde se fala merda o dia todo https://spam.example";
-    const ballot = sanitizeDefinition(fromModel, 140, "palavra");
-    expect(ballot).not.toMatch(/merda/);
-    expect(ballot).not.toMatch(/https?:/);
+    expect(wellFormedDefinition(fromModel, "palavra")).toBeNull();
+    expect(sanitizeDefinition("lugar onde se fala merda")).not.toContain("*");
   });
 });
 

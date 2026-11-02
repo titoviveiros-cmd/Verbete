@@ -502,6 +502,8 @@ const DENY = [
   "bot_vote_pick",
   // caminho legado em que o host escolhia os votos dos bots (revogado 2026-10-23)
   "cast_votes_bulk",
+  // 2.1.4: regra anti-cola do servidor e gravação do "Quase lá" (só a edge)
+  "definition_reveal_tokens", "definition_reveals_word", "apply_similarity_near_miss",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
@@ -518,6 +520,8 @@ const ALLOW_ANON = [
   "touch_presence", "resume_room",
   // voto dos bots no servidor (2026-10-22): só o host da sala comanda
   "cast_bot_votes",
+  // 2.1.4: "Quase lá" — só a marca do próprio autor, identidade checada
+  "get_my_near_miss",
 ];
 const execRows = await rows(
   `SELECT DISTINCT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_x,
