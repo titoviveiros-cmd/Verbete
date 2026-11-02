@@ -185,6 +185,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      definition_near_miss: {
+        Row: {
+          created_at: string;
+          definition_id: string;
+          room_id: string;
+          round: number;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          definition_id: string;
+          room_id: string;
+          round: number;
+        };
+        Update: {
+          created_at?: string;
+          definition_id?: string;
+          room_id?: string;
+          round?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "definition_near_miss_definition_id_fkey";
+            columns: ["definition_id"];
+            isOneToOne: true;
+            referencedRelation: "definitions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       definitions: {
         Row: {
           created_at: string;
@@ -1054,6 +1084,14 @@ export type Database = {
             };
             Returns: Json;
           };
+      apply_similarity_near_miss: {
+        Args: {
+          p_definition_ids: string[];
+          p_room_id: string;
+          p_round: number;
+        };
+        Returns: number;
+      };
       assert_actor_identity: {
         Args: { p_actor_id: string; p_room_id: string };
         Returns: string;
@@ -1135,6 +1173,11 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      definition_reveal_tokens: { Args: { p_text: string }; Returns: string[] };
+      definition_reveals_word: {
+        Args: { p_text: string; p_word: string };
+        Returns: boolean;
       };
       extend_voting_or_advance: { Args: { p_room_id: string }; Returns: Json };
       extend_writing_or_advance: { Args: { p_room_id: string }; Returns: Json };
