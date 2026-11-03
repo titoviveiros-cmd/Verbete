@@ -8,7 +8,6 @@ type StaticStep = {
   emoji: string;
   title: string;
   body: string;
-  joke: string;
   mood: "idle" | "excited" | "thinking" | "sad";
 };
 
@@ -27,37 +26,34 @@ const STEPS: Step[] = [
   {
     kind: "static",
     emoji: "📖",
-    title: "Sorteie a palavra",
-    body: 'O Coordenador 👑 toca em "Sortear palavra" e escolhe uma entre 3 palavras esquisitíssimas do dicionário. Ninguém faz ideia do que é — e essa é a graça.',
-    joke: 'Spoiler: ninguém aqui sabe o que é "jacarandá-do-cerrado". Tudo bem.',
+    title: "Escolha a palavra",
+    body: "Em cada rodada, o coordenador sorteia três palavras e escolhe uma. Todos veem a palavra, mas o significado verdadeiro fica escondido.",
     mood: "thinking",
   },
   {
     kind: "static",
     emoji: "✍️",
-    title: "Blefe ou diga a verdade",
-    body: "Cada jogador escreve uma definição falsa convincente (ou tenta acertar a verdadeira). O jogo embaralha tudo e mostra as opções sem nomes. Hora de votar!",
-    joke: 'Capricha no portuguesinho de dicionário, tipo: "s.f. ato ou efeito de…". Funciona sempre.',
+    title: "Invente um significado",
+    body: "Quem não está coordenando escreve uma definição para a palavra. Vale inventar ou tentar acertar o significado verdadeiro.\n\nDepois, o jogo mistura todas as definições com a resposta correta, sem mostrar quem escreveu cada uma.",
     mood: "excited",
   },
   {
     kind: "demo",
-    title: "Experimenta votar!",
+    title: "Hora de votar",
     word: "borogodó",
     truthIndex: 1,
     options: [
-      "tipo de instrumento musical de sopro feito de bambu",
-      "atrativo pessoal, charme natural que encanta os outros",
-      "doce regional feito de leite condensado e côco queimado",
+      "Instrumento de sopro feito de bambu.",
+      "Charme natural que atrai as pessoas.",
+      "Doce de leite com coco queimado.",
     ],
     mood: "thinking",
   },
   {
     kind: "static",
     emoji: "🏆",
-    title: "Pontue enganando",
-    body: "+3 se você acertar a verdadeira.\n+3 se seu significado for ao menos 80% equivalente ao verdadeiro.\n+2 pro Coordenador se ninguém descobrir a verdade.\n+1 pra cada voto que SUA definição receber.",
-    joke: "Tradução: enganar amigos = lucro. Ser enganado = aprendizado emocional.",
+    title: "Como ganhar pontos",
+    body: "+3 pontos por votar na definição verdadeira.\n+3 pontos se sua definição ficar muito próxima da correta, com nota de 80 ou mais.\n+2 pontos para o coordenador se ninguém acertar.\n+1 ponto por voto recebido no seu blefe.",
     mood: "excited",
   },
 ];
@@ -138,8 +134,8 @@ function DemoStepView({
             className="mt-3 text-xs text-pink/90 italic leading-snug"
           >
             {correct
-              ? "🎉 Boa! Você teria ganhado +3 pontos. Agora imagina enganar os amigos com uma definição falsa…"
-              : "😅 Tranquilo, é exatamente isso que acontece numa partida real. Agora você sabe."}
+              ? "Acertou! Na partida, isso vale 3 pontos."
+              : "Não foi dessa vez! A resposta certa está marcada com um visto."}
           </motion.div>
         )}
       </AnimatePresence>
@@ -149,7 +145,7 @@ function DemoStepView({
           onClick={onContinue}
           className="btn-pop btn-gold text-sm mt-3 px-5"
         >
-          Continuar →
+          Continuar
         </button>
       )}
     </motion.div>
@@ -193,7 +189,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
               onClick={() => setI(idx)}
               className={
                 "h-1.5 rounded-full transition-all " +
-                (idx === i ? "w-7 bg-pink" : "w-1.5 bg-white/20")
+                (idx === i ? "w-7 bg-pink" : "w-1.5 bg-foreground/45")
               }
               aria-label={`Passo ${idx + 1}`}
             />
@@ -220,9 +216,6 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
               </h2>
               <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-line">
                 {step.body}
-              </p>
-              <p className="mt-3 text-xs italic text-pink/90 leading-snug">
-                💬 {step.joke}
               </p>
             </motion.div>
           ) : (
@@ -252,7 +245,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
                 onClick={onClose}
                 className="btn-pop btn-gold flex-[2] text-base"
               >
-                🚀 Bora jogar!
+                Vamos jogar!
               </button>
             )}
           </div>
