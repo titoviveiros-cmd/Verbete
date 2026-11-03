@@ -7,28 +7,28 @@ type Tip = { phase: string; title: string; body: string };
 const TIPS: Tip[] = [
   {
     phase: "lobby",
-    title: "Bem-vindo!",
-    body: "Convide amigos com o código da sala. Quando todos chegarem, o host clica em 'Começar'.",
+    title: "Convide os amigos",
+    body: "Compartilhe o código ou o link da sala. Com pelo menos 4 participantes, contando os bots, o anfitrião pode começar.",
   },
   {
     phase: "choosing",
-    title: "Escolhendo a palavra",
-    body: "Quem coordena escolhe uma palavra rara. Os outros vão tentar enganar a galera com definições inventadas ou até mesmo com o significado verdadeiro.",
+    title: "Escolha da palavra",
+    body: "O coordenador escolhe uma entre três palavras sorteadas. O significado fica em segredo.",
   },
   {
     phase: "writing",
-    title: "Hora de blefar",
-    body: "Invente uma definição que pareça real! O objetivo é convencer os outros de que sua versão é a verdadeira.",
+    title: "Crie sua definição",
+    body: "Invente um significado convincente ou tente acertar o verdadeiro. Envie antes que o tempo acabe.",
   },
   {
     phase: "voting",
-    title: "Escolha a verdade",
-    body: "Vote na definição que você acredita ser a real. +3 pontos por acertar e +1 para cada pessoa que cair no seu blefe.",
+    title: "Hora de votar",
+    body: "Escolha a definição que parece verdadeira. Acertar vale 3 pontos, e cada voto no seu blefe vale 1.",
   },
   {
     phase: "reveal",
-    title: "A verdade aparece",
-    body: "A definição real é revelada e os pontos são distribuídos. Boa rodada!",
+    title: "Hora da verdade",
+    body: "Veja qual era a resposta certa, quem acertou e quem conseguiu enganar os outros.",
   },
 ];
 
