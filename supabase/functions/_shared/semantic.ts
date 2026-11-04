@@ -6,7 +6,7 @@
 // submit_daily_attempt_scored, com o mesmo valor; um teste garante). Mudou o
 // critério? Muda aqui e os dois modos mudam juntos.
 // Sem APIs do Deno: roda na edge e no servidor web.
-import { callChat, parseJsonObject, type AttemptResult, type ChatFailure } from "./ai.ts";
+import { GEMINI_MODEL, callChat, parseJsonObject, type AttemptResult, type ChatFailure } from "./ai.ts";
 
 export const SEMANTIC_THRESHOLD = 80;
 /** Julgamento, não criação: temperatura 0 para a mesma entrada dar a mesma nota. */
@@ -197,8 +197,26 @@ export async function judgeCandidates(opts: {
  * do Gemini às 22:06/22:07). O jogador espera a resposta na tela: até 3
  * tentativas em no máximo 15 s somados. A política de nova tentativa é a de
  * callChat — 503, timeout e rede repetem; 429 repete UMA vez só (2 chamadas).
+ * Cada tentativa espera no máximo 6 s (04/11: com 8 s, dois timeouts
+ * esgotavam o prazo sem chance para um modelo saudável).
  */
-export const DAILY_BUDGET = { timeoutMs: 8_000, retries: 2, deadlineMs: 15_000 } as const;
+export const DAILY_BUDGET = { timeoutMs: 6_000, retries: 2, deadlineMs: 15_000 } as const;
+
+/**
+ * Modelos do Desafio Diário, um por tentativa (incidente de 04/11/2026: com o
+ * build b7ee8d1 o Diário estourou 2 × 8 s no alias). Medição com o prompt real
+ * e a mesma chave, 04/11 14:20–15:40 UTC−3: o alias "-latest" com mediana de
+ * 12–21 s (até 59 s); o gemini-3.1-flash-lite rápido (~1,8 s) às 14:20 e com
+ * 503 "high demand" às 15:30; o gemini-3.5-flash em 2–4 s às 15:39. A
+ * capacidade do provedor oscila POR MODELO — um modelo só não basta.
+ * Paridade medida na bateria de calibração (45 casos, mesmo prompt): onde os
+ * dois responderam, 3.5-flash 22/22 e 3.1-flash-lite 38/38 do mesmo lado do
+ * corte que o alias (diferença média de nota 0,8 e 5,6).
+ * 1ª tentativa = o MESMO modelo do juiz do multiplayer (paridade no caso
+ * normal); as seguintes, versões FIXAS de outros modelos. Prompt, rubrica,
+ * temperatura e corte são os mesmos em todas.
+ */
+export const DAILY_MODELS = [GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.1-flash-lite"] as const;
 
 /** Desafio Diário: nota 0–100 do palpite. */
 export async function scoreGuess(opts: {
@@ -208,6 +226,7 @@ export async function scoreGuess(opts: {
   word: string;
   truth: string;
   guess: string;
+  onAttempt?: (r: AttemptResult, ms: number, model: string) => void;
 }): Promise<{ ok: true; score: number; attempts: number } | Failure> {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
@@ -216,6 +235,8 @@ export async function scoreGuess(opts: {
     temperature: SEMANTIC_TEMPERATURE,
     messages: dailyMessages(opts.word, opts.truth, opts.guess),
     ...DAILY_BUDGET,
+    models: DAILY_MODELS,
+    ...(opts.onAttempt ? { onAttempt: opts.onAttempt } : {}),
   });
   if (!chat.ok) return { ok: false, reason: chat.reason, status: chat.status, attempts: chat.attempts };
   const score = parseDailyScore(chat.content);

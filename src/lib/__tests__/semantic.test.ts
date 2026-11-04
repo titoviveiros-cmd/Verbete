@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import {
   DAILY_BUDGET,
   DAILY_ID,
+  DAILY_MODELS,
   JUDGE_BUDGET,
   SEMANTIC_CORE,
   SEMANTIC_EXAMPLES,
@@ -19,6 +20,7 @@ import {
   scoreGuess,
 } from "../../../supabase/functions/_shared/semantic.ts";
 import { BATCH, CASES } from "../../../scripts/semantic-calibration-cases.mjs";
+import { GEMINI_MODEL } from "../../../supabase/functions/_shared/ai.ts";
 
 const ok = (content: string) =>
   new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
@@ -424,5 +426,32 @@ describe("Desafio Diário (nota 0–100)", () => {
       retries: 3,
       deadlineMs: 17_000,
     });
+  });
+
+  it("o juiz do multiplayer NÃO usa a cadeia do Diário: todas as tentativas no alias de antes", async () => {
+    const fetchFn = vi.fn(async (_u: string, _i: RequestInit) => {
+      throw new TypeError("fetch failed");
+    });
+    vi.useFakeTimers();
+    try {
+      const p = judgeCandidates({
+        fetchFn,
+        apiKey: "k",
+        word: "w",
+        truth: "t",
+        candidates: [{ id: "c1", text: "g" }],
+        ...JUDGE_BUDGET,
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await p;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(fetchFn.mock.calls.length).toBeGreaterThan(1);
+    for (const c of fetchFn.mock.calls) {
+      expect(JSON.parse(String(c[1].body)).model).toBe(GEMINI_MODEL);
+    }
+    // e a 1ª do Diário é esse mesmo modelo (paridade no caso normal)
+    expect(DAILY_MODELS[0]).toBe(GEMINI_MODEL);
   });
 });

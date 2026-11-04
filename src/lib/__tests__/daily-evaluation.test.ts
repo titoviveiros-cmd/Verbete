@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DAILY_EVAL_UNAVAILABLE,
+  dailyEvent,
   dailyFailureEvent,
   evaluateDailyGuess,
   runDailyEvaluation,
@@ -10,7 +11,9 @@ import {
 import {
   DAILY_BUDGET,
   DAILY_ID,
+  DAILY_MODELS,
 } from "../../../supabase/functions/_shared/semantic.ts";
+import { GEMINI_MODEL } from "../../../supabase/functions/_shared/ai.ts";
 
 const ok = (content: string) =>
   new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
@@ -63,9 +66,9 @@ describe("Desafio Diário: novas tentativas e prazo (incidente de 03/11)", () =>
     vi.useRealTimers();
   });
 
-  it("orçamento: no máximo 3 tentativas em 15 s", () => {
+  it("orçamento: no máximo 3 tentativas em 15 s, 6 s por tentativa", () => {
     expect(DAILY_BUDGET).toEqual({
-      timeoutMs: 8_000,
+      timeoutMs: 6_000,
       retries: 2,
       deadlineMs: 15_000,
     });
@@ -123,9 +126,9 @@ describe("Desafio Diário: novas tentativas e prazo (incidente de 03/11)", () =>
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe("timeout");
-    expect(r.attempts).toBe(2); // 8 s + espera + o que resta; não cabe a 3ª
+    expect(r.attempts).toBe(2); // 6 s + 0,7 s + 6 s; a 3ª não caberia
     expect(r.latencyMs).toBeLessThanOrEqual(DAILY_BUDGET.deadlineMs);
-    expect(r.latencyMs).toBeGreaterThanOrEqual(DAILY_BUDGET.deadlineMs - 100);
+    expect(r.latencyMs).toBeGreaterThanOrEqual(2 * DAILY_BUDGET.timeoutMs);
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
@@ -222,9 +225,9 @@ describe("Desafio Diário: a tentativa só é gasta com nota", () => {
     expect(record).not.toHaveBeenCalled();
   });
 
-  it("sucesso: registra com a nota da IA, sem evento de erro", async () => {
+  it("sucesso: registra com a nota da IA e grava só o evento de SUCESSO", async () => {
     const record = vi.fn(async (s: number) => ({ similarity: s }));
-    const logEvent = vi.fn();
+    const logEvent = vi.fn(async () => {});
     const out = await runDailyEvaluation({
       evaluate: async () => ({
         ok: true,
@@ -238,7 +241,16 @@ describe("Desafio Diário: a tentativa só é gasta com nota", () => {
     });
     expect(out).toEqual({ similarity: 91 });
     expect(record).toHaveBeenCalledWith(91);
-    expect(logEvent).not.toHaveBeenCalled();
+    expect(logEvent).toHaveBeenCalledTimes(1);
+    expect(logEvent).toHaveBeenCalledWith({
+      kind: "judge_ai_success",
+      build: "abc1234",
+      payload: {
+        fn: "daily",
+        attempts: 1,
+        latency_ms: 800,
+      },
+    });
   });
 
   it("nota 0 legítima da IA é registrada (só a indisponibilidade não vira nota)", async () => {
@@ -251,7 +263,7 @@ describe("Desafio Diário: a tentativa só é gasta com nota", () => {
         latencyMs: 10,
       }),
       record,
-      logEvent: vi.fn(),
+      logEvent: vi.fn(async () => {}),
       build: null,
     });
     expect(record).toHaveBeenCalledWith(0);
@@ -294,7 +306,19 @@ describe("Desafio Diário: evento sem dados pessoais", () => {
     if (!ev) throw new Error("evento não gravado");
     expect(Object.keys(ev).sort()).toEqual(["build", "kind", "payload"]);
     expect(Object.keys(ev.payload).sort()).toEqual(
-      ["attempts", "fn", "latency_ms", "reason", "status"].sort(),
+      [
+        "attempts",
+        "fn",
+        "latency_ms",
+        "model",
+        "reason",
+        "status",
+        "tries",
+      ].sort(),
+    );
+    expect(ev.payload.model).toBe(DAILY_MODELS[1]);
+    expect(String(ev.payload.tries)).toMatch(
+      /^flash-lite-latest:429:\d+,3\.5-flash:429:\d+$/,
     );
     const logged = JSON.stringify(ev) + JSON.stringify(warn.mock.calls);
     for (const s of Object.values(SECRETS)) expect(logged).not.toContain(s);
@@ -321,5 +345,196 @@ describe("Desafio Diário: evento sem dados pessoais", () => {
         latency_ms: 15000,
       },
     });
+    // sem chamada à IA (sem chave ou sem definição): sem modelo
+    expect(
+      dailyFailureEvent(
+        { ok: false, reason: "missing_key", attempts: 0, latencyMs: 0 },
+        "b",
+      ).payload,
+    ).toEqual({
+      fn: "daily",
+      reason: "missing_key",
+      attempts: 0,
+      latency_ms: 0,
+    });
+  });
+});
+
+describe("Desafio Diário: cadeia de modelos e trilha por tentativa (incidente de 04/11)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const bodyModel = (fetchFn: ReturnType<typeof vi.fn>, i = 0): unknown =>
+    JSON.parse(
+      String(
+        (fetchFn.mock.calls[i] as unknown as [string, RequestInit])[1].body,
+      ),
+    ).model;
+
+  it("1ª tentativa no MESMO modelo do multiplayer; as seguintes em versões fixas", async () => {
+    expect(DAILY_MODELS[0]).toBe(GEMINI_MODEL);
+    expect(DAILY_MODELS).toHaveLength(DAILY_BUDGET.retries + 1);
+    for (const m of DAILY_MODELS.slice(1)) {
+      expect(m).not.toMatch(/latest/);
+      expect(m).not.toBe(GEMINI_MODEL);
+    }
+    expect(new Set(DAILY_MODELS).size).toBe(DAILY_MODELS.length);
+    const fetchFn = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    await run(fetchFn);
+    expect([0, 1, 2].map((i) => bodyModel(fetchFn, i))).toEqual([
+      ...DAILY_MODELS,
+    ]);
+  });
+
+  it("modelo saudável na 1ª: uma chamada só, no modelo do multiplayer", async () => {
+    const fetchFn = vi.fn(async () => scored(88));
+    const r = await run(fetchFn);
+    expect(r).toMatchObject({ ok: true, similarity: 88, attempts: 1 });
+    expect(bodyModel(fetchFn)).toBe(GEMINI_MODEL);
+    expect(dailyEvent(r, "b").payload.model).toBe(GEMINI_MODEL);
+  });
+
+  it("503 e depois sucesso: troca de modelo e trilha com modelo, resultado e duração", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(status(503))
+      .mockResolvedValueOnce(scored(84));
+    const r = await run(fetchFn);
+    expect(r.ok).toBe(true);
+    expect(r.tries?.map((x) => [x.model, x.result])).toEqual([
+      [DAILY_MODELS[0], "503"],
+      [DAILY_MODELS[1], "ok"],
+    ]);
+    const p = dailyEvent(r, "b").payload;
+    expect(p.tries).toMatch(/^flash-lite-latest:503:\d+,3\.5-flash:ok:\d+$/);
+    expect(p.model).toBe(DAILY_MODELS[1]); // quem deu a nota
+  });
+
+  it("timeout no 1º modelo e resposta no 2º: a nota chega dentro do prazo", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockImplementationOnce(hang())
+      .mockResolvedValueOnce(scored(91));
+    const r = await run(fetchFn);
+    expect(r).toMatchObject({ ok: true, similarity: 91, attempts: 2 });
+    expect(r.tries?.[0]).toMatchObject({
+      result: "timeout",
+      ms: DAILY_BUDGET.timeoutMs,
+    });
+    expect(r.latencyMs).toBeLessThan(DAILY_BUDGET.deadlineMs);
+  });
+
+  it("timeout persistente: cada tentativa registra a própria duração", async () => {
+    const r = await run(hang());
+    expect(r.ok).toBe(false);
+    expect(r.tries?.map((x) => x.result)).toEqual(["timeout", "timeout"]);
+    expect(r.tries?.map((x) => x.ms)).toEqual([
+      DAILY_BUDGET.timeoutMs,
+      DAILY_BUDGET.timeoutMs,
+    ]);
+    expect(dailyEvent(r, "b").payload).toMatchObject({
+      reason: "timeout",
+      attempts: 2,
+      model: DAILY_MODELS[1],
+    });
+  });
+
+  it("Gemini indisponível (rede caída persistente): 3 tentativas e falha, sem nota", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const r = await run(fetchFn);
+    expect(r).toMatchObject({ ok: false, reason: "network", attempts: 3 });
+    expect(r.tries?.map((x) => x.result)).toEqual([
+      "network",
+      "network",
+      "network",
+    ]);
+  });
+
+  it("erro 500 persistente: 3 tentativas, uma por modelo, com o status", async () => {
+    const r = await run(vi.fn(async () => status(500)));
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "http_error",
+      status: 500,
+      attempts: 3,
+    });
+    expect(dailyEvent(r, null).payload.tries).toMatch(
+      /^flash-lite-latest:500:\d+,3\.5-flash:500:\d+,3\.1-flash-lite:500:\d+$/,
+    );
+  });
+});
+
+describe("Desafio Diário: erro ao gravar o evento no Supabase", () => {
+  it("insert com { error } vira aviso só com o código; a tentativa segue não gasta", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const record = vi.fn();
+    await expect(
+      runDailyEvaluation({
+        evaluate: async () => ({
+          ok: false,
+          reason: "timeout",
+          attempts: 2,
+          latencyMs: 15001,
+        }),
+        record,
+        logEvent: async () => {
+          throw { code: "42501", message: "permission denied PALPITE-SECRETO" };
+        },
+        build: "b",
+      }),
+    ).rejects.toThrow(DAILY_EVAL_UNAVAILABLE);
+    expect(record).not.toHaveBeenCalled();
+    const avisos = JSON.stringify(warn.mock.calls);
+    expect(avisos).toContain("falha ao gravar ops_events");
+    expect(avisos).toContain("42501");
+    expect(avisos).not.toContain("PALPITE-SECRETO");
+    warn.mockRestore();
+  });
+
+  it("no sucesso, erro ao gravar o evento não impede registrar a tentativa", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const out = await runDailyEvaluation({
+      evaluate: async () => ({
+        ok: true,
+        similarity: 70,
+        attempts: 1,
+        latencyMs: 900,
+      }),
+      record: async (s) => ({ similarity: s }),
+      logEvent: async () => {
+        throw new Error("banco fora");
+      },
+      build: "b",
+    });
+    expect(out).toEqual({ similarity: 70 });
+    warn.mockRestore();
+  });
+
+  it("erro do RPC ao registrar chega ao jogador; o sucesso da IA ainda vira evento", async () => {
+    const logEvent = vi.fn(async () => {});
+    await expect(
+      runDailyEvaluation({
+        evaluate: async () => ({
+          ok: true,
+          similarity: 70,
+          attempts: 1,
+          latencyMs: 900,
+        }),
+        record: async () => {
+          throw new Error("Não foi possível registrar sua tentativa.");
+        },
+        logEvent,
+        build: "b",
+      }),
+    ).rejects.toThrow("Não foi possível registrar");
+    expect(logEvent).toHaveBeenCalledTimes(1);
   });
 });

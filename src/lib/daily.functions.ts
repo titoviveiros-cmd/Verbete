@@ -63,8 +63,11 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
           truth,
           guess: data.guess,
         }),
+      // supabase-js não lança em erro de gravação: devolve { error }. Antes
+      // o erro era ignorado em silêncio; agora vira aviso no log do Worker.
       logEvent: async (ev) => {
-        await supabaseAdmin.from("ops_events").insert(ev);
+        const { error } = await supabaseAdmin.from("ops_events").insert(ev);
+        if (error) throw error;
       },
       build: import.meta.env.VITE_BUILD_ID as string | undefined,
       record: async (similarity) => {
