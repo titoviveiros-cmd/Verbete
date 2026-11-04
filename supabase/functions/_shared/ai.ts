@@ -35,6 +35,7 @@ async function attempt(
   messages: Array<{ role: string; content: string }>,
   timeoutMs: number,
   temperature: number | undefined,
+  model: string,
 ): Promise<AttemptResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -46,7 +47,7 @@ async function attempt(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: GEMINI_MODEL,
+        model,
         messages,
         ...(temperature === undefined ? {} : { temperature }),
       }),
@@ -93,8 +94,12 @@ export async function callChat(opts: {
    *  Omitido = sem prazo total (bots e Diário seguem como antes). */
   deadlineMs?: number;
   minAttemptMs?: number;
-  /** Chamado ao fim de cada tentativa (trilha da auditoria). */
-  onAttempt?: (r: AttemptResult) => void;
+  /** Chamado ao fim de cada tentativa (trilha da auditoria), com a duração
+   *  dela em ms e o modelo usado. */
+  onAttempt?: (r: AttemptResult, ms: number, model: string) => void;
+  /** Modelo de cada tentativa: a tentativa i usa models[i] (ou o último).
+   *  Omitido = só GEMINI_MODEL (bots e juiz do multiplayer, como antes). */
+  models?: readonly string[];
   /** Omitida = padrão do modelo (geração criativa dos bots). */
   temperature?: number;
 }): Promise<ChatResult> {
@@ -113,6 +118,10 @@ export async function callChat(opts: {
       if (left() - backoffMs * i < minAttemptMs) return last;
       await new Promise((res) => setTimeout(res, backoffMs * i));
     }
+    const model = opts.models?.length
+      ? (opts.models[Math.min(i, opts.models.length - 1)] ?? GEMINI_MODEL)
+      : GEMINI_MODEL;
+    const ta = Date.now();
     const res = await attempt(
       opts.fetchFn,
       url,
@@ -120,8 +129,9 @@ export async function callChat(opts: {
       opts.messages,
       Math.min(timeoutMs, left()),
       opts.temperature,
+      model,
     );
-    opts.onAttempt?.(res);
+    opts.onAttempt?.(res, Date.now() - ta, model);
     last = { ...res, attempts: i + 1 };
     if (!retriable(res, i)) return last;
   }
