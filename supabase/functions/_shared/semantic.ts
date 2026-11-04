@@ -197,10 +197,14 @@ export async function judgeCandidates(opts: {
  * do Gemini às 22:06/22:07). O jogador espera a resposta na tela: até 3
  * tentativas em no máximo 15 s somados. A política de nova tentativa é a de
  * callChat — 503, timeout e rede repetem; 429 repete UMA vez só (2 chamadas).
- * Cada tentativa espera no máximo 6 s (04/11: com 8 s, dois timeouts
- * esgotavam o prazo sem chance para um modelo saudável).
+ * 5 s por tentativa e SEM espera entre elas: cada nova tentativa vai para
+ * OUTRO modelo (DAILY_MODELS), com capacidade própria no provedor — esperar
+ * não ajuda. Assim três timeouts seguidos cabem nos 15 s e o 3º modelo é
+ * usado (com 6 s + espera de 0,7/1,4 s a 3ª nunca acontecia após 2 timeouts).
+ * Simulação com as latências medidas em 04/11: sucesso 74,6% → 76,6% com o
+ * alias lento; sem mudança com o alias saudável (resposta em ~1,5 s).
  */
-export const DAILY_BUDGET = { timeoutMs: 6_000, retries: 2, deadlineMs: 15_000 } as const;
+export const DAILY_BUDGET = { timeoutMs: 5_000, retries: 2, deadlineMs: 15_000, backoffMs: 0 } as const;
 
 /**
  * Modelos do Desafio Diário, um por tentativa (incidente de 04/11/2026: com o
@@ -211,7 +215,9 @@ export const DAILY_BUDGET = { timeoutMs: 6_000, retries: 2, deadlineMs: 15_000 }
  * capacidade do provedor oscila POR MODELO — um modelo só não basta.
  * Paridade medida na bateria de calibração (45 casos, mesmo prompt): onde os
  * dois responderam, 3.5-flash 22/22 e 3.1-flash-lite 38/38 do mesmo lado do
- * corte que o alias (diferença média de nota 0,8 e 5,6).
+ * corte que o alias (diferença média de nota 0,8 e 5,6). ATENÇÃO: em 6 pares
+ * de fronteira, o 3.1-flash-lite deu notas mais altas que o alias (+5 a +20)
+ * e virou 1 deles de lado (60 → 80) — decisão pendente sobre mantê-lo.
  * 1ª tentativa = o MESMO modelo do juiz do multiplayer (paridade no caso
  * normal); as seguintes, versões FIXAS de outros modelos. Prompt, rubrica,
  * temperatura e corte são os mesmos em todas.

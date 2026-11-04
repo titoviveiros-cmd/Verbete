@@ -66,12 +66,18 @@ describe("Desafio Diário: novas tentativas e prazo (incidente de 03/11)", () =>
     vi.useRealTimers();
   });
 
-  it("orçamento: no máximo 3 tentativas em 15 s, 6 s por tentativa", () => {
+  it("orçamento: 3 tentativas de 5 s, sem espera entre modelos, em 15 s", () => {
     expect(DAILY_BUDGET).toEqual({
-      timeoutMs: 6_000,
+      timeoutMs: 5_000,
       retries: 2,
       deadlineMs: 15_000,
+      backoffMs: 0,
     });
+    // três timeouts seguidos cabem no prazo (a 3ª tentativa acontece)
+    expect(
+      (DAILY_BUDGET.retries + 1) * DAILY_BUDGET.timeoutMs +
+        DAILY_BUDGET.backoffMs * 3,
+    ).toBeLessThanOrEqual(DAILY_BUDGET.deadlineMs);
   });
 
   it("503 seguido de sucesso: nota válida na 2ª tentativa", async () => {
@@ -126,10 +132,10 @@ describe("Desafio Diário: novas tentativas e prazo (incidente de 03/11)", () =>
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe("timeout");
-    expect(r.attempts).toBe(2); // 6 s + 0,7 s + 6 s; a 3ª não caberia
+    expect(r.attempts).toBe(3); // 5 s + 5 s + 5 s, sem espera
     expect(r.latencyMs).toBeLessThanOrEqual(DAILY_BUDGET.deadlineMs);
-    expect(r.latencyMs).toBeGreaterThanOrEqual(2 * DAILY_BUDGET.timeoutMs);
-    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(r.latencyMs).toBeGreaterThanOrEqual(DAILY_BUDGET.deadlineMs - 100);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
   it("chave Gemini ausente: não chama a IA e não vira nota 0", async () => {
@@ -430,19 +436,88 @@ describe("Desafio Diário: cadeia de modelos e trilha por tentativa (incidente d
     expect(r.latencyMs).toBeLessThan(DAILY_BUDGET.deadlineMs);
   });
 
-  it("timeout persistente: cada tentativa registra a própria duração", async () => {
-    const r = await run(hang());
+  it("timeout persistente: os 3 modelos são tentados e cada um registra a duração", async () => {
+    const fetchFn = hang();
+    const r = await run(fetchFn);
     expect(r.ok).toBe(false);
-    expect(r.tries?.map((x) => x.result)).toEqual(["timeout", "timeout"]);
-    expect(r.tries?.map((x) => x.ms)).toEqual([
-      DAILY_BUDGET.timeoutMs,
-      DAILY_BUDGET.timeoutMs,
+    expect(r.tries?.map((x) => [x.model, x.result])).toEqual([
+      [DAILY_MODELS[0], "timeout"],
+      [DAILY_MODELS[1], "timeout"],
+      [DAILY_MODELS[2], "timeout"],
     ]);
+    const ms = r.tries?.map((x) => x.ms) ?? [];
+    expect(ms.slice(0, 2)).toEqual([5_000, 5_000]);
+    // a 3ª recebe o que resta do prazo (cada troca de modelo consome ~1 ms)
+    expect(ms[2]).toBeGreaterThan(4_990);
+    expect(ms[2]).toBeLessThanOrEqual(5_000);
+    expect([0, 1, 2].map((i) => bodyModel(fetchFn, i))).toEqual([
+      ...DAILY_MODELS,
+    ]);
+    expect(r.latencyMs).toBeLessThanOrEqual(DAILY_BUDGET.deadlineMs);
     expect(dailyEvent(r, "b").payload).toMatchObject({
       reason: "timeout",
-      attempts: 2,
-      model: DAILY_MODELS[1],
+      attempts: 3,
+      model: DAILY_MODELS[2],
     });
+  });
+
+  it("dois timeouts e nota no 3º modelo: a nota chega dentro dos 15 s", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockImplementationOnce(hang())
+      .mockImplementationOnce(hang())
+      .mockImplementationOnce(async () => {
+        await new Promise((res) => setTimeout(res, 3_000)); // 3º modelo responde em 3 s
+        return scored(83);
+      });
+    const r = await run(fetchFn);
+    expect(r).toMatchObject({ ok: true, similarity: 83, attempts: 3 });
+    expect(r.latencyMs).toBeGreaterThanOrEqual(13_000);
+    expect(r.latencyMs).toBeLessThan(13_010);
+    expect(r.latencyMs).toBeLessThanOrEqual(DAILY_BUDGET.deadlineMs);
+    expect(bodyModel(fetchFn, 2)).toBe(DAILY_MODELS[2]);
+    expect(dailyEvent(r, "b").payload).toMatchObject({
+      attempts: 3,
+      model: DAILY_MODELS[2],
+    });
+    expect(dailyEvent(r, "b").payload.tries).toMatch(
+      /^flash-lite-latest:timeout:5000,3\.5-flash:timeout:5000,3\.1-flash-lite:ok:300\d$/,
+    );
+  });
+
+  it("dois timeouts e o 3º modelo lento demais: corta no prazo global, sem nota", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockImplementationOnce(hang())
+      .mockImplementationOnce(hang())
+      .mockImplementationOnce(hang());
+    const r = await run(fetchFn);
+    expect(r).toMatchObject({ ok: false, reason: "timeout", attempts: 3 });
+    expect(r.latencyMs).toBeLessThanOrEqual(DAILY_BUDGET.deadlineMs);
+  });
+
+  it("perto do corte: a nota do modelo de reserva passa intacta (o corte de 80 é o do SQL)", async () => {
+    for (const n of [79, 80, 81]) {
+      const fetchFn = vi
+        .fn()
+        .mockImplementationOnce(hang())
+        .mockImplementationOnce(hang())
+        .mockResolvedValueOnce(scored(n));
+      const r = await run(fetchFn);
+      expect(r).toMatchObject({ ok: true, similarity: n });
+      // mesmo prompt e temperatura em todos os modelos; só o modelo muda
+      const bodies = [0, 1, 2].map((i) =>
+        JSON.parse(
+          String(
+            (fetchFn.mock.calls[i] as unknown as [string, RequestInit])[1].body,
+          ),
+        ),
+      );
+      for (const b of bodies.slice(1)) {
+        expect(b.messages).toEqual(bodies[0].messages);
+        expect(b.temperature).toBe(bodies[0].temperature);
+      }
+    }
   });
 
   it("Gemini indisponível (rede caída persistente): 3 tentativas e falha, sem nota", async () => {
