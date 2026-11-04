@@ -192,6 +192,14 @@ export async function judgeCandidates(opts: {
   return { ok: true, scores, matches, attempts: chat.attempts };
 }
 
+/**
+ * Orçamento do Desafio Diário (incidente de 03/11/2026: duas falhas seguidas
+ * do Gemini às 22:06/22:07). O jogador espera a resposta na tela: até 3
+ * tentativas em no máximo 15 s somados. A política de nova tentativa é a de
+ * callChat — 503, timeout e rede repetem; 429 repete UMA vez só (2 chamadas).
+ */
+export const DAILY_BUDGET = { timeoutMs: 8_000, retries: 2, deadlineMs: 15_000 } as const;
+
 /** Desafio Diário: nota 0–100 do palpite. */
 export async function scoreGuess(opts: {
   fetchFn: Fetch;
@@ -207,6 +215,7 @@ export async function scoreGuess(opts: {
     url: opts.url,
     temperature: SEMANTIC_TEMPERATURE,
     messages: dailyMessages(opts.word, opts.truth, opts.guess),
+    ...DAILY_BUDGET,
   });
   if (!chat.ok) return { ok: false, reason: chat.reason, status: chat.status, attempts: chat.attempts };
   const score = parseDailyScore(chat.content);

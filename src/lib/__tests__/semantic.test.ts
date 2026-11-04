@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import {
+  DAILY_BUDGET,
   DAILY_ID,
+  JUDGE_BUDGET,
   SEMANTIC_CORE,
   SEMANTIC_EXAMPLES,
   SEMANTIC_TEMPERATURE,
@@ -360,14 +362,67 @@ describe("Desafio Diário (nota 0–100)", () => {
     ).toMatchObject({ ok: false, reason: "invalid_response" });
   });
 
-  it("o servidor do Diário recusa ANTES de gravar quando não há nota (tentativa não é gasta)", () => {
+  it("o servidor do Diário só grava pela nota da IA (tentativa não é gasta sem nota)", () => {
     const src = readFileSync("src/lib/daily.functions.ts", "utf8");
-    expect(src).toContain("res.ok ? res.score : null");
-    const iNull = src.indexOf("similarity === null");
-    const iThrow = src.indexOf("throw new Error(DAILY_EVAL_UNAVAILABLE)");
-    const iRecord = src.indexOf('"submit_daily_attempt_scored"');
-    expect(iNull).toBeGreaterThan(-1);
-    expect(iThrow).toBeGreaterThan(iNull);
-    expect(iRecord).toBeGreaterThan(iThrow);
+    // a RPC que gasta a tentativa só existe dentro do `record`, que
+    // runDailyEvaluation chama apenas com nota (testes em daily-evaluation)
+    const iRun = src.indexOf("runDailyEvaluation({");
+    const iRecord = src.indexOf("record: async (similarity)");
+    const iRpc = src.indexOf('"submit_daily_attempt_scored"');
+    expect(iRun).toBeGreaterThan(-1);
+    expect(iRecord).toBeGreaterThan(iRun);
+    expect(iRpc).toBeGreaterThan(iRecord);
+    expect(src.split('"submit_daily_attempt_scored"')).toHaveLength(2);
+    // nada de nota padrão quando falta a definição ou a IA
+    expect(src).not.toMatch(/:\s*0;\s*$/m);
+    expect(src).toContain("process.env.GEMINI_API_KEY");
+  });
+
+  it("paridade com o multiplayer: mesmo prompt, temperatura, modelo e corte para a mesma nota", async () => {
+    const reply = (content: string) =>
+      vi.fn(async (_u: string, _i: RequestInit) => ok(content));
+    for (const n of [0, 49, 50, 79, 80, 81, 100]) {
+      const daily = reply(
+        JSON.stringify({ scores: [{ id: DAILY_ID, score: n }] }),
+      );
+      const multi = reply(
+        JSON.stringify({ scores: [{ id: DAILY_ID, score: n }] }),
+      );
+      const d = await scoreGuess({
+        fetchFn: daily,
+        apiKey: "k",
+        word: "w",
+        truth: "t",
+        guess: "g",
+      });
+      const m = await judgeCandidates({
+        fetchFn: multi,
+        apiKey: "k",
+        word: "w",
+        truth: "t",
+        candidates: [{ id: DAILY_ID, text: "g" }],
+      });
+      expect(d).toMatchObject({ ok: true, score: n });
+      expect(m).toMatchObject({ ok: true });
+      if (!d.ok || !m.ok) continue;
+      // o Diário aplica o corte no SQL (>= 80); o multiplayer, aqui
+      expect(m.matches.includes(DAILY_ID)).toBe(d.score >= SEMANTIC_THRESHOLD);
+      const bd = sentBody(daily);
+      const bm = sentBody(multi);
+      expect(bd.messages).toEqual(bm.messages);
+      expect(bd.temperature).toBe(bm.temperature);
+      expect(bd.model).toBe(bm.model);
+    }
+  });
+
+  it("orçamento do Diário cabe na espera do jogador e não muda o do juiz do multiplayer", () => {
+    expect(DAILY_BUDGET.retries + 1).toBeLessThanOrEqual(3);
+    expect(DAILY_BUDGET.deadlineMs).toBeLessThanOrEqual(15_000);
+    expect(DAILY_BUDGET.timeoutMs).toBeLessThan(DAILY_BUDGET.deadlineMs);
+    expect(JUDGE_BUDGET).toEqual({
+      timeoutMs: 8_000,
+      retries: 3,
+      deadlineMs: 17_000,
+    });
   });
 });

@@ -8,10 +8,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { scoreGuess } from "../../supabase/functions/_shared/semantic.ts";
+import { evaluateDailyGuess, runDailyEvaluation } from "./daily-evaluation";
 
-export const DAILY_EVAL_UNAVAILABLE =
-  "A avaliação está indisponível agora — sua tentativa NÃO foi gasta. Tente de novo em instantes.";
+export { DAILY_EVAL_UNAVAILABLE } from "./daily-evaluation";
 
 const submitInput = z.object({
   guess: z.string().min(1).max(200),
@@ -22,20 +21,6 @@ function hourBucketIso(): string {
   const d = new Date();
   d.setUTCMinutes(0, 0, 0);
   return d.toISOString();
-}
-
-// null = avaliação indisponível (sem chave, Gemini fora após nova tentativa,
-// resposta inválida). Antes virava 0: o palpite era gravado como ERRADO e a
-// tentativa do dia era consumida sem o jogador saber (IA-04).
-async function scoreSemanticSimilarity(
-  word: string,
-  truth: string,
-  guess: string,
-): Promise<number | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-  const res = await scoreGuess({ fetchFn: fetch, apiKey, word, truth, guess });
-  return res.ok ? res.score : null;
 }
 
 export const submitDailyAttempt = createServerFn({ method: "POST" })
@@ -64,41 +49,43 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
       truth = String(w?.meaning ?? "");
     }
 
-    // 2) Calcula a semelhança semântica via IA. Indisponível = NÃO registra
-    // (a tentativa não é gasta) e o painel de saúde/alerta fica sabendo.
-    const similarity = truth
-      ? await scoreSemanticSimilarity(word, truth, data.guess)
-      : 0;
-    if (similarity === null) {
-      await supabaseAdmin
-        .from("ops_events")
-        .insert({
-          kind: "judge_ai_error",
-          payload: { fn: "daily", reason: "unavailable" },
-        })
-        .then(
-          () => {},
-          () => {},
-        );
-      throw new Error(DAILY_EVAL_UNAVAILABLE);
-    }
-
+    // 2) Calcula a semelhança semântica via IA. Indisponível (sem chave, sem
+    // definição, Gemini fora após as novas tentativas, resposta inválida) =
+    // NÃO registra (a tentativa não é gasta, nunca vira nota 0) e o evento
+    // diz o motivo para o painel de saúde/alerta.
     // 3) Registra via RPC de servidor (apenas service_role pode chamar).
-    const { data: result, error } = await supabaseAdmin.rpc(
-      "submit_daily_attempt_scored",
-      {
-        p_user_id: userId,
-        p_guess: data.guess,
-        p_time_seconds: data.timeSeconds,
-        p_similarity: similarity,
+    const result = await runDailyEvaluation({
+      evaluate: () =>
+        evaluateDailyGuess({
+          fetchFn: fetch,
+          apiKey: process.env.GEMINI_API_KEY,
+          word,
+          truth,
+          guess: data.guess,
+        }),
+      logEvent: async (ev) => {
+        await supabaseAdmin.from("ops_events").insert(ev);
       },
-    );
-    if (error) {
-      console.error("[submitDailyAttempt] rpc error", error);
-      throw new Error(
-        `Não foi possível registrar sua tentativa. [${(error as { code?: string }).code ?? "?"}: ${(error as { message?: string }).message ?? "?"}]`,
-      );
-    }
+      build: import.meta.env.VITE_BUILD_ID as string | undefined,
+      record: async (similarity) => {
+        const { data: recorded, error } = await supabaseAdmin.rpc(
+          "submit_daily_attempt_scored",
+          {
+            p_user_id: userId,
+            p_guess: data.guess,
+            p_time_seconds: data.timeSeconds,
+            p_similarity: similarity,
+          },
+        );
+        if (error) {
+          console.error("[submitDailyAttempt] rpc error", error);
+          throw new Error(
+            `Não foi possível registrar sua tentativa. [${(error as { code?: string }).code ?? "?"}: ${(error as { message?: string }).message ?? "?"}]`,
+          );
+        }
+        return recorded;
+      },
+    });
     return result as {
       already_played: boolean;
       is_correct?: boolean;
