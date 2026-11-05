@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:web": "node scripts/build-web.mjs",
+    "verify:web-bundle": "node scripts/verify-web-bundle.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

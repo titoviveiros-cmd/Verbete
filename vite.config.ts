@@ -19,8 +19,9 @@ import {
   readAndroidVersion,
   resolveReleaseChannel,
 } from "./build/native-env";
+import { assertWebEnv } from "./build/web-env";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // Fonte única da versão: android/app/build.gradle (a mesma do APK).
   const appVersion = readAndroidVersion("android/app/build.gradle");
   // O prerender do shell SPA relança um vite preview que RECARREGA este
@@ -47,6 +48,13 @@ export default defineConfig(({ mode }) => {
     }
   }
   const isCapacitor = mode === "capacitor" || process.env.CAP_BUILD === "1";
+  // Bundle web: sem URL/chave pública do Supabase o app abre direto no "Ops!
+  // Algo deu errado" (incidente P1 de 05/11/2026). O build FALHA aqui, antes
+  // de gerar qualquer arquivo. Só o dev server e o build de desenvolvimento
+  // (`vite build --mode development`) ficam de fora.
+  if (command === "build" && !isCapacitor && mode !== "development") {
+    assertWebEnv(loadEnv(mode, process.cwd(), "VITE_"));
+  }
   // Rodapé de versão da Home (src/lib/version-label.ts): versionName sempre
   // do build.gradle (sem override: nunca diverge do APK) e o canal decidido
   // aqui, no build — nativo = teste interno por padrão, web = produção.
