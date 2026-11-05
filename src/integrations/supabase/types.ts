@@ -1174,6 +1174,30 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      daily_claim: {
+        Args: { p_hour: string; p_origin?: string; p_user_id: string };
+        Returns: Json;
+      };
+      daily_finish_fail: {
+        Args: {
+          p_claim_id: string;
+          p_hour: string;
+          p_kind: string;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
+      daily_finish_ok: {
+        Args: {
+          p_claim_id: string;
+          p_guess: string;
+          p_hour: string;
+          p_similarity: number;
+          p_time_seconds: number;
+          p_user_id: string;
+        };
+        Returns: Json;
+      };
       definition_reveal_tokens: { Args: { p_text: string }; Returns: string[] };
       definition_reveals_word: {
         Args: { p_text: string; p_word: string };

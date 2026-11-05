@@ -364,15 +364,33 @@ describe("Desafio Diário (nota 0–100)", () => {
 
   it("o servidor do Diário só grava pela nota da IA (tentativa não é gasta sem nota)", () => {
     const src = readFileSync("src/lib/daily.functions.ts", "utf8");
-    // a RPC que gasta a tentativa só existe dentro do `record`, que
-    // runDailyEvaluation chama apenas com nota (testes em daily-evaluation)
-    const iRun = src.indexOf("runDailyEvaluation({");
-    const iRecord = src.indexOf("record: async (similarity)");
+    // V2 (05/11/2026): a reserva vem antes da IA. As DUAS formas de gastar a
+    // tentativa só recebem a nota da IA:
+    //  (a) fluxo antigo: `legacyRecord(similarity)`, que runDailyEvaluation
+    //      só chama com nota (testes em daily-evaluation);
+    //  (b) fluxo com reserva: `finishOk(claimId, similarity)` → daily_finish_ok,
+    //      que daily-guard só chama depois de r.ok (testes em daily-guard).
+    const iRun = src.indexOf("runGuardedDailyAttempt({");
+    const iFinish = src.indexOf("finishOk: async (claimId, similarity)");
+    const iFinishRpc = src.indexOf('"daily_finish_ok"');
+    const iLegacy = src.indexOf("legacyRecord: async (similarity)");
     const iRpc = src.indexOf('"submit_daily_attempt_scored"');
     expect(iRun).toBeGreaterThan(-1);
-    expect(iRecord).toBeGreaterThan(iRun);
-    expect(iRpc).toBeGreaterThan(iRecord);
+    expect(iFinish).toBeGreaterThan(iRun);
+    expect(iFinishRpc).toBeGreaterThan(iFinish);
+    expect(iLegacy).toBeGreaterThan(iRun);
+    expect(iRpc).toBeGreaterThan(iLegacy);
     expect(src.split('"submit_daily_attempt_scored"')).toHaveLength(2);
+    expect(src.split('"daily_finish_ok"')).toHaveLength(2);
+    // no orquestrador, a gravação só vem DEPOIS de checar a nota
+    const guard = readFileSync("src/lib/daily-guard.ts", "utf8");
+    const iOkCheck = guard.indexOf("if (!r.ok) {");
+    const iFinishCall = guard.indexOf("deps.finishOk(claimId, r.similarity)");
+    expect(iOkCheck).toBeGreaterThan(-1);
+    expect(iFinishCall).toBeGreaterThan(iOkCheck);
+    expect(guard.split("deps.finishOk(").length).toBe(2);
+    expect(guard).toContain("record: deps.legacyRecord");
+    expect(guard).toContain("runDailyEvaluation({");
     // nada de nota padrão quando falta a definição ou a IA
     expect(src).not.toMatch(/:\s*0;\s*$/m);
     expect(src).toContain("process.env.GEMINI_API_KEY");

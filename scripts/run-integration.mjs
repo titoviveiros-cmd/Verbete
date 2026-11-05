@@ -12,6 +12,7 @@ const SUITES = [
   "test-security-rest.mjs",
   "test-shuffling-deadlock.mjs",
   "test-similarity-bonus.mjs",
+  "test-daily-guard.mjs", // V2 Diário: reserva atômica antes da IA, com conexões REAIS independentes
   "test-edges-e2e.mjs",
   "test-phase-secs.mjs",
   "test-ops.mjs",
