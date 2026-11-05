@@ -40,6 +40,25 @@ export type Database = {
         };
         Relationships: [];
       };
+      ai_quota: {
+        Row: {
+          key: string;
+          used: number;
+          window_start: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          key: string;
+          used?: number;
+          window_start: string;
+        };
+        Update: {
+          key?: string;
+          used?: number;
+          window_start?: string;
+        };
+        Relationships: [];
+      };
       ai_served_defs: {
         Row: {
           created_at: string;
@@ -182,6 +201,46 @@ export type Database = {
           created_at?: string;
           id?: string;
           word_id?: string;
+        };
+        Relationships: [];
+      };
+      daily_eval_claims: {
+        Row: {
+          challenge_hour: string;
+          claim_id: string;
+          expires_at: string;
+          failures: number;
+          last_failure_at: string | null;
+          last_failure_kind: string | null;
+          started_at: string;
+          state: string;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          challenge_hour: string;
+          claim_id: string;
+          expires_at: string;
+          failures?: number;
+          last_failure_at?: string | null;
+          last_failure_kind?: string | null;
+          started_at?: string;
+          state: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          challenge_hour?: string;
+          claim_id?: string;
+          expires_at?: string;
+          failures?: number;
+          last_failure_at?: string | null;
+          last_failure_kind?: string | null;
+          started_at?: string;
+          state?: string;
+          updated_at?: string;
+          user_id?: string;
         };
         Relationships: [];
       };
@@ -1074,6 +1133,14 @@ export type Database = {
         Args: { p_room_id: string };
         Returns: undefined;
       };
+      ai_quota_add: {
+        Args: { p_key: string; p_window_s: number };
+        Returns: number;
+      };
+      ai_quota_used: {
+        Args: { p_key: string; p_window_s: number };
+        Returns: number;
+      };
       apply_similarity_bonus:
         | { Args: { p_definition_ids: string[] }; Returns: Json }
         | {
@@ -1175,7 +1242,7 @@ export type Database = {
         };
       };
       daily_claim: {
-        Args: { p_hour: string; p_origin?: string; p_user_id: string };
+        Args: { p_hour?: string; p_origin?: string; p_user_id: string };
         Returns: Json;
       };
       daily_finish_fail: {
@@ -1198,6 +1265,16 @@ export type Database = {
         };
         Returns: Json;
       };
+      daily_guard_cleanup: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
+      daily_guard_int: {
+        Args: { p_default: number; p_key: string; p_min?: number };
+        Returns: number;
+      };
+      daily_guard_log: { Args: { p_payload: Json }; Returns: undefined };
+      daily_guard_mode: { Args: Record<PropertyKey, never>; Returns: string };
       definition_reveal_tokens: { Args: { p_text: string }; Returns: string[] };
       definition_reveals_word: {
         Args: { p_text: string; p_word: string };
