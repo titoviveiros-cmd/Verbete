@@ -38,8 +38,16 @@ export function jwtRole(token: string): string | null {
   }
 }
 
-/** Lista de problemas da configuração pública do bundle nativo (vazia = ok). */
-export function nativeEnvProblems(
+/** https público (não localhost/.local), ou null. */
+export function isPublicHttps(raw: string | undefined): boolean {
+  return publicHttps(raw) !== null;
+}
+
+/**
+ * Problemas da configuração pública do Supabase embutida no cliente (URL +
+ * chave pública). Compartilhada pelas travas do build nativo e do build web.
+ */
+export function supabasePublicProblems(
   env: Record<string, string | undefined>,
 ): string[] {
   const problems: string[] = [];
@@ -68,6 +76,14 @@ export function nativeEnvProblems(
       "VITE_SUPABASE_PUBLISHABLE_KEY não parece uma chave pública do Supabase",
     );
   }
+  return problems;
+}
+
+/** Lista de problemas da configuração pública do bundle nativo (vazia = ok). */
+export function nativeEnvProblems(
+  env: Record<string, string | undefined>,
+): string[] {
+  const problems = supabasePublicProblems(env);
 
   if (!publicHttps(env.VITE_APP_URL)) {
     problems.push(

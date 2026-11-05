@@ -41,11 +41,22 @@ jobs:
         run: npm run typecheck
       - name: Testes unitários
         run: npm run test
-      - name: Build web
-        run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      # Incidente P1 de 05/11/2026: bundle web publicado SEM a configuração
+      # pública do Supabase. (1) A trava TEM de barrar um build sem ela — se
+      # este passo "buildar", a trava sumiu. (2) O build de verdade usa a
+      # configuração de wrangler.jsonc (a do SSR) e termina na verificação
+      # POSITIVA do bundle (URL/chave embutidas, build ID, nenhum segredo).
+      # Os secrets VITE_SUPABASE_* que este passo usava nunca existiram no
+      # repositório: o build da CI saía sem configuração e passava.
+      - name: Trava do build web (deve BLOQUEAR sem configuração pública)
+        run: |
+          if env -u VITE_SUPABASE_URL -u VITE_SUPABASE_PUBLISHABLE_KEY npx vite build --outDir /tmp/nao-deveria-existir > /tmp/trava.log 2>&1; then
+            echo "::error::vite build passou SEM VITE_SUPABASE_* — a trava do build web sumiu"; exit 1
+          fi
+          grep -q "Build web bloqueado" /tmp/trava.log || { cat /tmp/trava.log; echo "::error::falhou por outro motivo"; exit 1; }
+          echo "trava OK: build sem configuração pública bloqueado"
+      - name: Build web (configuração pública de wrangler.jsonc + verificação do bundle)
+        run: npm run build:web
 
   integration:
     runs-on: ubuntu-latest
