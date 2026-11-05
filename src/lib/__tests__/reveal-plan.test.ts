@@ -148,7 +148,7 @@ describe("microcopy", () => {
     expect(["enganou todo mundo!", "golpe perfeito"]).toContain(
       bluffQuip(3, 3, 1, "C"),
     );
-    expect(["quase perfeito", "por um triz, todos"]).toContain(
+    expect(["quase acertou", "por um triz, todos"]).toContain(
       bluffQuip(3, 4, 1, "C"),
     );
   });
