@@ -155,8 +155,17 @@ export function WriteDefinition({
   const terms = useTermsGate();
   const textRef = useRef(text);
   textRef.current = text;
+  // Envio em voo (05/11/2026): o "✓ enviada" só aparece quando o servidor
+  // confirma. Até lá, "Enviando…" — feedback no mesmo quadro do clique, sem
+  // prometer o que ainda não aconteceu. A definição otimista da lista
+  // (id `pending_…`, injetada por submitDefinition) também conta como em voo.
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const myDefPending = !!myDef && String(myDef.id).startsWith("pending_");
+  const confirmed = submitted || (!!myDef && !myDefPending);
+  const showSent = sending || submitted || !!myDef;
   const sentRef = useRef(false);
-  sentRef.current = submitted || !!myDef;
+  sentRef.current = showSent;
   const generateAuto = useMemo(
     () => () =>
       generateAiDefinitionForPlayer(word, room.id, room.current_round),
@@ -354,6 +363,9 @@ export function WriteDefinition({
   const timerMax = writingTimerMax(activeExtension);
 
   const handleSubmit = async ({ keyboard = false } = {}) => {
+    // Um envio por vez: dois Enter/cliques no mesmo quadro mandavam 2 RPCs
+    // (medido 05/11/2026; o servidor deduplicava, mas a 2ª podia vir com erro).
+    if (sendingRef.current || submitted || myDef) return;
     if (!text.trim()) return;
     if (!me || !word) return;
     const issue = definitionIssue(text, word.word);
@@ -365,7 +377,8 @@ export function WriteDefinition({
     // em seguida marcaria a caixa sem querer); no botão, o foco vai à caixa.
     if (!terms.confirm({ focus: !keyboard })) return;
     void playSubmit();
-    setSubmitted(true);
+    sendingRef.current = true;
+    setSending(true);
     try {
       await submitDefinition(
         room.id,
@@ -374,6 +387,7 @@ export function WriteDefinition({
         text,
         word.word,
       );
+      setSubmitted(true);
     } catch (e) {
       console.error("submitDefinition failed", e);
       setSubmitted(false);
@@ -391,11 +405,14 @@ export function WriteDefinition({
       } else {
         toast.error("Não foi possível enviar sua definição. Tente novamente.");
       }
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   };
 
   const handleAiGenerate = async () => {
-    if (!word || !autoKey || aiLoading || submitted || myDef) return;
+    if (!word || !autoKey || aiLoading || showSent) return;
     setAiLoading(true);
     try {
       // Reserva local: a sugestão antecipada não chegou nem na espera curta
@@ -526,7 +543,7 @@ export function WriteDefinition({
       </p>
     </>
   );
-  const editing = !(submitted || myDef);
+  const editing = !showSent;
 
   return (
     <motion.div
@@ -593,14 +610,26 @@ export function WriteDefinition({
           </div>
         </div>
         <div className="flex flex-col gap-2 min-w-0">
-          {submitted || myDef ? (
+          {showSent ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center panel px-4 py-6">
               <Mascot mood="thinking" size={110} />
-              <p className="font-display text-2xl text-mint">
-                Definição enviada! ✓
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Aguardando os outros…
+              {confirmed ? (
+                <p className="font-display text-2xl text-mint">
+                  Definição enviada! ✓
+                </p>
+              ) : (
+                <p className="font-display text-2xl" aria-live="polite">
+                  Enviando sua definição…
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {!confirmed
+                  ? "Só um instante."
+                  : allSubmitted
+                    ? "Todos enviaram! Já vamos embaralhar…"
+                    : pending.length > 0 && pending.every((p) => p.is_bot)
+                      ? "Só faltam os bots — já já embaralha…"
+                      : "Aguardando os outros…"}
               </p>
               <ProgressBar current={submittedCount} total={writers.length} />
               <PendingList pending={pending} />
