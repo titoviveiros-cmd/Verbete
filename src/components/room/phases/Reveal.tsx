@@ -739,7 +739,7 @@ function RevealImpl({
                           data-testid="near-miss"
                           className="mt-2 text-[12px] font-display text-muted-foreground"
                         >
-                          🤏 Quase lá! Faltou precisão.
+                          🤏 Quase acertou! Faltou precisão.
                         </motion.p>
                       )}
                       {dVoters.length > 0 && (

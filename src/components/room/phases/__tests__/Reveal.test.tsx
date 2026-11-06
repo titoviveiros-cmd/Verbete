@@ -256,13 +256,13 @@ describe("verdade primeiro", () => {
         ? { data: mine }
         : { data: { near_truth_ids: near } }) as never);
 
-  it("🤏 'Quase lá! Faltou precisão.' só no MEU blefe, sem ponto extra", async () => {
+  it("🤏 'Quase acertou! Faltou precisão.' só no MEU blefe, sem ponto extra", async () => {
     nearMissRpc(true);
     mount();
     await tick(12_000);
     const tags = region().querySelectorAll('[data-testid="near-miss"]');
     expect(tags).toHaveLength(1);
-    expect(tags[0]!.textContent).toBe("🤏 Quase lá! Faltou precisão.");
+    expect(tags[0]!.textContent).toBe("🤏 Quase acertou! Faltou precisão.");
     expect(tags[0]!.closest("li")!.textContent).toContain("canoa indígena");
     expect(region().querySelectorAll('[data-near-truth="1"]')).toHaveLength(0);
     expect(
