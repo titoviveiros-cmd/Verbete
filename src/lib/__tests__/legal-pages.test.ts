@@ -2,13 +2,13 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  AI_PROVIDER,
   ANDROID_PACKAGE,
   CONTACT_EMAIL,
   DELETE_ACCOUNT_PATH,
-  GEMINI_TERMS_URL,
-  GOOGLE_PRIVACY_URL,
   contactMailto,
 } from "@/lib/legal";
+import { TERMS_VERSION } from "@/lib/terms-record";
 
 // Páginas legais (rodada 2A da conformidade Google Play, 27/10/2026): o
 // contato oficial é decisão do proprietário, os fatos do Suporte foram
@@ -205,17 +205,17 @@ describe("Termos 2026-10-27 — o que a política de UGC exige", () => {
       /bandeira 🚩/,
       /Denunciar jogador/,
       /banir/,
-      /Gemini/,
+      /AI_PROVIDER\.name/,
       /novo aceite/,
       /licença gratuita e não exclusiva/,
     ])
       expect(t).toMatch(topic);
   });
 
-  it("a Política cita o Gemini sem identificadores e os provedores reais", () => {
+  it("a Política cita o provedor de IA sem identificadores e os provedores reais", () => {
     const p = read(ROUTES.privacy);
     for (const fact of [
-      /Gemini/,
+      /AI_PROVIDER\.name/,
       /Supabase/,
       /Cloudflare/,
       /fontes do jogo/,
@@ -225,29 +225,89 @@ describe("Termos 2026-10-27 — o que a política de UGC exige", () => {
   });
 });
 
-// 05/11/2026: a chave Gemini está no plano gratuito — pelos termos da Gemini
-// API, o Google usa o conteúdo para melhorar os produtos dele, com revisão
-// humana. A Política tem de dizer isso (e o Data Safety declara
-// compartilhamento). Ativar faturamento = mudar este teste, a Política e
-// docs/google-play-data-safety-draft.md juntos.
-describe("Gemini no plano gratuito — a Política conta o uso pelo Google", () => {
-  it("diz o plano, a melhoria de produtos, a revisão humana e orienta a não escrever dados pessoais", () => {
-    const p = read(ROUTES.privacy);
-    expect(p).toMatch(/plano gratuito da API Gemini/);
-    expect(p).toMatch(/melhorar e desenvolver os produtos e serviços dele/);
-    expect(p).toMatch(/revisores humanos podem ler/);
-    expect(p).toMatch(/não escreva dados pessoais/);
-    expect(p).toMatch(/href=\{GEMINI_TERMS_URL\}/);
-    expect(p).toMatch(/href=\{GOOGLE_PRIVACY_URL\}/);
-    expect(GEMINI_TERMS_URL).toBe("https://ai.google.dev/gemini-api/terms");
-    expect(GOOGLE_PRIVACY_URL).toBe("https://policies.google.com/privacy");
+// 05/11/2026: provedor de IA num PONTO ÚNICO (AI_PROVIDER em src/lib/legal.ts).
+// Hoje: Google Gemini no plano gratuito — pelos termos da Gemini API, o Google
+// usa o conteúdo para melhorar os produtos dele, com revisão humana (Data
+// Safety: compartilhamento). Trocar o provedor (ex.: Workers AI) ou o plano =
+// editar AI_PROVIDER + ESTE bloco; o teste de amarração ao código falha se o
+// código trocar de provedor sem o texto acompanhar.
+const AI_CODE = [
+  "supabase/functions/_shared/ai.ts",
+  "src/lib/daily-evaluation.ts",
+  "src/lib/daily.functions.ts",
+];
+/** Provedor que o CÓDIGO chama (Edges + Worker do Diário). */
+function providerInCode(): string[] {
+  const src = AI_CODE.map(read).join(" ");
+  const found: string[] = [];
+  if (/generativelanguage\.googleapis\.com|GEMINI_API_KEY/.test(src))
+    found.push("Google Gemini");
+  if (/@cf\/|\/ai\/run\/|env\.AI\.run|workers-ai/i.test(src))
+    found.push("Cloudflare Workers AI");
+  if (/api\.openai\.com|api\.anthropic\.com/.test(src)) found.push("outro");
+  return found;
+}
+
+describe("provedor de IA — ponto único (AI_PROVIDER)", () => {
+  it("hoje: Google Gemini no plano gratuito, com os termos e a política do Google", () => {
+    expect(AI_PROVIDER).toEqual({
+      name: "Google Gemini",
+      shortName: "Gemini",
+      termsLabel: "termos da API Gemini",
+      termsUrl: "https://ai.google.dev/gemini-api/terms",
+      privacyLabel: "Política de Privacidade do Google",
+      privacyUrl: "https://policies.google.com/privacy",
+      ownUseNotice: expect.stringMatching(/plano gratuito da API Gemini/),
+    });
+    expect(AI_PROVIDER.ownUseNotice).toMatch(
+      /melhorar e desenvolver os produtos e serviços dele/,
+    );
+    expect(AI_PROVIDER.ownUseNotice).toMatch(/revisores humanos podem ler/);
   });
 
-  it("o único provedor de IA no código é o Gemini (o texto não pode citar outro)", () => {
-    const ai = read("supabase/functions/_shared/ai.ts");
-    expect(ai).toMatch(/generativelanguage\.googleapis\.com/);
-    for (const path of [ROUTES.privacy, ROUTES.terms, ROUTES.support])
-      expect(read(path), path).not.toMatch(/OpenAI|ChatGPT|Anthropic|Claude/);
+  it("o texto acompanha o provedor que o código chama", () => {
+    expect(providerInCode()).toEqual([AI_PROVIDER.name]);
+  });
+
+  it("trocar o provedor exige revisar os Termos (TERMS_VERSION)", () => {
+    // Os Termos citam AI_PROVIDER: novo provedor = novo texto aceito. Ao
+    // trocar, mudar a data de /terms (TERMS_VERSION) e este par juntos.
+    expect({ provider: AI_PROVIDER.name, terms: TERMS_VERSION }).toEqual({
+      provider: "Google Gemini",
+      terms: "2026-10-27",
+    });
+  });
+
+  it("as páginas usam só a constante — nenhum provedor escrito à mão", () => {
+    for (const path of [ROUTES.privacy, ROUTES.terms, ROUTES.support]) {
+      // sem comentários (podem citar o provedor de hoje para contexto)
+      const src = readFileSync(resolve(ROOT, path), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      expect(src, path).toMatch(/AI_PROVIDER\.name/);
+      expect(src, path).not.toMatch(
+        /Gemini|googleapis|Workers AI|OpenAI|ChatGPT|Anthropic|Claude/,
+      );
+    }
+  });
+
+  it("a Política mostra o uso próprio (quando houver), a orientação e os links do provedor", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/AI_PROVIDER\.ownUseNotice/);
+    expect(p).toMatch(/Não escreva dados pessoais/);
+    expect(p).toMatch(/href=\{AI_PROVIDER\.termsUrl\}/);
+    expect(p).toMatch(/href=\{AI_PROVIDER\.privacyUrl\}/);
+  });
+
+  it("a Política vale também com a IA desligada (contenção), sem prometer interruptor", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(
+      /Quando os recursos de inteligência artificial estão ligados/,
+    );
+    expect(p).toMatch(/indisponível ou desligada/);
+    expect(p).toMatch(/os bots usam definições de reserva/);
+    // a reserva local dos bots existe hoje
+    expect(read("src/lib/room.ts")).toMatch(/BOT_FAKE_DEFINITIONS_TEMPLATES/);
   });
 });
 

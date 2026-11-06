@@ -83,6 +83,11 @@ pelo Google para melhorar os próprios produtos é descrito na `/privacy`.
 - Os mesmos termos exigem 18+ e vedam uso em serviço direcionado a ou
   provavelmente acessado por menores de 18. **Decisão pendente do dono**
   (público-alvo 13+); este rascunho não a resolve.
+- Ponto único nas páginas: `AI_PROVIDER` em `src/lib/legal.ts`
+  (`ownUseNotice` não-nulo = "compartilhado" aqui). Trocar o provedor (ex.:
+  Workers AI, que não usa o conteúdo para treinar) ou suspender a IA muda
+  esta seção e a linha "Outro conteúdo gerado pelo usuário" — revisar junto
+  com o objeto, os testes e a data de `/terms`.
 
 ## 5. V2 do Diário — registros de limite de uso
 

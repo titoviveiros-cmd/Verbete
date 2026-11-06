@@ -1,10 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { APP_HOST } from "@/lib/app-url";
-import {
-  CONTACT_EMAIL,
-  GEMINI_TERMS_URL,
-  GOOGLE_PRIVACY_URL,
-} from "@/lib/legal";
+import { AI_PROVIDER, CONTACT_EMAIL } from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 // Só o comportamento COMPROVADO no código (auditoria da rodada 2A,
@@ -15,12 +11,14 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 // texto só DEPOIS de aplicar a migration. Pendente do proprietário e por isso
 // fora daqui: identidade formal do controlador (nome do desenvolvedor igual
 // ao da conta do Play Console) e prazo de atendimento dos pedidos.
-// Gemini (05/11/2026): a chave está no PLANO GRATUITO da API — pelos termos
-// da Gemini API (ai.google.dev/terms), o Google usa o conteúdo enviado para
-// melhorar os produtos dele, com revisão humana. Se o faturamento for ativado,
-// este texto, o Data Safety e docs/google-play-data-safety-draft.md mudam
-// juntos. Registros da V2 do Diário (daily_eval_claims, ai_quota): limpeza
-// de 3 dias em 20261105150000_daily_guard_v2.sql.
+// Provedor de IA (05/11/2026): nome, termos e uso próprio do conteúdo vêm
+// SÓ de AI_PROVIDER (src/lib/legal.ts) — hoje Google Gemini, plano gratuito.
+// O texto vale também com a IA desligada (contenção): fala em "quando os
+// recursos estão ligados" e não promete interruptor. Trocar o provedor ou o
+// plano = mudar AI_PROVIDER, o Data Safety e
+// docs/google-play-data-safety-draft.md juntos. Registros da V2 do Diário
+// (daily_eval_claims, ai_quota): limpeza de 3 dias em
+// 20261105150000_daily_guard_v2.sql.
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
@@ -155,44 +153,44 @@ function PrivacyPage() {
 
         <section>
           <h2 className="font-display text-lg mb-1">
-            Inteligência artificial (Google Gemini)
+            Inteligência artificial ({AI_PROVIDER.name})
           </h2>
           <p>
-            Enviamos ao Gemini, do Google: a palavra da rodada, a definição
+            Quando os recursos de inteligência artificial estão ligados,
+            enviamos ao {AI_PROVIDER.name}: a palavra da rodada, a definição
             verdadeira e os textos das definições da rodada, inclusive as
             escritas pelos jogadores, para avaliar quais chegaram perto da
             verdadeira; o seu palpite do Desafio Diário, para avaliá-lo; e, para
             criar as definições dos bots, a palavra, a definição verdadeira e
             definições anteriores dos próprios bots. Não enviamos nome, apelido,
-            e-mail nem identificadores de conta, sessão ou jogador.
+            e-mail nem identificadores de conta, sessão ou jogador. Se a
+            inteligência artificial estiver indisponível ou desligada, o bônus
+            🧠 e a avaliação do Desafio Diário podem não funcionar, e os bots
+            usam definições de reserva.
           </p>
           <p className="mt-2">
-            Hoje o jogo usa o plano gratuito da API Gemini. Nesse plano, pelos
-            termos do Google, o Google pode usar o conteúdo que enviamos — a
-            palavra, as definições e os palpites — e as respostas da IA para
-            fornecer, melhorar e desenvolver os produtos e serviços dele, e
-            revisores humanos podem ler esse conteúdo. Por isso,{" "}
+            {AI_PROVIDER.ownUseNotice ? `${AI_PROVIDER.ownUseNotice} ` : null}
             <strong>
-              não escreva dados pessoais (seus ou de outras pessoas) nem
-              informações confidenciais nas definições e nos palpites
-            </strong>
-            . Veja os{" "}
+              Não escreva dados pessoais (seus ou de outras pessoas) nem
+              informações confidenciais nas definições e nos palpites.
+            </strong>{" "}
+            Veja os{" "}
             <a
               className="underline"
-              href={GEMINI_TERMS_URL}
+              href={AI_PROVIDER.termsUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
-              termos da API Gemini
+              {AI_PROVIDER.termsLabel}
             </a>{" "}
             e a{" "}
             <a
               className="underline"
-              href={GOOGLE_PRIVACY_URL}
+              href={AI_PROVIDER.privacyUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
-              Política de Privacidade do Google
+              {AI_PROVIDER.privacyLabel}
             </a>
             .
           </p>
@@ -209,11 +207,13 @@ function PrivacyPage() {
               <strong>Cloudflare:</strong> hospedagem do site e do servidor web.
             </li>
             <li>
-              <strong>Google:</strong> o Gemini (acima — no plano gratuito, o
-              Google também usa esse conteúdo para os fins próprios descritos
-              ali); o login com Google, se você escolher; e as fontes do jogo,
-              carregadas dos servidores do Google, que recebem o endereço IP do
-              seu aparelho.
+              <strong>{AI_PROVIDER.name}:</strong> a inteligência artificial
+              descrita acima.
+            </li>
+            <li>
+              <strong>Google:</strong> o login com Google, se você escolher; e
+              as fontes do jogo, carregadas dos servidores do Google, que
+              recebem o endereço IP do seu aparelho.
             </li>
           </ul>
           <p className="mt-2">

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CONTACT_EMAIL, contactMailto } from "@/lib/legal";
+import { AI_PROVIDER, CONTACT_EMAIL, contactMailto } from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 export const Route = createFileRoute("/support")({
@@ -46,7 +46,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "O que é o Desafio Diário?",
-    a: "Uma palavra rara para você adivinhar o significado. Vale um palpite por hora; a inteligência artificial (Google Gemini) avalia o quanto o palpite chegou perto. Não escreva dados pessoais no palpite — veja na Política de Privacidade como o Google trata esse texto.",
+    a: `Uma palavra rara para você adivinhar o significado. Vale um palpite por hora; a inteligência artificial (${AI_PROVIDER.name}) avalia o quanto o palpite chegou perto. Não escreva dados pessoais no palpite — veja na Política de Privacidade como esse texto é tratado.`,
   },
   {
     q: "Encontrei uma definição ofensiva. O que faço?",
