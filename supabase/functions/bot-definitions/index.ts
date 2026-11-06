@@ -7,6 +7,8 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
+import { bearerToken, blockedBody, guardEvent, runRoomGuard } from "../_shared/room-guard.ts";
+import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
 import {
   dropAlreadyServed,
   dropMalformed,
@@ -87,11 +89,15 @@ Deno.serve(async (req) => {
     // Busca palavra + significado server-side (service role), tentando words depois room_words.
     // Validação de contexto: só gera para a palavra corrente de uma sala
     // em fase de escrita/embaralhamento (substitui o gate de login).
-    const { data: activeRoom, error: roomError } = await admin
+    // V3: com room_id, a palavra tem de estar ativa NESSA sala (antes qualquer
+    // sala servia — e a memória da rodada era gravada no room_id pedido).
+    let roomQuery = admin
       .from("rooms")
-      .select("id")
+      .select("id, current_round")
       .eq("current_word_id", wordId)
-      .in("status", ["writing", "shuffling"])
+      .in("status", ["writing", "shuffling"]);
+    if (memRoomId) roomQuery = roomQuery.eq("id", memRoomId);
+    const { data: activeRoom, error: roomError } = await roomQuery
       .limit(1)
       .maybeSingle();
     // Falha do banco não pode se passar por "palavra fora de rodada" (403
@@ -100,6 +106,21 @@ Deno.serve(async (req) => {
     if (!activeRoom) {
       return new Response(JSON.stringify({ error: "no_active_round_for_word", definitions: [] }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // V3 (05/11/2026): sessão (conta ou convidado) + membro da sala + cota
+    // por sala/rodada, sob app_config.bots_auth_mode — padrão 'observar'
+    // (registra o que bloquearia em ops_events, não bloqueia).
+    const guard = await runRoomGuard(supabaseGuardDeps(admin), {
+      token: bearerToken(req.headers.get("authorization")),
+      askedRoomId: memRoomId,
+      roomId: String((activeRoom as { id: string }).id),
+      round: Number((activeRoom as { current_round: number }).current_round),
+    });
+    if (guard.decision !== "ok") await logEvent(admin, guardEvent("bot-definitions", guard));
+    if (guard.block) {
+      return new Response(JSON.stringify(blockedBody(guard.decision)), {
+        status: guard.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     let word = "";

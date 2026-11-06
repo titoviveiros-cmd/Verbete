@@ -7,6 +7,9 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
+import { decideJudge, judgeGuardEvent } from "../_shared/judge-guard.ts";
+import { GUARD_MODE_KEY, parseGuardMode } from "../_shared/room-guard.ts";
+import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
 import { JUDGE_BUDGET, judgeCandidates, nearMissIds } from "../_shared/semantic.ts";
 
 const corsHeaders = {
@@ -72,7 +75,7 @@ Deno.serve(async (req) => {
     // usar a palavra "atual" da sala quebrava quando ela já tinha avançado.
     const { data: roundRow, error: roundError } = await admin
       .from("rounds")
-      .select("word_id")
+      .select("word_id, judged_at, judge_attempts, scored_at")
       .eq("room_id", roomId)
       .eq("round", round)
       .maybeSingle();
@@ -81,6 +84,21 @@ Deno.serve(async (req) => {
     if (roundError) throw new Error(`rounds lookup failed: ${roundError.code ?? ""} ${roundError.message}`);
     const wid: string | null = (roundRow as { word_id?: string } | null)?.word_id ?? null;
     if (!wid) return json({ matches: [], error: "round_not_scored" });
+
+    // V3 (05/11/2026): rodada já julgada, desistida ou fora da janela do
+    // reenvio não volta à IA (_shared/judge-guard.ts). Sob
+    // app_config.bots_auth_mode: 'observar' só registra; 'aplicar' responde
+    // sem "error" — o reenvio do banco lê isso como julgada, sem nova tentativa.
+    const mode = parseGuardMode(
+      await supabaseGuardDeps(admin).readConfig(GUARD_MODE_KEY).catch(() => null),
+    );
+    const judgeGuard = decideJudge(
+      mode,
+      roundRow as { judged_at?: string | null; judge_attempts?: number | null; scored_at?: string | null },
+      Date.now(),
+    );
+    if (judgeGuard.reason) await logEvent(admin, judgeGuardEvent(judgeGuard));
+    if (judgeGuard.skip) return json({ matches: [], skipped: judgeGuard.reason });
 
     let word = "";
     const { data: w1 } = await admin.from("words").select("word").eq("id", wid).maybeSingle();

@@ -146,7 +146,8 @@ export type OpsEventKind =
   | "bot_ai_fallback"
   | "bot_ai_error"
   | "judge_ai_success"
-  | "judge_ai_error";
+  | "judge_ai_error"
+  | "ai_guard"; // V3: guarda das edges (room-guard.ts) e julgamento repetido
 
 export type OpsEvent = { kind: OpsEventKind; payload: Record<string, string | number | boolean> };
 

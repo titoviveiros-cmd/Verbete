@@ -25,6 +25,13 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
+import {
+  bearerToken,
+  blockedBody,
+  guardEvent,
+  runRoomGuard,
+} from "../_shared/room-guard.ts";
+import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
 import { judgeCandidates } from "../_shared/semantic.ts";
 import {
   BOT_GATE_MAX_SCORE,
@@ -116,6 +123,19 @@ Deno.serve(async (req) => {
     const round = Number(
       (activeRoom as { current_round: number }).current_round,
     );
+
+    // V3 (05/11/2026): sessão (conta ou convidado) + membro da sala + cota
+    // por sala/rodada, sob app_config.bots_auth_mode — padrão 'observar'
+    // (registra o que bloquearia em ops_events, não bloqueia).
+    const guard = await runRoomGuard(supabaseGuardDeps(admin), {
+      token: bearerToken(req.headers.get("authorization")),
+      askedRoomId: askRoomId,
+      roomId,
+      round,
+    });
+    if (guard.decision !== "ok")
+      await logEvent(admin, guardEvent("bot-definitions-v2", guard));
+    if (guard.block) return json(blockedBody(guard.decision), guard.status);
 
     let word = "";
     let meaning = "";
