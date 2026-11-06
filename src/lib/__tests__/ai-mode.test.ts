@@ -322,3 +322,132 @@ describe("Desafio Diário com a IA suspensa", () => {
     });
   });
 });
+
+// ---- Corte sem banco (06/11/2026): AI_FORCE_SUSPEND e chave do provedor ausente ----
+import { readFileSync } from "node:fs";
+import {
+  AI_FORCE_SUSPEND_ENV,
+  AI_PROVIDER_KEY_ENV,
+  forcedSuspensionFrom,
+  isForcedSuspension,
+} from "../../../supabase/functions/_shared/ai-mode.ts";
+
+describe("corte FECHADO pelo ambiente (não depende do Supabase)", () => {
+  const env = (o: Record<string, string | undefined>) => (k: string) => o[k];
+  const COM_CHAVE = { [AI_PROVIDER_KEY_ENV]: "k" };
+
+  it.each(["1", "true", "SIM", " suspenso "])(
+    "AI_FORCE_SUSPEND=%j suspende",
+    (v) => expect(isForcedSuspension(v)).toBe(true),
+  );
+  it.each([undefined, "", "0", "false", "ligado", "não"])(
+    "AI_FORCE_SUSPEND=%j não suspende",
+    (v) => expect(isForcedSuspension(v)).toBe(false),
+  );
+
+  it("chave do provedor ausente/vazia = suspenso; presente e sem flag = segue o banco", () => {
+    expect(forcedSuspensionFrom(env({}))).toBe(true);
+    expect(forcedSuspensionFrom(env({ [AI_PROVIDER_KEY_ENV]: "  " }))).toBe(
+      true,
+    );
+    expect(forcedSuspensionFrom(env(COM_CHAVE))).toBe(false);
+    expect(
+      forcedSuspensionFrom(env({ ...COM_CHAVE, [AI_FORCE_SUSPEND_ENV]: "1" })),
+    ).toBe(true);
+  });
+
+  it("Supabase FORA num isolate novo: sem flag = ligado (falha aberta do banco); com flag = suspenso sem ler o banco", async () => {
+    const dbFora = vi.fn(async () => {
+      throw new Error("supabase fora");
+    });
+    expect(
+      await createAiModeReader({
+        forced: () => forcedSuspensionFrom(env(COM_CHAVE)),
+      })(dbFora),
+    ).toBe("ligado");
+    const forcado = createAiModeReader({
+      forced: () =>
+        forcedSuspensionFrom(
+          env({ ...COM_CHAVE, [AI_FORCE_SUSPEND_ENV]: "1" }),
+        ),
+    });
+    dbFora.mockClear();
+    expect(await forcado(dbFora)).toBe("suspenso");
+    expect(dbFora).not.toHaveBeenCalled();
+  });
+
+  it("a flag vence o cache 'ligado' na hora (sem esperar o TTL)", async () => {
+    let flag = false;
+    const read = createAiModeReader({ now: () => 0, forced: () => flag });
+    const load = vi.fn(async () => "ligado");
+    expect(await read(load)).toBe("ligado");
+    flag = true;
+    expect(await read(load)).toBe("suspenso");
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("ambiente ilegível (forced lança) = segue para o banco", async () => {
+    const read = createAiModeReader({
+      forced: () => {
+        throw new Error("env");
+      },
+    });
+    expect(await read(async () => "suspenso")).toBe("suspenso");
+  });
+
+  it("troca de modo com chamada em andamento: quem já leu 'ligado' conclui; as próximas leem 'suspenso' após o TTL", async () => {
+    let t = 0;
+    let valor = "ligado";
+    const read = createAiModeReader({ now: () => t });
+    const load = async () => valor;
+    expect(await read(load)).toBe("ligado"); // pedido A já liberado
+    valor = "suspenso"; // UPDATE no banco
+    t = AI_MODE_CACHE_MS - 1;
+    expect(await read(load)).toBe("ligado"); // mesmo isolate, dentro do cache
+    t = AI_MODE_CACHE_MS;
+    expect(await read(load)).toBe("suspenso");
+  });
+
+  it("Diário: chave removida = pausa, sem reserva nem chamada ao provedor", async () => {
+    const read = createAiModeReader({
+      forced: () => forcedSuspensionFrom(env({})),
+    });
+    const claim = vi.fn();
+    const evaluate = vi.fn();
+    await expect(
+      runGuardedDailyAttempt({
+        aiMode: () => read(async () => "ligado"),
+        logSuspended: async () => true,
+        claim,
+        evaluate,
+        finishOk: vi.fn(),
+        finishFail: vi.fn(),
+        legacyRecord: vi.fn(),
+        logEvent: vi.fn(),
+        build: "b",
+      } as never),
+    ).rejects.toThrow(DAILY_AI_PAUSED);
+    expect(claim).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "supabase/functions/score-similarity/index.ts",
+    "supabase/functions/bot-definitions/index.ts",
+    "supabase/functions/bot-definitions-v2/index.ts",
+    "src/lib/daily.functions.ts",
+  ])("%s liga o leitor ao corte do ambiente", (f) => {
+    const src = readFileSync(f, "utf8");
+    expect(src).toMatch(
+      /createAiModeReader\(\{\s*\/\/[^\n]*\n\s*forced: \(\) => forcedSuspensionFrom\(/,
+    );
+    // o modo é lido ANTES de qualquer uso da chave do provedor
+    const iModo = src.indexOf("readAiMode(");
+    const iChave =
+      src.indexOf(`env.get("${AI_PROVIDER_KEY_ENV}")`) >= 0
+        ? src.indexOf(`env.get("${AI_PROVIDER_KEY_ENV}")`)
+        : src.indexOf(`process.env.${AI_PROVIDER_KEY_ENV}`);
+    expect(iModo).toBeGreaterThan(0);
+    expect(iChave).toBeGreaterThan(iModo);
+  });
+});

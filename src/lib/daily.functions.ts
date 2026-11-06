@@ -19,6 +19,7 @@ import {
 } from "./daily-guard";
 import {
   createAiModeReader,
+  forcedSuspensionFrom,
   createSuspendedLogger,
   loadAiModeValue,
   suspendedEventIO,
@@ -30,7 +31,10 @@ import { submitInput } from "./daily-input";
 
 // Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache curto por
 // isolate do Worker e no máximo 1 evento 'ai_suspended' a cada 10 min.
-const readAiMode = createAiModeReader();
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => process.env[k]),
+});
 const logSuspended = createSuspendedLogger();
 
 function hourBucketIso(): string {

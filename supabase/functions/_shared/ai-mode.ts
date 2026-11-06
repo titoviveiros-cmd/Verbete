@@ -15,6 +15,36 @@ export const AI_MODE_CACHE_MS = 30_000;
 /** No máximo 1 evento 'ai_suspended' por função a cada 10 min. */
 export const AI_SUSPENDED_EVENT_WINDOW_MS = 10 * 60_000;
 
+/**
+ * Corte que NÃO depende do banco (06/11/2026): variável de ambiente/segredo da
+ * edge ou do Worker. Com ela, o modo é 'suspenso' sem ler app_config — vale
+ * mesmo com o Supabase fora ou num isolate novo (falha FECHADA).
+ */
+export const AI_FORCE_SUSPEND_ENV = "AI_FORCE_SUSPEND";
+/** Chave do provedor atual; sem ela não há como chamar a IA → suspenso, sem erro. */
+export const AI_PROVIDER_KEY_ENV = "GEMINI_API_KEY";
+
+export function isForcedSuspension(v: unknown): boolean {
+  return (
+    typeof v === "string" &&
+    ["1", "true", "sim", "suspenso"].includes(v.trim().toLowerCase())
+  );
+}
+
+/**
+ * Suspensão forçada pelo ambiente: AI_FORCE_SUSPEND ligado OU chave do
+ * provedor ausente/vazia (revogar/remover a chave = mesma pausa limpa do
+ * interruptor, em vez de erro 5xx e reenvios).
+ */
+export function forcedSuspensionFrom(
+  get: (k: string) => string | undefined | null,
+): boolean {
+  return (
+    isForcedSuspension(get(AI_FORCE_SUSPEND_ENV)) ||
+    !String(get(AI_PROVIDER_KEY_ENV) ?? "").trim()
+  );
+}
+
 /** Só 'suspenso' (sem diferença de caixa/espaços) suspende; o resto = ligado. */
 export function parseAiMode(v: unknown): AiMode {
   return typeof v === "string" && v.trim().toLowerCase() === "suspenso"
@@ -23,12 +53,15 @@ export function parseAiMode(v: unknown): AiMode {
 }
 
 /**
- * Leitor com cache curto. Falha de leitura → último valor conhecido neste
- * isolate; sem nenhum → 'ligado' (falha aberta: o interruptor nunca derruba
- * o jogo por conta própria).
+ * Leitor com cache curto. Ordem: (1) suspensão forçada pelo ambiente
+ * (opts.forced) → 'suspenso' sem tocar no banco; (2) app_config com cache.
+ * Falha de leitura do banco → último valor conhecido neste isolate; sem
+ * nenhum → 'ligado' (falha aberta do interruptor do BANCO: ele nunca derruba
+ * o jogo sozinho). Corte garantido com o banco fora = AI_FORCE_SUSPEND ou
+ * remover a chave do provedor (docs/contencao-ia.md, "Corte completo").
  */
 export function createAiModeReader(
-  opts: { ttlMs?: number; now?: () => number } = {},
+  opts: { ttlMs?: number; now?: () => number; forced?: () => boolean } = {},
 ) {
   const ttl = opts.ttlMs ?? AI_MODE_CACHE_MS;
   const now = opts.now ?? Date.now;
@@ -36,6 +69,11 @@ export function createAiModeReader(
   return async function readAiMode(
     load: () => Promise<unknown>,
   ): Promise<AiMode> {
+    try {
+      if (opts.forced?.()) return "suspenso";
+    } catch {
+      /* ambiente ilegível: segue para o banco */
+    }
     const t = now();
     if (cached && t - cached.at < ttl) return cached.mode;
     try {

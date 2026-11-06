@@ -11,6 +11,7 @@ import {
   createSuspendedLogger,
   loadAiModeValue,
   suspendedEventIO,
+  forcedSuspensionFrom,
 } from "../_shared/ai-mode.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import {
@@ -53,7 +54,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
-const readAiMode = createAiModeReader();
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
 const logSuspended = createSuspendedLogger();
 
 // Telemetria nunca derruba o pedido.

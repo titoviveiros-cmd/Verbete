@@ -8,6 +8,8 @@ Interruptor mínimo e reversível para desligar **todas** as chamadas ao provedo
 | `suspenso` | Nenhuma chamada ao Gemini em lugar nenhum (detalhes abaixo). |
 | ausente / qualquer outro valor | Igual a `ligado` (falha aberta: o interruptor nunca derruba o jogo sozinho). |
 
+**Precedência (06/11/2026):** antes de ler o banco, edges e Worker conferem o **ambiente**. `AI_FORCE_SUSPEND` = `1`/`true`/`sim`/`suspenso` **ou** a chave do provedor (`GEMINI_API_KEY`) ausente/vazia → `suspenso` na hora, **sem depender do Supabase** e sem esperar o cache. Ver "Corte completo".
+
 Código: `supabase/functions/_shared/ai-mode.ts` (lógica pura, compartilhada pelas edges e pelo Worker). Migration: `supabase/migrations/20261105231500_ai_mode_contencao.sql` (só configuração: insere `ai_mode = 'ligado'` com `ON CONFLICT DO NOTHING` e explicita o `GRANT SELECT` de `app_config` à `service_role`).
 
 ## Efeito por funcionalidade com `suspenso`
@@ -47,6 +49,34 @@ Conferência (só leitura, depois de ~1 min e de algum uso): um evento `ai_suspe
 SELECT at, payload FROM public.ops_events WHERE kind = 'ai_suspended' ORDER BY at DESC LIMIT 10;
 ```
 
+## Corte completo (banco fora ou exigência de corte garantido)
+
+O interruptor do banco falha **aberto**: num isolate novo, se a leitura de `app_config` falhar, ele vale `ligado`. Na prática, com o Supabase inteiro fora, o juiz e os bots também não leem a rodada nem a palavra e não chegam ao provedor; o Diário exige a reserva `daily_claim` antes da IA (falha fechada). O risco real é uma falha **parcial** (só a leitura de `app_config` falhando, ou um isolate que nunca leu `suspenso`).
+
+Para corte **garantido**, independente do banco (cada passo exige autorização):
+
+| Nível | Como | Alcance | Tempo |
+|---|---|---|---|
+| A. Flag de ambiente | `supabase secrets set AI_FORCE_SUSPEND=1` (vale para as 3 edges) + `wrangler secret put AI_FORCE_SUSPEND` (valor `1`) no Worker `jogo` | Mesmo efeito de `suspenso` (sem erro para o jogador), sem ler o banco | Edges: no próximo isolate (segundos). Worker: segredo novo cria versão; propaga em segundos |
+| B. Remover a chave do ambiente | `supabase secrets unset GEMINI_API_KEY` + `wrangler secret delete GEMINI_API_KEY` | Igual ao A: chave ausente = `suspenso` (pausa limpa, não 5xx) | Igual ao A |
+| C. Revogar a chave no Google AI Studio | Revogar/rotacionar a chave | Corta na origem, inclusive cópias fora do Verbete (ex.: `.env` local de `scripts/generate-words.mjs` e `scripts/test-semantic-calibration.mjs`) | Imediato no provedor; uma chamada já em voo pode concluir |
+
+Recomendado para corte completo: **A + C** (A deixa o jogo limpo; C garante que nada fora do código consiga chamar com a chave antiga).
+
+Rollback: A → `supabase secrets unset AI_FORCE_SUSPEND` + `wrangler secret delete AI_FORCE_SUSPEND`; B → recolocar a chave; C → nova chave nos dois ambientes.
+
+### Verificações (06/11/2026)
+
+| Ponto | Situação |
+|---|---|
+| Web e Android já instalado (APK 2.1.4/vc8, bundle offline) | Só o servidor muda; edges mantêm os campos de resposta. O Diário do APK usa o mesmo `catch (e) → e.message` (`src/routes/daily.tsx`) e mostra o texto da pausa |
+| Desafio Diário e streak | Pausa antes da reserva: nada gasto. **Streak:** quem não conseguir jogar num dia de pausa perde a sequência (regra atual, não alterada). Pausa longa → comunicar |
+| Bots, 💡 e juiz | Reservas / sugestões locais / rodada julgada sem bônus; sem reenvio (resposta 200 sem `error`) |
+| Chamada em andamento na troca de modo | Quem já leu `ligado` conclui a chamada (no máximo 1 por pedido; o juiz tem a reserva única por rodada da V3). Os seguintes leem `suspenso` em até 30 s (banco) ou na hora (ambiente) |
+| Cache e concorrência | Cache por isolate; leitura barata (1 SELECT a cada 30 s); sem estado compartilhado além do banco |
+| Telemetria | `ai_suspended` 1 por função a cada 10 min; sem dado pessoal |
+| Chave compartilhada com outros projetos | Nenhum outro projeto local (ERP, KING, Titoko, Finance OS, Pregão, RecebeJá) referencia Gemini — CONFIRMADO no código local. Uso da mesma chave fora deste PC → NÃO VERIFICADO (conferir no Google AI Studio quais projetos/chaves existem) |
+
 ## Rollback
 
 ```sql
@@ -59,7 +89,7 @@ UPDATE public.app_config SET value = 'ligado', updated_at = now() WHERE key = 'a
 
 | Risco | Impacto | Mitigação |
 |---|---|---|
-| Falha aberta: erro ao ler `app_config` num isolate novo → `ligado` | Aquele isolate pode chamar a IA enquanto o banco estiver com problema | O isolate mantém o último valor lido; para corte garantido na origem, complementar com o nível 0 (revogar a chave / remover `GEMINI_API_KEY`) |
+| Falha aberta: erro ao ler `app_config` num isolate novo → `ligado` | Aquele isolate pode chamar a IA enquanto o banco estiver com problema | Mantém o último valor lido; corte garantido = `AI_FORCE_SUSPEND` ou chave removida (falha FECHADA, sem banco) + revogação no provedor |
 | Atraso de até 30 s (cache por isolate) | Algumas chamadas logo após a ativação | Esperar ~1 min antes de conferir |
 | `service_role` sem `SELECT` em `app_config` em produção | O interruptor não teria efeito (lê "ausente") | A migration faz o `GRANT` explícito; a suíte de integração confere o privilégio; conferir o evento `ai_suspended` após ativar |
 | Diário pausado por completo | Perda temporária da funcionalidade | Mensagem clara, nada é gasto; streak: o jogador não consegue jogar na pausa (avaliar comunicação se a pausa for longa) |

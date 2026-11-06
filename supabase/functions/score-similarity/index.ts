@@ -12,6 +12,7 @@ import {
   loadAiModeValue,
   skipJudgeSuspended,
   suspendedEventIO,
+  forcedSuspensionFrom,
 } from "../_shared/ai-mode.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import { JUDGE_BUDGET, judgeCandidates, nearMissIds } from "../_shared/semantic.ts";
@@ -30,7 +31,10 @@ const json = (body: unknown) =>
   });
 
 // Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
-const readAiMode = createAiModeReader();
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
 const logSuspended = createSuspendedLogger();
 
 // Telemetria nunca derruba o pedido.

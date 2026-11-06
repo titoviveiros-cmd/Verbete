@@ -44,6 +44,7 @@ import {
   createSuspendedLogger,
   loadAiModeValue,
   suspendedEventIO,
+  forcedSuspensionFrom,
 } from "../_shared/ai-mode.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
@@ -66,7 +67,10 @@ const TOTAL_BUDGET_MS = 9500;
 const EXTRA_CANDIDATES = 3;
 
 // Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
-const readAiMode = createAiModeReader();
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
 const logSuspended = createSuspendedLogger();
 
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
