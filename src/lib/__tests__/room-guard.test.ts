@@ -480,7 +480,7 @@ describe("as edges usam a guarda ANTES da IA", () => {
       const s = src(f);
       const guard = s.indexOf("runRoomGuard(supabaseGuardDeps(admin)");
       expect(guard).toBeGreaterThan(0);
-      expect(guard).toBeLessThan(s.indexOf("GEMINI_API_KEY"));
+      expect(guard).toBeLessThan(s.indexOf("resolveAiProvider("));
       expect(s).toMatch(/if \(guard\.block\)/);
       expect(s).toContain('bearerToken(req.headers.get("authorization"))');
     });
@@ -489,7 +489,7 @@ describe("as edges usam a guarda ANTES da IA", () => {
     const s = src("score-similarity/index.ts");
     const guard = s.indexOf("decideJudge(");
     expect(guard).toBeGreaterThan(0);
-    expect(guard).toBeLessThan(s.indexOf("GEMINI_API_KEY"));
+    expect(guard).toBeLessThan(s.indexOf("resolveAiProvider("));
     expect(s).toContain("json({ matches: [], skipped: judgeGuard.reason })");
   });
 
@@ -498,7 +498,7 @@ describe("as edges usam a guarda ANTES da IA", () => {
     const judged = s.indexOf("decideJudge(");
     const take = s.indexOf('admin.rpc("judge_lease_take"');
     const recheck = s.indexOf('.select("judged_at")');
-    const gemini = s.indexOf("GEMINI_API_KEY");
+    const gemini = s.indexOf("resolveAiProvider(");
     expect(judged).toBeGreaterThan(0);
     expect(take).toBeGreaterThan(judged);
     expect(recheck).toBeGreaterThan(take);

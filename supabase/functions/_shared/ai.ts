@@ -1,6 +1,8 @@
 // Chamada ao Gemini (endpoint OpenAI-compatível) e eventos de operação das
 // edge functions. Sem APIs do Deno: coberto pelos testes Vitest em
-// src/lib/__tests__/edge-ai.test.ts.
+// src/lib/__tests__/edge-ai.test.ts. O provedor pode ser trocado por
+// configuração (ai-provider.ts, docs/provedor-ia.md); sem nada configurado,
+// tudo aqui segue idêntico ao Gemini de sempre.
 
 export const GEMINI_CHAT_URL =
   "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
@@ -15,6 +17,33 @@ export type AttemptResult =
 export type ChatResult = AttemptResult & { attempts: number };
 
 type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * Destino da chamada (perfil do provedor, montado por ai-provider.ts). Tudo
+ * omitido = Gemini de sempre: mesma URL, mesmo modelo, mesmo corpo.
+ */
+export type ChatTarget = {
+  /** Endpoint alternativo (outro provedor ou simulador nos testes). */
+  url?: string;
+  model?: string;
+  /** Parâmetros do perfil (ex.: max_tokens); nunca sobrescrevem model/messages. */
+  extraBody?: Readonly<Record<string, unknown>>;
+  /** Rejeita (sem nova tentativa) marcadores de canal e finish_reason=length. */
+  strictOutput?: boolean;
+};
+
+/** Só os campos de destino informados (repasse sem `undefined` explícito). */
+export function pickTarget(o: ChatTarget): ChatTarget {
+  return {
+    ...(o.url ? { url: o.url } : {}),
+    ...(o.model ? { model: o.model } : {}),
+    ...(o.extraBody ? { extraBody: o.extraBody } : {}),
+    ...(o.strictOutput ? { strictOutput: true } : {}),
+  };
+}
+
+/** Marcadores de canal vazados (achado da N1b com gpt-oss: "<|channel|>"). */
+const CHANNEL_MARKER = /<\|(?:start|end|channel|message|return|call|constrain)\|>/i;
 
 /** Falhas transitórias que valem uma nova tentativa. 429 (cota/ritmo) vale
  *  UMA só: o limite do Gemini é por minuto e insistir em segundos só gasta
@@ -35,6 +64,7 @@ async function attempt(
   messages: Array<{ role: string; content: string }>,
   timeoutMs: number,
   temperature: number | undefined,
+  target: ChatTarget,
 ): Promise<AttemptResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -46,7 +76,8 @@ async function attempt(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: GEMINI_MODEL,
+        ...(target.extraBody ?? {}),
+        model: target.model || GEMINI_MODEL,
         messages,
         ...(temperature === undefined ? {} : { temperature }),
       }),
@@ -62,9 +93,21 @@ async function attempt(
     } catch {
       return { ok: false, reason: "invalid_response" };
     }
-    const content = (data as { choices?: Array<{ message?: { content?: unknown } }> })
-      ?.choices?.[0]?.message?.content;
+    const choice = (
+      data as {
+        choices?: Array<{ message?: { content?: unknown }; finish_reason?: unknown }>;
+      }
+    )?.choices?.[0];
+    const content = choice?.message?.content;
     if (typeof content !== "string" || content.trim() === "") {
+      return { ok: false, reason: "invalid_response" };
+    }
+    // Perfis estritos: resposta cortada ou com canal interno vazado é falha
+    // do provedor, não conteúdo — invalid_response não ganha nova tentativa.
+    if (
+      target.strictOutput &&
+      (choice?.finish_reason === "length" || CHANNEL_MARKER.test(content))
+    ) {
       return { ok: false, reason: "invalid_response" };
     }
     return { ok: true, content };
@@ -79,12 +122,10 @@ async function attempt(
  * Chama o modelo com timeout por tentativa e até `retries` novas tentativas
  * em falha transitória (timeout, rede, 429, 5xx). Nunca lança.
  */
-export async function callChat(opts: {
+export async function callChat(opts: ChatTarget & {
   fetchFn: FetchFn;
   apiKey: string;
   messages: Array<{ role: string; content: string }>;
-  /** Endpoint alternativo (testes de ponta a ponta com Gemini simulado). */
-  url?: string;
   timeoutMs?: number;
   retries?: number;
   backoffMs?: number;
@@ -120,6 +161,7 @@ export async function callChat(opts: {
       opts.messages,
       Math.min(timeoutMs, left()),
       opts.temperature,
+      opts,
     );
     opts.onAttempt?.(res);
     last = { ...res, attempts: i + 1 };
