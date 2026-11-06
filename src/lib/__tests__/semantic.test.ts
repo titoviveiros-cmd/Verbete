@@ -393,7 +393,8 @@ describe("Desafio Diário (nota 0–100)", () => {
     expect(guard).toContain("runDailyEvaluation({");
     // nada de nota padrão quando falta a definição ou a IA
     expect(src).not.toMatch(/:\s*0;\s*$/m);
-    expect(src).toContain("process.env.GEMINI_API_KEY");
+    // chave do provedor (GEMINI_API_KEY por padrão) via adaptador, no Worker
+    expect(src).toContain("resolveAiProvider((k) => process.env[k])");
   });
 
   it("paridade com o multiplayer: mesmo prompt, temperatura, modelo e corte para a mesma nota", async () => {

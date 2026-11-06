@@ -6,7 +6,14 @@
 // submit_daily_attempt_scored, com o mesmo valor; um teste garante). Mudou o
 // critério? Muda aqui e os dois modos mudam juntos.
 // Sem APIs do Deno: roda na edge e no servidor web.
-import { callChat, parseJsonObject, type AttemptResult, type ChatFailure } from "./ai.ts";
+import {
+  callChat,
+  parseJsonObject,
+  pickTarget,
+  type AttemptResult,
+  type ChatFailure,
+  type ChatTarget,
+} from "./ai.ts";
 
 export const SEMANTIC_THRESHOLD = 80;
 /** Julgamento, não criação: temperatura 0 para a mesma entrada dar a mesma nota. */
@@ -158,10 +165,9 @@ type Failure = { ok: false; reason: ChatFailure; status?: number; attempts: numb
 export const JUDGE_BUDGET = { timeoutMs: 8_000, retries: 3, deadlineMs: 17_000 } as const;
 
 /** Multiplayer: aprova as candidatas com nota >= SEMANTIC_THRESHOLD. */
-export async function judgeCandidates(opts: {
+export async function judgeCandidates(opts: ChatTarget & {
   fetchFn: Fetch;
   apiKey: string;
-  url?: string;
   word: string;
   truth: string;
   candidates: ReadonlyArray<{ id: string; text: string }>;
@@ -175,7 +181,7 @@ export async function judgeCandidates(opts: {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
     apiKey: opts.apiKey,
-    url: opts.url,
+    ...pickTarget(opts),
     temperature: SEMANTIC_TEMPERATURE,
     messages: judgeMessages(opts.word, opts.truth, opts.candidates),
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
@@ -201,10 +207,9 @@ export async function judgeCandidates(opts: {
 export const DAILY_BUDGET = { timeoutMs: 8_000, retries: 2, deadlineMs: 15_000 } as const;
 
 /** Desafio Diário: nota 0–100 do palpite. */
-export async function scoreGuess(opts: {
+export async function scoreGuess(opts: ChatTarget & {
   fetchFn: Fetch;
   apiKey: string;
-  url?: string;
   word: string;
   truth: string;
   guess: string;
@@ -212,7 +217,7 @@ export async function scoreGuess(opts: {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
     apiKey: opts.apiKey,
-    url: opts.url,
+    ...pickTarget(opts),
     temperature: SEMANTIC_TEMPERATURE,
     messages: dailyMessages(opts.word, opts.truth, opts.guess),
     ...DAILY_BUDGET,

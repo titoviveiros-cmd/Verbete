@@ -14,6 +14,7 @@ import {
   suspendedEventIO,
   forcedSuspensionFrom,
 } from "../_shared/ai-mode.ts";
+import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import { decideJudge, decideLease, judgeGuardEvent } from "../_shared/judge-guard.ts";
 import { GUARD_MODE_KEY, parseGuardMode } from "../_shared/room-guard.ts";
@@ -208,8 +209,9 @@ Deno.serve(async (req) => {
     );
     if (candidates.length === 0) return json({ matches: [] });
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
+    // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER = Gemini
+    const ai = resolveAiProvider((k) => Deno.env.get(k));
+    if (!ai.ok) throw new Error(aiConfigError(ai));
 
     // flash-lite: pool de quota gratuita separado e maior — o flash comum
     // estourou o free tier no playtest e TODAS as rodadas perderam o bônus
@@ -222,8 +224,8 @@ Deno.serve(async (req) => {
     const tries: string[] = [];
     const judged = await judgeCandidates({
       fetchFn: fetch,
-      apiKey,
-      url: Deno.env.get("GEMINI_CHAT_URL"),
+      apiKey: ai.apiKey,
+      ...ai.target,
       word,
       truth,
       candidates,

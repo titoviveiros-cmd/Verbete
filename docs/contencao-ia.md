@@ -8,7 +8,7 @@ Interruptor mínimo e reversível para desligar **todas** as chamadas ao provedo
 | `suspenso` | Nenhuma chamada ao Gemini em lugar nenhum (detalhes abaixo). |
 | ausente / qualquer outro valor | Igual a `ligado` (falha aberta: o interruptor nunca derruba o jogo sozinho). |
 
-**Precedência (06/11/2026):** antes de ler o banco, edges e Worker conferem o **ambiente**. `AI_FORCE_SUSPEND` = `1`/`true`/`sim`/`suspenso` **ou** a chave do provedor (`GEMINI_API_KEY`) ausente/vazia → `suspenso` na hora, **sem depender do Supabase** e sem esperar o cache. Ver "Corte completo".
+**Precedência (06/11/2026):** antes de ler o banco, edges e Worker conferem o **ambiente**. `AI_FORCE_SUSPEND` = `1`/`true`/`sim`/`suspenso` **ou** a chave do provedor ativo ausente/vazia (`GEMINI_API_KEY` por padrão; com `AI_PROVIDER`, a do perfil escolhido ou configuração incompleta — `docs/provedor-ia.md`) → `suspenso` na hora, **sem depender do Supabase** e sem esperar o cache. Ver "Corte completo".
 
 Código: `supabase/functions/_shared/ai-mode.ts` (lógica pura, compartilhada pelas edges e pelo Worker). Migration: `supabase/migrations/20261105231500_ai_mode_contencao.sql` (só configuração: insere `ai_mode = 'ligado'` com `ON CONFLICT DO NOTHING` e explicita o `GRANT SELECT` de `app_config` à `service_role`).
 

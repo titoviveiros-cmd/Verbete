@@ -4,7 +4,11 @@
 // logs — não deu para saber se foi 429, 5xx, timeout ou resposta inválida.
 // Agora o evento traz o motivo, o status HTTP, as tentativas e a duração.
 // NUNCA entram no evento: palavra, definição, palpite, jogador ou chave.
-import type { ChatFailure } from "../../supabase/functions/_shared/ai.ts";
+import {
+  pickTarget,
+  type ChatFailure,
+  type ChatTarget,
+} from "../../supabase/functions/_shared/ai.ts";
 import { scoreGuess } from "../../supabase/functions/_shared/semantic.ts";
 
 export const DAILY_EVAL_UNAVAILABLE =
@@ -30,15 +34,16 @@ type Fetch = (input: string, init: RequestInit) => Promise<Response>;
  * é falha (o jogador tenta de novo), nunca nota 0 — antes, verdade vazia
  * virava 0 e a tentativa do dia era gasta como ERRADA.
  */
-export async function evaluateDailyGuess(opts: {
-  fetchFn: Fetch;
-  apiKey: string | undefined;
-  word: string;
-  truth: string;
-  guess: string;
-  url?: string;
-  now?: () => number;
-}): Promise<DailyEvalResult> {
+export async function evaluateDailyGuess(
+  opts: ChatTarget & {
+    fetchFn: Fetch;
+    apiKey: string | undefined;
+    word: string;
+    truth: string;
+    guess: string;
+    now?: () => number;
+  },
+): Promise<DailyEvalResult> {
   const now = opts.now ?? Date.now;
   const t0 = now();
   if (!opts.apiKey)
@@ -48,7 +53,7 @@ export async function evaluateDailyGuess(opts: {
   const res = await scoreGuess({
     fetchFn: opts.fetchFn,
     apiKey: opts.apiKey,
-    url: opts.url,
+    ...pickTarget(opts),
     word: opts.word,
     truth: opts.truth,
     guess: opts.guess,
