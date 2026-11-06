@@ -7,10 +7,14 @@
 //     texto do chamador ignorado, verdade fora das candidatas, replay sem
 //     somar, falha do Gemini sem bônus e com evento — e a CADEIA COMPLETA de
 //     produção: advance_voting_to_reveal → pg_net → edge → apply_similarity_bonus.
+//   • V3 (05/11/2026): guarda das edges (sessão + membro da sala + cota por
+//     sala/rodada) nos modos aplicar/observar/desligado, e o score-similarity
+//     sem IA para rodada já julgada — com a cadeia do banco no modo aplicar.
 // Envs: SUPA_URL, ANON, DB_URL (a chave de serviço LOCAL vem do `supabase status`).
 import http from "node:http";
 import { execSync, spawn } from "node:child_process";
 import pg from "pg";
+import { createClient } from "@supabase/supabase-js";
 
 const { SUPA_URL, ANON, DB_URL } = process.env;
 const SERVICE =
@@ -180,6 +184,32 @@ const callEdge = async (body) => {
     body: JSON.stringify(body),
   });
   return { status: r.status, json: await r.json().catch(() => null) };
+};
+// V3: mesmo pedido, com o token de uma sessão (conta/convidado) ou outro
+const callEdgeAs = async (token, body) => {
+  const r = await fetch("http://127.0.0.1:8000/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  return { status: r.status, json: await r.json().catch(() => null) };
+};
+const setCfg = (k, v) =>
+  db.query(
+    `INSERT INTO public.app_config (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [k, v],
+  );
+const anonSession = async (label) => {
+  const c = createClient(SUPA_URL, ANON, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { data, error } = await c.auth.signInAnonymously();
+  if (error || !data.session) throw new Error(`sessão anônima (${label}): ${error?.message}`);
+  return { uid: data.user.id, token: data.session.access_token };
 };
 const lastEvent = async (kindLike, afterId) =>
   row(
@@ -368,6 +398,169 @@ try {
         ev?.payload?.dropped_late === 1,
       `${short(r.json)} ${short(ev?.payload)}`,
     );
+
+    // ---------------------------------------------------------- V3: guarda
+    console.log("\n— V3: guarda da v2 (sessão + membro da sala + cota)");
+    const modeDefault = (
+      await row(`SELECT value FROM public.app_config WHERE key = 'bots_auth_mode'`)
+    )?.value;
+    check(
+      "V3 migration: modo padrão = observar e limite configurado",
+      modeDefault === "observar" &&
+        !!(await row(`SELECT 1 AS ok FROM public.app_config WHERE key = 'bots_ai_round_limit'`)),
+      String(modeDefault),
+    );
+    const guest = await anonSession("convidado");
+    const stranger = await anonSession("de outra sala");
+    const ridG = await mkRoom("writing");
+    const ridO = await mkRoom("writing");
+    await db.query(
+      `INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot, user_id) VALUES
+       ($1, $3, 'Convidado', 'g', '#000', false, $4), ($2, $5, 'Estranho', 'o', '#000', false, $6)`,
+      [`edge_g_${tag}`, `edge_o_${tag}`, ridG, guest.uid, ridO, stranger.uid],
+    );
+    const guardEv = async (from) =>
+      row(
+        `SELECT payload FROM public.ops_events WHERE kind = 'ai_guard' AND id > $1 ORDER BY id DESC LIMIT 1`,
+        [from],
+      );
+    const maxEv = async () =>
+      (await row(`SELECT COALESCE(max(id), 0) AS id FROM public.ops_events`)).id;
+    const body = (rid) => ({ word_id: w.id, count: 1, room_id: rid, round: 1 });
+    try {
+      await setCfg("bots_auth_mode", "aplicar");
+      let from = await maxEv();
+      let before = calls.length;
+      r = await callEdgeAs(null, body(ridG));
+      let gev = await guardEv(from);
+      check(
+        "aplicar: sem token → 401, IA não chamada, evento ai_guard sem dados pessoais",
+        r.status === 401 &&
+          r.json?.error === "no_session" &&
+          calls.length === before &&
+          gev?.payload?.decision === "no_session" &&
+          gev?.payload?.blocked === true &&
+          !JSON.stringify(gev).includes(ridG),
+        `HTTP ${r.status} ${short(r.json)} ${short(gev)}`,
+      );
+      before = calls.length;
+      r = await callEdgeAs(ANON, body(ridG));
+      check(
+        "aplicar: chave anon (sem sessão de usuário) → 401, IA não chamada",
+        r.status === 401 && calls.length === before,
+        `HTTP ${r.status} ${short(r.json)}`,
+      );
+      before = calls.length;
+      r = await callEdgeAs(stranger.token, body(ridG));
+      check(
+        "aplicar: jogador de OUTRA sala → 403, IA não chamada",
+        r.status === 403 && r.json?.error === "not_member" && calls.length === before,
+        `HTTP ${r.status} ${short(r.json)}`,
+      );
+      r = await callEdgeAs(stranger.token, { word_id: w.id, count: 1 });
+      check(
+        "aplicar: sem room_id → 400",
+        r.status === 400 && r.json?.error === "room_required",
+        `HTTP ${r.status} ${short(r.json)}`,
+      );
+      r = await callEdgeAs(guest.token, body(ridO));
+      check(
+        "aplicar: convidado pedindo pela sala de OUTRO (mesma palavra ativa) → 403",
+        r.status === 403 && r.json?.error === "not_member",
+        `HTTP ${r.status} ${short(r.json)}`,
+      );
+      before = calls.length;
+      r = await callEdgeAs(guest.token, body(ridG));
+      check(
+        "aplicar: convidado anônimo da PRÓPRIA sala → 200 e a IA é chamada",
+        r.status === 200 && !r.json?.error && calls.length > before,
+        `HTTP ${r.status} ${short(r.json)}`,
+      );
+      const used = await row(
+        `SELECT coalesce(sum(used), 0)::int AS n FROM public.ai_quota WHERE key = $1`,
+        [`bots_round:${ridG}:1`],
+      );
+      check(
+        "aplicar: só o pedido aceito conta na cota da sala/rodada",
+        used.n === 1,
+        `used=${used.n}`,
+      );
+      await db.query(`UPDATE public.players SET kicked_at = now() WHERE id = $1`, [`edge_g_${tag}`]);
+      r = await callEdgeAs(guest.token, body(ridG));
+      await db.query(`UPDATE public.players SET kicked_at = NULL WHERE id = $1`, [`edge_g_${tag}`]);
+      check("aplicar: jogador expulso → 403", r.status === 403, `HTTP ${r.status}`);
+      await setCfg("bots_ai_round_limit", "20");
+      // concorrência: faltando 5 para o limite, 8 pedidos SIMULTÂNEOS do
+      // convidado legítimo → exatamente 5 passam e 3 levam 429
+      await db.query(
+        `INSERT INTO public.ai_quota (key, window_start, used)
+         VALUES ($1, to_timestamp(floor(extract(epoch FROM now()) / 86400) * 86400), 15)
+         ON CONFLICT (key, window_start) DO UPDATE SET used = 15`,
+        [`bots_round:${ridG}:1`],
+      );
+      const burst = await Promise.all(
+        Array.from({ length: 8 }, () => callEdgeAs(guest.token, body(ridG))),
+      );
+      const burstUsed = await row(
+        `SELECT coalesce(sum(used), 0)::int AS n FROM public.ai_quota WHERE key = $1`,
+        [`bots_round:${ridG}:1`],
+      );
+      const st = burst.map((x) => x.status).sort();
+      check(
+        "aplicar: 8 pedidos simultâneos com 5 vagas → 5 × 200 e 3 × 429 (o limite não estoura)",
+        st.filter((s) => s === 200).length === 5 &&
+          st.filter((s) => s === 429).length === 3 &&
+          burstUsed.n === 23,
+        `status=${st.join(",")} used=${burstUsed.n}`,
+      );
+      await db.query(
+        `INSERT INTO public.ai_quota (key, window_start, used)
+         VALUES ($1, to_timestamp(floor(extract(epoch FROM now()) / 86400) * 86400), 20)
+         ON CONFLICT (key, window_start) DO UPDATE SET used = 20`,
+        [`bots_round:${ridG}:1`],
+      );
+      before = calls.length;
+      r = await callEdgeAs(guest.token, body(ridG));
+      check(
+        "aplicar: cota da sala/rodada esgotada → 429, IA não chamada",
+        r.status === 429 && r.json?.error === "quota_exceeded" && calls.length === before,
+        `HTTP ${r.status} ${short(r.json)}`,
+      );
+
+      await setCfg("bots_auth_mode", "observar");
+      from = await maxEv();
+      r = await callEdgeAs(stranger.token, body(ridG));
+      gev = await guardEv(from);
+      check(
+        "observar: o mesmo pedido de fora NÃO é bloqueado, só registrado",
+        r.status === 200 &&
+          gev?.payload?.decision === "not_member" &&
+          gev?.payload?.blocked === false,
+        `HTTP ${r.status} ${short(gev)}`,
+      );
+      await setCfg("bots_auth_mode", "lixo");
+      r = await callEdgeAs(null, body(ridG));
+      check(
+        "modo inválido = observar (nunca aplicar): sem token não bloqueia",
+        r.status === 200,
+        `HTTP ${r.status}`,
+      );
+      await setCfg("bots_auth_mode", "desligado");
+      from = await maxEv();
+      r = await callEdgeAs(null, body(ridG));
+      gev = await guardEv(from);
+      check(
+        "desligado: fluxo antigo (sem token passa, nenhum evento ai_guard)",
+        r.status === 200 && !gev,
+        `HTTP ${r.status} ${short(gev)}`,
+      );
+    } finally {
+      await setCfg("bots_auth_mode", "observar");
+      await setCfg("bots_ai_round_limit", "60");
+      await db.query(`DELETE FROM public.ai_quota WHERE key LIKE ANY($1)`, [
+        [`bots_round:${ridG}:%`, `bots_round:${ridO}:%`],
+      ]);
+    }
   } finally {
     await stopEdge(edge);
   }
@@ -455,6 +648,61 @@ try {
       ev?.kind === "judge_ai_success",
       short(ev),
     );
+    // V3: a 1ª chamada marcou judged_at; no modo aplicar, repetir não chama a IA
+    await setCfg("bots_auth_mode", "aplicar");
+    try {
+      const judgedRow = await row(
+        `SELECT judged_at FROM public.rounds WHERE room_id = $1 AND round = 1`,
+        [a.rid],
+      );
+      const before = calls.length;
+      r = await callEdge({ room_id: a.rid, round: 1, candidates: [{ id: a.near }] });
+      check(
+        "V3 aplicar: rodada já julgada → sem IA, resposta sem 'error' (o reenvio a trata como julgada)",
+        !!judgedRow?.judged_at &&
+          calls.length === before &&
+          short(r.json) === short({ matches: [], skipped: "already_judged" }) &&
+          (await score(P_NEAR)) === 3,
+        `${short(r.json)} chamadas=${calls.length - before}`,
+      );
+
+      // V3: 3 invocações SIMULTÂNEAS da mesma rodada ainda não julgada (o juiz
+      // demora 2 s) → uma só avaliação; as outras saem com judge_in_progress
+      const k = await mkRound("reveal", true, `edge_k1_${tag}`, `edge_k2_${tag}`);
+      await db.query(
+        `UPDATE public.definitions SET text = 'TARDIO: fruto seco do cerrado brasileiro' WHERE id = $1`,
+        [k.near],
+      );
+      const beforeK = calls.length;
+      const trio = await Promise.all(
+        [0, 1, 2].map(() => callEdge({ room_id: k.rid, round: 1, candidates: [{ id: k.near }] })),
+      );
+      const judgedK = trio.filter((x) => (x.json?.matches ?? []).length === 1);
+      const busyK = trio.filter((x) => x.json?.error === "judge_in_progress");
+      const leaseLeft = await row(
+        `SELECT count(*)::int AS n FROM public.ai_quota WHERE key = $1`,
+        [`judge_lease:${k.rid}:1`],
+      );
+      check(
+        "V3 aplicar: 3 juízes simultâneos da mesma rodada → 1 avaliação (1 chamada à IA), 2 × judge_in_progress, +3 uma vez, reserva solta",
+        judgedK.length === 1 &&
+          busyK.length === 2 &&
+          calls.length - beforeK === 1 &&
+          (await score(`edge_k1_${tag}`)) === 3 &&
+          leaseLeft.n === 0,
+        `${short(trio.map((x) => x.json))} chamadas=${calls.length - beforeK} reserva=${leaseLeft.n}`,
+      );
+      // a rodada ficou julgada: a próxima chamada nem chega à reserva
+      r = await callEdge({ room_id: k.rid, round: 1, candidates: [{ id: k.near }] });
+      check(
+        "V3 aplicar: depois da avaliação única, a rodada já julgada responde skipped",
+        r.json?.skipped === "already_judged",
+        short(r.json),
+      );
+      await db.query(`UPDATE public.rounds SET judge_attempts = 4 WHERE room_id = $1`, [k.rid]);
+    } finally {
+      await setCfg("bots_auth_mode", "observar");
+    }
 
     const b = await mkRound(
       "voting",
@@ -521,6 +769,10 @@ try {
     );
 
     // ----- cadeia completa de produção: fim da votação → pg_net → edge
+    // V3: TODA a cadeia do banco (1ª tentativa, reenvios, desistência,
+    // partida encerrada, cenários A–G) roda no modo APLICAR — a guarda do
+    // juiz não pode atrapalhar nenhuma chamada legítima.
+    await setCfg("bots_auth_mode", "aplicar");
     const gw = (await row(`SELECT host(inet_server_addr()) AS ip`)).ip.replace(
       /\.\d+$/,
       ".1",
@@ -949,9 +1201,212 @@ try {
       await db.query(
         `DELETE FROM public.app_config WHERE key IN ('supabase_url', 'supabase_anon_key')`,
       );
+      await setCfg("bots_auth_mode", "observar");
     }
   } finally {
     await stopEdge(edge);
+  }
+
+  // ================================================================ contenção da IA
+  // app_config.ai_mode = 'suspenso' (docs/contencao-ia.md): as 3 edges servidas
+  // de verdade, NENHUMA chamada ao Gemini simulado, respostas no mesmo formato,
+  // juiz marca a rodada julgada sem bônus (cadeia pg_net → edge → cron sem
+  // reenvio) e no máximo 1 evento 'ai_suspended' por função.
+  console.log("\n— contenção da IA: app_config.ai_mode = 'suspenso'");
+  const modeRow = await row(`SELECT value FROM public.app_config WHERE key = 'ai_mode'`);
+  check(
+    "migration: ai_mode existe e vale 'ligado' (nada muda ao aplicar)",
+    modeRow?.value === "ligado",
+    short(modeRow),
+  );
+  const cfgPriv = await row(
+    `SELECT has_table_privilege('service_role', 'public.app_config', 'SELECT') AS svc,
+            has_table_privilege('anon', 'public.app_config', 'SELECT') AS anon,
+            has_table_privilege('authenticated', 'public.app_config', 'SELECT') AS auth`,
+  );
+  check(
+    "app_config: a chave de serviço lê; anon/authenticated não",
+    cfgPriv.svc && !cfgPriv.anon && !cfgPriv.auth,
+    short(cfgPriv),
+  );
+  await db.query(`UPDATE public.app_config SET value = 'suspenso' WHERE key = 'ai_mode'`);
+  const susFrom = (
+    await row(`SELECT COALESCE(max(id), 0) AS id FROM public.ops_events`)
+  ).id;
+  const suspendedEvents = async (fn) =>
+    (
+      await row(
+        `SELECT count(*)::int AS n FROM public.ops_events
+          WHERE kind = 'ai_suspended' AND id > $1 AND payload->>'fn' = $2`,
+        [susFrom, fn],
+      )
+    ).n;
+  try {
+    // ---- bot-definitions (💡)
+    edge = await serveEdge("bot-definitions");
+    try {
+      const rid = await mkRoom("writing");
+      botDefs = ["utensilio de ferro usado para moer graos"];
+      const before = calls.length;
+      const r1 = await callEdge({ word_id: w.id, count: 2, room_id: rid, round: 1 });
+      const r2 = await callEdge({ word_id: w.id, count: 2, room_id: rid, round: 1 });
+      check(
+        "suspenso · bot-definitions: 200 com definitions [] (sem erro), Gemini NÃO chamado",
+        r1.status === 200 && r2.status === 200 &&
+          Array.isArray(r1.json?.definitions) && r1.json.definitions.length === 0 &&
+          !r1.json?.error && calls.length === before,
+        `${short(r1.json)} chamadas=${calls.length - before}`,
+      );
+      const botEv = await lastEvent("bot_ai_%", susFrom);
+      check(
+        "suspenso · bot-definitions: 1 evento ai_suspended em 2 pedidos, nenhum bot_ai_*",
+        (await suspendedEvents("bot-definitions")) === 1 && !botEv,
+        short(botEv),
+      );
+    } finally {
+      await stopEdge(edge);
+    }
+
+    // ---- bot-definitions-v2 (bots e 🤖)
+    edge = await serveEdge("bot-definitions-v2");
+    try {
+      const rid = await mkRoom("writing");
+      const before = calls.length;
+      const r = await callEdge({ word_id: w.id, count: 3, room_id: rid, round: 1 });
+      const keys = Object.keys(r.json ?? {}).sort().join(",");
+      check(
+        "suspenso · bot-definitions-v2: 200, mesmo formato, reservas vetadas e Gemini NÃO chamado",
+        r.status === 200 && keys === "definitions,fallbacks,gate,personas" &&
+          r.json.definitions.length === 0 && r.json.fallbacks.length > 0 &&
+          r.json.gate === "skipped" && calls.length === before,
+        `${keys} fallbacks=${r.json?.fallbacks?.length} chamadas=${calls.length - before}`,
+      );
+      check(
+        "suspenso · bot-definitions-v2: evento ai_suspended (sem texto)",
+        (await suspendedEvents("bot-definitions-v2")) === 1,
+      );
+    } finally {
+      await stopEdge(edge);
+    }
+
+    // ---- score-similarity (juiz 🧠): chamada direta e cadeia completa
+    edge = await serveEdge("score-similarity");
+    try {
+      const S_V = `edge_sv_${tag}`;
+      const S_N = `edge_sn_${tag}`;
+      const S_C = `edge_sc_${tag}`;
+      const rid = await mkRoom("voting");
+      await db.query(
+        `INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot, joined_at) VALUES
+         ($1, $4, 'Votante', 'v', '#000', false, now() - interval '10 minutes'),
+         ($2, $4, 'Escritor', 'w', '#000', false, now() - interval '10 minutes'),
+         ($3, $4, 'Coordenador', 'c', '#000', false, now() - interval '10 minutes')`,
+        [S_V, S_N, S_C, rid],
+      );
+      const { rows: d } = await db.query(
+        `INSERT INTO public.definitions (room_id, round, player_id, text, is_truth, letter) VALUES
+         ($1, 1, '__truth__', 'fruto seco do cerrado', true, 'A'),
+         ($1, 1, $2, 'QUASE: fruto seco tipico do cerrado', false, 'B')
+         RETURNING id, player_id`,
+        [rid, S_N],
+      );
+      const truthId = d.find((x) => x.player_id === "__truth__").id;
+      const nearId = d.find((x) => x.player_id === S_N).id;
+      await db.query(
+        `INSERT INTO public.votes (room_id, round, voter_id, definition_id) VALUES ($1, 1, $2, $4), ($1, 1, $3, $4)`,
+        [rid, S_V, S_N, truthId],
+      );
+      await db.query(
+        `UPDATE public.rooms SET current_coordinator = $2, round_phase_ends_at = now() - interval '5 minutes' WHERE id = $1`,
+        [rid, S_C],
+      );
+      const gw = (await row(`SELECT host(inet_server_addr()) AS ip`)).ip.replace(/\.\d+$/, ".1");
+      await db.query(
+        `INSERT INTO public.app_config (key, value) VALUES ('supabase_url', $1), ('supabase_anon_key', $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [`http://${gw}:8000`, ANON],
+      );
+      try {
+        const before = calls.length;
+        // fim da votação → fire_round_judge → pg_net → edge (suspensa)
+        await db.query(`SELECT public.advance_voting_to_reveal($1)`, [rid]);
+        let rr = null;
+        for (let i = 0; i < 40 && !rr?.judged_at; i++) {
+          await sleep(500);
+          rr = await row(
+            `SELECT judged_at, judge_attempts, judge_request_id FROM public.rounds WHERE room_id = $1 AND round = 1`,
+            [rid],
+          );
+        }
+        const resp = await row(
+          `SELECT status_code, content FROM net._http_response WHERE id = $1`,
+          [rr?.judge_request_id ?? -1],
+        ).catch(() => null);
+        const near = await row(`SELECT near_truth FROM public.definitions WHERE id = $1`, [nearId]);
+        const nScore = (await row(`SELECT score FROM public.players WHERE id = $1`, [S_N])).score;
+        check(
+          "suspenso · juiz pela cadeia pg_net: rodada JULGADA na 1ª tentativa, sem bônus 🧠 (só os +3 do voto na verdade) nem near_truth, Gemini NÃO chamado",
+          !!rr?.judged_at && rr?.judge_attempts === 1 && near?.near_truth !== true &&
+            nScore === 3 && calls.length === before,
+          short({ rr, resp, near, nScore, chamadas: calls.length - before }),
+        );
+        check(
+          "suspenso · juiz responde 200 sem 'error' (o reenvio não insiste)",
+          resp?.status_code === 200 && !("error" in JSON.parse(resp.content ?? "{}")),
+          short(resp),
+        );
+        // o cron, mesmo com a rodada "envelhecida", não reenvia
+        await db.query(
+          `UPDATE public.rounds SET judge_fired_at = now() - interval '2 minutes', scored_at = now() - interval '2 minutes' WHERE room_id = $1 AND round = 1`,
+          [rid],
+        );
+        const cron = await row(`SELECT public.retry_round_judgments() AS r`);
+        const after = await row(
+          `SELECT judge_attempts FROM public.rounds WHERE room_id = $1 AND round = 1`,
+          [rid],
+        );
+        check(
+          "suspenso · retry_round_judgments não reenvia a rodada julgada (sem laço)",
+          after.judge_attempts === 1 && calls.length === before,
+          short({ cron: cron.r, after }),
+        );
+
+        // chamada direta com a marca desfeita: a edge marca de novo, resposta igual
+        await db.query(`UPDATE public.rounds SET judged_at = NULL WHERE room_id = $1 AND round = 1`, [rid]);
+        const r = await callEdge({ room_id: rid, round: 1, candidates: [{ id: nearId }] });
+        const again = await row(`SELECT judged_at FROM public.rounds WHERE room_id = $1 AND round = 1`, [rid]);
+        check(
+          "suspenso · score-similarity direto: {matches:[], skipped:'ai_suspended'} e judged_at gravado pela edge",
+          short(r.json) === short({ matches: [], skipped: "ai_suspended" }) && !!again?.judged_at &&
+            calls.length === before,
+          short(r.json),
+        );
+        check(
+          "suspenso · juiz: 1 evento ai_suspended em 2 pedidos (throttle), nenhum judge_ai_*",
+          (await suspendedEvents("score-similarity")) === 1 &&
+            !(await lastEvent("judge_ai_%", susFrom)),
+        );
+      } finally {
+        await db.query(
+          `DELETE FROM public.app_config WHERE key IN ('supabase_url', 'supabase_anon_key')`,
+        );
+      }
+    } finally {
+      await stopEdge(edge);
+    }
+    const susPayloads = (
+      await db.query(
+        `SELECT payload FROM public.ops_events WHERE kind = 'ai_suspended' AND id > $1`,
+        [susFrom],
+      )
+    ).rows.map((x) => Object.keys(x.payload).sort().join(","));
+    check(
+      "evento ai_suspended só com {fn, mode} (sem sala, jogador, palavra ou texto)",
+      susPayloads.length === 3 && susPayloads.every((k) => k === "fn,mode"),
+      short(susPayloads),
+    );
+  } finally {
+    await db.query(`UPDATE public.app_config SET value = 'ligado' WHERE key = 'ai_mode'`);
   }
 
   // ---------------------------------------------------------------- privilégios
@@ -965,11 +1420,22 @@ try {
     priv.svc && !priv.anon && !priv.auth,
     short(priv),
   );
+  const quotaPriv = await row(
+    `SELECT has_function_privilege('service_role', 'public.bots_quota_take(uuid,integer)', 'EXECUTE') AS svc,
+          has_function_privilege('anon', 'public.bots_quota_take(uuid,integer)', 'EXECUTE') AS anon,
+          has_function_privilege('authenticated', 'public.bots_quota_take(uuid,integer)', 'EXECUTE') AS auth`,
+  );
+  check(
+    "V3 bots_quota_take (cota das edges): só a chave de serviço executa",
+    quotaPriv.svc && !quotaPriv.anon && !quotaPriv.auth,
+    short(quotaPriv),
+  );
   // a mesma lista que a sonda de produção confere (scripts/probe-m1-prod.mjs)
   const { rows: missing } = await db.query(
     `SELECT t.tbl, t.priv
        FROM (VALUES ('rooms','SELECT'), ('rounds','SELECT'), ('rounds','UPDATE'), ('words','SELECT'), ('room_words','SELECT'),
-                    ('definitions','SELECT'), ('ai_served_defs','INSERT'), ('ops_events','INSERT')) AS t(tbl, priv)
+                    ('definitions','SELECT'), ('ai_served_defs','INSERT'), ('ops_events','INSERT'),
+                    ('app_config','SELECT'), ('players','SELECT')) AS t(tbl, priv)
       WHERE NOT has_table_privilege('service_role', 'public.' || t.tbl, t.priv)`,
   );
   check(

@@ -314,6 +314,22 @@ export function dropMatchRepeats(defs: string[], previous: string[]) {
   return { kept, dropped: defs.length - kept.length };
 }
 
+/**
+ * Reservas do servidor pelos filtros lexicais da v2 (forma, vazamento da
+ * verdade, repetição da partida, já servidas na rodada) — sem o juiz. Mesma
+ * cadeia das reservas no caminho normal da v2 (ai-mode.test.ts confere a
+ * equivalência); usada quando a IA está suspensa (docs/contencao-ia.md).
+ */
+export function vetReserves(
+  reserves: string[],
+  ctx: { word: string; meaning: string; previous: string[]; servedNorms: string[] },
+): string[] {
+  const shape = dropMalformed(reserves, ctx.word);
+  const leak = dropNearTruth(shape.kept, ctx.meaning);
+  const match = dropMatchRepeats(leak.kept, ctx.previous);
+  return dropAlreadyServed(match.kept, ctx.servedNorms).kept;
+}
+
 /** Dedup entre as próprias candidatas (mantém a ordem; fica a primeira). */
 export function dropSelfSimilar(defs: string[]) {
   const kept: string[] = [];

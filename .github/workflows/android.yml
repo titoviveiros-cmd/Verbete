@@ -15,6 +15,12 @@ on:
       - "package*.json"
       - ".github/workflows/android.yml"
   workflow_dispatch:
+    inputs:
+      release_channel:
+        description: "Canal do rodapé do app (internal = Teste interno; production = AAB da loja)"
+        type: choice
+        options: [internal, preview, production]
+        default: internal
 
 jobs:
   android-build:
@@ -35,6 +41,11 @@ jobs:
 
       - name: Bundle web offline (modo capacitor)
         run: npx vite build --mode capacitor
+        env:
+          # Canal decidido no BUILD (src/lib/version-label.ts). Sem input
+          # (push no master) = "internal", como antes. Valor inválido
+          # BLOQUEIA o build (resolveReleaseChannel).
+          VITE_RELEASE_CHANNEL: ${{ github.event.inputs.release_channel || 'internal' }}
 
       - name: Capacitor sync
         run: npx cap sync android
@@ -94,6 +105,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'workflow_dispatch' && hashFiles('android/key.properties') != '' }}
         with:
-          name: verbete-release-aab
+          name: verbete-release-aab-${{ github.event.inputs.release_channel || 'internal' }}
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30

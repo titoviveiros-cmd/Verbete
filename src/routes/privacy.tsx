@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { APP_HOST } from "@/lib/app-url";
-import { CONTACT_EMAIL } from "@/lib/legal";
+import { AI_PROVIDER, CONTACT_EMAIL } from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 // Só o comportamento COMPROVADO no código (auditoria da rodada 2A,
@@ -9,8 +9,16 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 // (salas 30 d, convidado 30 d sem uso, denúncias 180 d após a resolução):
 // migration 20261027200000 + scripts/test-data-retention.mjs — publicar este
 // texto só DEPOIS de aplicar a migration. Pendente do proprietário e por isso
-// fora daqui: identidade formal do controlador, plano da API Gemini e prazo
-// de atendimento dos pedidos.
+// fora daqui: identidade formal do controlador (nome do desenvolvedor igual
+// ao da conta do Play Console) e prazo de atendimento dos pedidos.
+// Provedor de IA (05/11/2026): nome, termos e uso próprio do conteúdo vêm
+// SÓ de AI_PROVIDER (src/lib/legal.ts) — hoje Google Gemini, plano gratuito.
+// O texto vale também com a IA desligada (contenção): fala em "quando os
+// recursos estão ligados" e não promete interruptor. Trocar o provedor ou o
+// plano = mudar AI_PROVIDER, o Data Safety e
+// docs/google-play-data-safety-draft.md juntos. Registros da V2 do Diário
+// (daily_eval_claims, ai_quota): limpeza de 3 dias em
+// 20261105150000_daily_guard_v2.sql.
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
@@ -48,7 +56,7 @@ function PrivacyPage() {
         </Link>
         <h1 className="font-display text-3xl mt-2">Política de Privacidade</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Última atualização: 27 de outubro de 2026
+          Última atualização: 5 de novembro de 2026
         </p>
       </header>
 
@@ -104,6 +112,14 @@ function PrivacyPage() {
               erro e de saúde do jogo (mensagem do erro, página e versão do
               app), sem nome, e-mail ou IP.
             </li>
+            <li>
+              <strong>Limite de uso do Desafio Diário:</strong> quando você
+              envia um palpite, o servidor registra a hora da tentativa e conta
+              quantas avaliações você pediu no dia, ligados ao identificador da
+              sua sessão ou conta (sem o palpite). Serve para evitar avaliações
+              duplicadas e abuso da inteligência artificial; esses registros são
+              apagados automaticamente depois de 3 dias.
+            </li>
           </ul>
           <p className="mt-2">
             Não coletamos localização, contatos, fotos, câmera ou microfone. O
@@ -130,24 +146,53 @@ function PrivacyPage() {
             Para rodar a partida em tempo real, calcular placares, manter o
             ranking e o progresso, gerar as definições dos bots, avaliar por
             inteligência artificial a semelhança entre definições (bônus 🧠 e
-            Desafio Diário), moderar denúncias e corrigir erros. Não vendemos
-            seus dados.
+            Desafio Diário), evitar avaliações duplicadas e abuso, moderar
+            denúncias e corrigir erros. Não vendemos seus dados.
           </p>
         </section>
 
         <section>
           <h2 className="font-display text-lg mb-1">
-            Inteligência artificial (Google Gemini)
+            Inteligência artificial ({AI_PROVIDER.name})
           </h2>
           <p>
-            Enviamos ao Gemini, do Google: a palavra da rodada, a definição
+            Quando os recursos de inteligência artificial estão ligados,
+            enviamos ao {AI_PROVIDER.name}: a palavra da rodada, a definição
             verdadeira e os textos das definições da rodada, inclusive as
             escritas pelos jogadores, para avaliar quais chegaram perto da
             verdadeira; o seu palpite do Desafio Diário, para avaliá-lo; e, para
             criar as definições dos bots, a palavra, a definição verdadeira e
             definições anteriores dos próprios bots. Não enviamos nome, apelido,
-            e-mail nem identificadores de conta, sessão ou jogador. Não escreva
-            dados pessoais nas definições e nos palpites.
+            e-mail nem identificadores de conta, sessão ou jogador. Se a
+            inteligência artificial estiver indisponível ou desligada, o bônus
+            🧠 e a avaliação do Desafio Diário podem não funcionar, e os bots
+            usam definições de reserva.
+          </p>
+          <p className="mt-2">
+            {AI_PROVIDER.ownUseNotice ? `${AI_PROVIDER.ownUseNotice} ` : null}
+            <strong>
+              Não escreva dados pessoais (seus ou de outras pessoas) nem
+              informações confidenciais nas definições e nos palpites.
+            </strong>{" "}
+            Veja os{" "}
+            <a
+              className="underline"
+              href={AI_PROVIDER.termsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {AI_PROVIDER.termsLabel}
+            </a>{" "}
+            e a{" "}
+            <a
+              className="underline"
+              href={AI_PROVIDER.privacyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {AI_PROVIDER.privacyLabel}
+            </a>
+            .
           </p>
         </section>
 
@@ -162,9 +207,13 @@ function PrivacyPage() {
               <strong>Cloudflare:</strong> hospedagem do site e do servidor web.
             </li>
             <li>
-              <strong>Google:</strong> o Gemini (acima); o login com Google, se
-              você escolher; e as fontes do jogo, carregadas dos servidores do
-              Google, que recebem o endereço IP do seu aparelho.
+              <strong>{AI_PROVIDER.name}:</strong> a inteligência artificial
+              descrita acima.
+            </li>
+            <li>
+              <strong>Google:</strong> o login com Google, se você escolher; e
+              as fontes do jogo, carregadas dos servidores do Google, que
+              recebem o endereço IP do seu aparelho.
             </li>
           </ul>
           <p className="mt-2">
@@ -220,6 +269,7 @@ function PrivacyPage() {
             </li>
             <li>
               Presença na mesa: 2 dias. Registros de erro e saúde: 30 dias.
+              Registros de limite de uso do Desafio Diário: 3 dias.
             </li>
           </ul>
         </section>
@@ -232,8 +282,9 @@ function PrivacyPage() {
             estatísticas, as conquistas, o histórico de partidas e os palpites
             do Desafio Diário. Permanecem os registros das salas (apelido,
             definições, votos e identificadores técnicos), as denúncias e os
-            banimentos, e os registros técnicos acima. Sem o app, peça por{" "}
-            <Mail /> — detalhes em{" "}
+            banimentos, e os registros técnicos acima — os de limite de uso do
+            Desafio Diário não são apagados na hora, mas expiram sozinhos em 3
+            dias. Sem o app, peça por <Mail /> — detalhes em{" "}
             <Link to="/delete-account" className="underline">
               Excluir conta
             </Link>

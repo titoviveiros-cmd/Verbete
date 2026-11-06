@@ -5,20 +5,38 @@
 // buscada no servidor (service role) e nunca volta ao cliente até a
 // tentativa ser registrada.
 import { createServerFn } from "@tanstack/react-start";
+import { setResponseStatus } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { evaluateDailyGuess } from "./daily-evaluation";
 import {
+  DAILY_AI_PAUSED,
   DAILY_PREP_TIMEOUT_MS,
   runGuardedDailyAttempt,
   withTimeout,
   type ClaimResponse,
   type FinishOkResponse,
 } from "./daily-guard";
+import {
+  createAiModeReader,
+  forcedSuspensionFrom,
+  createSuspendedLogger,
+  loadAiModeValue,
+  suspendedEventIO,
+} from "../../supabase/functions/_shared/ai-mode.ts";
+import { resolveAiProvider } from "../../supabase/functions/_shared/ai-provider.ts";
 
 export { DAILY_EVAL_UNAVAILABLE } from "./daily-evaluation";
 
 import { submitInput } from "./daily-input";
+
+// Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache curto por
+// isolate do Worker e no máximo 1 evento 'ai_suspended' a cada 10 min.
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => process.env[k]),
+});
+const logSuspended = createSuspendedLogger();
 
 function hourBucketIso(): string {
   const d = new Date();
@@ -63,7 +81,10 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
     // V2 (05/11/2026): reserva atômica ANTES da IA (supabase/migrations/
     // 20261105150000_daily_guard_v2.sql). Banco fora = sem IA. Falha da IA
     // nunca gasta a tentativa. Modo 'desligado' = fluxo antigo, idêntico.
-    const result = await runGuardedDailyAttempt({
+    const attempt = runGuardedDailyAttempt({
+      aiMode: () => readAiMode(() => loadAiModeValue(supabaseAdmin)),
+      logSuspended: () =>
+        logSuspended("daily", suspendedEventIO(supabaseAdmin)),
       claim: async () => {
         const { data: claimed, error } = await supabaseAdmin.rpc(
           "daily_claim",
@@ -92,9 +113,12 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
             truth: "",
           },
         );
+        // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER =
+        // Gemini de sempre. Configuração incompleta = missing_key, sem IA.
+        const ai = resolveAiProvider((k) => process.env[k]);
         return evaluateDailyGuess({
           fetchFn: fetch,
-          apiKey: process.env.GEMINI_API_KEY,
+          ...(ai.ok ? { apiKey: ai.apiKey, ...ai.target } : { apiKey: "" }),
           word,
           truth,
           guess: data.guess,
@@ -146,6 +170,17 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
         return recorded;
       },
     });
+    let result: unknown;
+    try {
+      result = await attempt;
+    } catch (e) {
+      // Pausa da IA é estado previsto, não falha do servidor: HTTP 200 com o
+      // erro serializado — o cliente (site e APK instalado) lança e mostra a
+      // mensagem, como nos outros avisos do Diário, sem contar como 5xx.
+      if (e instanceof Error && e.message === DAILY_AI_PAUSED)
+        setResponseStatus(200);
+      throw e;
+    }
     return result as {
       already_played: boolean;
       is_correct?: boolean;

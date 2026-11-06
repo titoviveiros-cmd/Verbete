@@ -18,6 +18,7 @@ import {
   type DailyEvalResult,
   type DailyFailureEvent,
 } from "./daily-evaluation";
+import type { AiMode } from "../../supabase/functions/_shared/ai-mode.ts";
 
 export const DAILY_IN_PROGRESS =
   "Sua resposta já está sendo avaliada — aguarde um instante e confira o resultado.";
@@ -27,6 +28,9 @@ export const DAILY_HOUR_CHANGED =
   "O desafio virou de hora enquanto sua resposta era avaliada — sua tentativa NÃO foi gasta. Jogue o desafio novo.";
 export const DAILY_STALE =
   "Sua avaliação demorou demais e foi descartada — sua tentativa NÃO foi gasta. Tente de novo.";
+/** IA suspensa (app_config.ai_mode = 'suspenso'; docs/contencao-ia.md). */
+export const DAILY_AI_PAUSED =
+  "O Desafio Diário está em pausa para manutenção — sua tentativa NÃO foi gasta. Volte mais tarde!";
 export const DAILY_RECORD_FAILED =
   "Não foi possível confirmar o registro agora. Atualize a página para conferir o resultado — se ele não aparecer, a tentativa NÃO foi gasta e você pode tentar de novo.";
 
@@ -112,7 +116,25 @@ export async function runGuardedDailyAttempt<T>(deps: {
   legacyRecord: (similarity: number) => Promise<T>;
   logEvent: (ev: DailyFailureEvent) => Promise<unknown>;
   build: string | null | undefined;
+  /** app_config.ai_mode (com cache). Omitido = 'ligado'. */
+  aiMode?: () => Promise<AiMode>;
+  /** Evento 'ai_suspended' com throttle (melhor esforço). */
+  logSuspended?: () => Promise<unknown>;
 }): Promise<T | unknown> {
+  // 0) IA suspensa: pausa ANTES da reserva — nada reservado, nada gasto,
+  //    nenhuma leitura de palavra/definição e nenhuma chamada ao provedor.
+  const mode = await (deps.aiMode?.() ?? Promise.resolve("ligado")).catch(
+    () => "ligado",
+  );
+  if (mode === "suspenso") {
+    try {
+      await deps.logSuspended?.();
+    } catch {
+      /* telemetria nunca derruba a resposta */
+    }
+    throw new Error(DAILY_AI_PAUSED);
+  }
+
   // 1) Reserva ANTES de qualquer IA. Banco fora = sem IA (fail-closed).
   let c: ClaimResponse;
   try {

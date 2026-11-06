@@ -6,7 +6,19 @@
 // envia a resposta, evitando que ela seja interceptada / usada para cheating.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
+import {
+  createAiModeReader,
+  createSuspendedLogger,
+  loadAiModeValue,
+  skipJudgeSuspended,
+  suspendedEventIO,
+  forcedSuspensionFrom,
+} from "../_shared/ai-mode.ts";
+import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
+import { decideJudge, decideLease, judgeGuardEvent } from "../_shared/judge-guard.ts";
+import { GUARD_MODE_KEY, parseGuardMode } from "../_shared/room-guard.ts";
+import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
 import { JUDGE_BUDGET, judgeCandidates, nearMissIds } from "../_shared/semantic.ts";
 
 const corsHeaders = {
@@ -21,6 +33,13 @@ const json = (body: unknown) =>
   new Response(JSON.stringify(body), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+
+// Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
+const logSuspended = createSuspendedLogger();
 
 // Telemetria nunca derruba o pedido.
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
@@ -40,6 +59,8 @@ Deno.serve(async (req) => {
   // anônimos (convidados) precisam poder ganhar o bônus de equivalência ≥80%.
   const t0 = Date.now();
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  // V3: reserva da rodada tomada por ESTA invocação (solta no finally)
+  let leased: { roomId: string; round: number } | null = null;
   try {
     const body = await readJsonObject(req);
     const roomId = isUuid(body?.room_id) ? body.room_id : "";
@@ -72,7 +93,7 @@ Deno.serve(async (req) => {
     // usar a palavra "atual" da sala quebrava quando ela já tinha avançado.
     const { data: roundRow, error: roundError } = await admin
       .from("rounds")
-      .select("word_id")
+      .select("word_id, judged_at, judge_attempts, scored_at")
       .eq("room_id", roomId)
       .eq("round", round)
       .maybeSingle();
@@ -81,6 +102,77 @@ Deno.serve(async (req) => {
     if (roundError) throw new Error(`rounds lookup failed: ${roundError.code ?? ""} ${roundError.message}`);
     const wid: string | null = (roundRow as { word_id?: string } | null)?.word_id ?? null;
     if (!wid) return json({ matches: [], error: "round_not_scored" });
+
+    // V3 (05/11/2026): rodada já julgada, desistida ou fora da janela do
+    // reenvio não volta à IA (_shared/judge-guard.ts). Sob
+    // app_config.bots_auth_mode: 'observar' só registra; 'aplicar' responde
+    // sem "error" — o reenvio do banco lê isso como julgada, sem nova tentativa.
+    const mode = parseGuardMode(
+      await supabaseGuardDeps(admin).readConfig(GUARD_MODE_KEY).catch(() => null),
+    );
+    const judgeGuard = decideJudge(
+      mode,
+      roundRow as { judged_at?: string | null; judge_attempts?: number | null; scored_at?: string | null },
+      Date.now(),
+    );
+    if (judgeGuard.reason) await logEvent(admin, judgeGuardEvent(judgeGuard));
+    if (judgeGuard.skip) return json({ matches: [], skipped: judgeGuard.reason });
+
+    // V3: uma avaliação por rodada de cada vez. Duas invocações simultâneas
+    // antes do judged_at davam duas notas da IA (custo em dobro e "segunda
+    // chance" de ≥ 80 para quem dispara em paralelo). Falha ao reservar =
+    // segue sem reserva: nunca impede o julgamento legítimo do banco.
+    let took: boolean | null = null;
+    if (mode !== "desligado") {
+      try {
+        const { data: tk, error: leaseError } = await admin.rpc("judge_lease_take", {
+          p_room_id: roomId,
+          p_round: round,
+        });
+        if (leaseError) console.warn("judge_lease_take failed", leaseError.code);
+        else took = tk === true;
+      } catch (e) {
+        console.warn("judge_lease_take failed", e);
+      }
+      if (took) leased = { roomId, round };
+    }
+    const lease = decideLease(mode, took);
+    if (lease.reason) await logEvent(admin, judgeGuardEvent(lease));
+    if (lease.skip) return json({ matches: [], error: "judge_in_progress" });
+    if (took) {
+      // relê: outra avaliação pode ter terminado entre a 1ª leitura e a reserva
+      const { data: again } = await admin
+        .from("rounds")
+        .select("judged_at")
+        .eq("room_id", roomId)
+        .eq("round", round)
+        .maybeSingle();
+      const late = decideJudge(mode, (again ?? {}) as { judged_at?: string | null }, Date.now());
+      if (late.reason) await logEvent(admin, judgeGuardEvent(late));
+      if (late.skip) return json({ matches: [], skipped: late.reason });
+    }
+
+    // Contenção (PR #43) DEPOIS das travas da V3: a rodada já julgada sai antes,
+    // e a suspensa é marcada dentro da reserva única (solta no finally).
+    // IA suspensa: rodada julgada SEM bônus, sem chamar o provedor e sem
+    // "error" na resposta (o reenvio do banco não insiste).
+    if ((await readAiMode(() => loadAiModeValue(admin))) === "suspenso") {
+      return json(
+        await skipJudgeSuspended({
+          markJudged: async () => {
+            const at = new Date().toISOString();
+            const { error } = await admin
+              .from("rounds")
+              .update({ judged_at: at })
+              .eq("room_id", roomId)
+              .eq("round", round)
+              .is("judged_at", null);
+            if (error) throw new Error(`rounds.judged_at ${error.code ?? "?"}`);
+          },
+          logSuspended: () => logSuspended("score-similarity", suspendedEventIO(admin)),
+        }),
+      );
+    }
 
     let word = "";
     const { data: w1 } = await admin.from("words").select("word").eq("id", wid).maybeSingle();
@@ -117,8 +209,9 @@ Deno.serve(async (req) => {
     );
     if (candidates.length === 0) return json({ matches: [] });
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
+    // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER = Gemini
+    const ai = resolveAiProvider((k) => Deno.env.get(k));
+    if (!ai.ok) throw new Error(aiConfigError(ai));
 
     // flash-lite: pool de quota gratuita separado e maior — o flash comum
     // estourou o free tier no playtest e TODAS as rodadas perderam o bônus
@@ -131,8 +224,8 @@ Deno.serve(async (req) => {
     const tries: string[] = [];
     const judged = await judgeCandidates({
       fetchFn: fetch,
-      apiKey,
-      url: Deno.env.get("GEMINI_CHAT_URL"),
+      apiKey: ai.apiKey,
+      ...ai.target,
       word,
       truth,
       candidates,
@@ -252,5 +345,17 @@ Deno.serve(async (req) => {
     console.error("score-similarity error", e);
     await logEvent(admin, exceptionEvent("judge_ai_error", "score-similarity", e, Date.now() - t0));
     return json({ matches: [], error: "internal_error" });
+  } finally {
+    if (leased) {
+      try {
+        const { error } = await admin.rpc("judge_lease_release", {
+          p_room_id: leased.roomId,
+          p_round: leased.round,
+        });
+        if (error) console.warn("judge_lease_release failed", error.code); // vence sozinha em 30 s
+      } catch (e) {
+        console.warn("judge_lease_release failed", e);
+      }
+    }
   }
 });

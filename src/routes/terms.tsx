@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CONTACT_EMAIL } from "@/lib/legal";
+import { AI_PROVIDER, CONTACT_EMAIL } from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 // A data de "Última atualização" É a versão aceita (TERMS_VERSION em
@@ -131,13 +131,14 @@ function TermsPage() {
             5. Inteligência artificial
           </h2>
           <p>
-            As definições dos bots são criadas por inteligência artificial
-            (Google Gemini), que também avalia a semelhança entre as definições
-            e a verdadeira (bônus 🧠) e os palpites do Desafio Diário. Para
-            isso, as definições e os palpites que você escreve são enviados ao
-            Gemini, sem seu nome, e-mail ou identificadores. A IA pode errar, e
-            o conteúdo gerado por ela também pode ser denunciado. Não escreva
-            dados pessoais nas definições e nos palpites.
+            As definições dos bots são criadas por inteligência artificial (
+            {AI_PROVIDER.name}), que também avalia a semelhança entre as
+            definições e a verdadeira (bônus 🧠) e os palpites do Desafio
+            Diário. Para isso, as definições e os palpites que você escreve são
+            enviados ao {AI_PROVIDER.shortName}, sem seu nome, e-mail ou
+            identificadores. A IA pode errar, e o conteúdo gerado por ela também
+            pode ser denunciado. Não escreva dados pessoais nas definições e nos
+            palpites.
           </p>
         </section>
 

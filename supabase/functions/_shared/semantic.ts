@@ -6,7 +6,14 @@
 // submit_daily_attempt_scored, com o mesmo valor; um teste garante). Mudou o
 // critério? Muda aqui e os dois modos mudam juntos.
 // Sem APIs do Deno: roda na edge e no servidor web.
-import { callChat, parseJsonObject, type AttemptResult, type ChatFailure } from "./ai.ts";
+import {
+  callChat,
+  parseJsonObject,
+  pickTarget,
+  type AttemptResult,
+  type ChatFailure,
+  type ChatTarget,
+} from "./ai.ts";
 
 export const SEMANTIC_THRESHOLD = 80;
 /** Julgamento, não criação: temperatura 0 para a mesma entrada dar a mesma nota. */
@@ -66,6 +73,29 @@ ${examplesText}`;
 const JUDGE_OUTPUT = `Avalie CADA candidata separadamente pela rubrica. Responda APENAS com JSON {"scores": [{"id": "<id>", "score": <inteiro 0-100>}]}, uma entrada por candidata, sem markdown.`;
 
 type Message = { role: "system" | "user"; content: string };
+
+/**
+ * Esquema da resposta do juiz — o MESMO formato que JUDGE_OUTPUT pede
+ * ({"scores":[{"id","score"}]}). Enviado como `guided_json` só no fio
+ * "workers-run" (ai.ts); Gemini segue sem ele. Sem minimum/maximum: a faixa
+ * 0–100 continua garantida por clampScore. Idêntico ao da N1-M (piloto).
+ */
+export const JUDGE_SCORES_SCHEMA = {
+  type: "object",
+  properties: {
+    scores: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, score: { type: "integer" } },
+        required: ["id", "score"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["scores"],
+  additionalProperties: false,
+} as const;
 
 /** Id do palpite do Diário na lista de candidatas (uma só). */
 export const DAILY_ID = "palpite";
@@ -158,10 +188,9 @@ type Failure = { ok: false; reason: ChatFailure; status?: number; attempts: numb
 export const JUDGE_BUDGET = { timeoutMs: 8_000, retries: 3, deadlineMs: 17_000 } as const;
 
 /** Multiplayer: aprova as candidatas com nota >= SEMANTIC_THRESHOLD. */
-export async function judgeCandidates(opts: {
+export async function judgeCandidates(opts: ChatTarget & {
   fetchFn: Fetch;
   apiKey: string;
-  url?: string;
   word: string;
   truth: string;
   candidates: ReadonlyArray<{ id: string; text: string }>;
@@ -175,9 +204,10 @@ export async function judgeCandidates(opts: {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
     apiKey: opts.apiKey,
-    url: opts.url,
+    ...pickTarget(opts),
     temperature: SEMANTIC_TEMPERATURE,
     messages: judgeMessages(opts.word, opts.truth, opts.candidates),
+    jsonSchema: JUDGE_SCORES_SCHEMA,
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
     ...(opts.retries !== undefined ? { retries: opts.retries } : {}),
     ...(opts.deadlineMs !== undefined ? { deadlineMs: opts.deadlineMs } : {}),
@@ -201,10 +231,9 @@ export async function judgeCandidates(opts: {
 export const DAILY_BUDGET = { timeoutMs: 8_000, retries: 2, deadlineMs: 15_000 } as const;
 
 /** Desafio Diário: nota 0–100 do palpite. */
-export async function scoreGuess(opts: {
+export async function scoreGuess(opts: ChatTarget & {
   fetchFn: Fetch;
   apiKey: string;
-  url?: string;
   word: string;
   truth: string;
   guess: string;
@@ -212,9 +241,10 @@ export async function scoreGuess(opts: {
   const chat = await callChat({
     fetchFn: opts.fetchFn,
     apiKey: opts.apiKey,
-    url: opts.url,
+    ...pickTarget(opts),
     temperature: SEMANTIC_TEMPERATURE,
     messages: dailyMessages(opts.word, opts.truth, opts.guess),
+    jsonSchema: JUDGE_SCORES_SCHEMA,
     ...DAILY_BUDGET,
   });
   if (!chat.ok) return { ok: false, reason: chat.reason, status: chat.status, attempts: chat.attempts };

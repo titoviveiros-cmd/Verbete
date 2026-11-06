@@ -25,6 +25,13 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
+import {
+  bearerToken,
+  blockedBody,
+  guardEvent,
+  runRoomGuard,
+} from "../_shared/room-guard.ts";
+import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
 import { judgeCandidates } from "../_shared/semantic.ts";
 import {
   BOT_GATE_MAX_SCORE,
@@ -37,7 +44,16 @@ import {
   outcomeEvent,
   regenEventFields,
   servedRows,
+  vetReserves,
 } from "../bot-definitions/logic.ts";
+import {
+  createAiModeReader,
+  createSuspendedLogger,
+  loadAiModeValue,
+  suspendedEventIO,
+  forcedSuspensionFrom,
+} from "../_shared/ai-mode.ts";
+import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
 
@@ -57,6 +73,13 @@ const GATE_TIMEOUT_MS = 3500;
 const TOTAL_BUDGET_MS = 9500;
 /** Pede algumas candidatas a mais: filtros e juiz podem descartar. */
 const EXTRA_CANDIDATES = 3;
+
+// Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
+const logSuspended = createSuspendedLogger();
 
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
   try {
@@ -117,6 +140,19 @@ Deno.serve(async (req) => {
       (activeRoom as { current_round: number }).current_round,
     );
 
+    // V3 (05/11/2026): sessão (conta ou convidado) + membro da sala + cota
+    // por sala/rodada, sob app_config.bots_auth_mode — padrão 'observar'
+    // (registra o que bloquearia em ops_events, não bloqueia).
+    const guard = await runRoomGuard(supabaseGuardDeps(admin), {
+      token: bearerToken(req.headers.get("authorization")),
+      askedRoomId: askRoomId,
+      roomId,
+      round,
+    });
+    if (guard.decision !== "ok")
+      await logEvent(admin, guardEvent("bot-definitions-v2", guard));
+    if (guard.block) return json(blockedBody(guard.decision), guard.status);
+
     let word = "";
     let meaning = "";
     let category = "";
@@ -150,9 +186,16 @@ Deno.serve(async (req) => {
         404,
       );
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
-    const url = Deno.env.get("GEMINI_CHAT_URL") ?? undefined;
+    // IA suspensa (docs/contencao-ia.md): sem geração e sem juiz; saem só as
+    // reservas do servidor pelos filtros lexicais (o "gate failed" de sempre).
+    const suspended =
+      (await readAiMode(() => loadAiModeValue(admin))) === "suspenso";
+    // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER = Gemini
+    const ai = resolveAiProvider((k) => Deno.env.get(k));
+    if (!ai.ok && !suspended) throw new Error(aiConfigError(ai));
+    const chatTarget = ai.ok
+      ? { apiKey: ai.apiKey, ...ai.target }
+      : { apiKey: "" };
 
     // Memória da PARTIDA (rodadas anteriores, só bots) e da RODADA (servidos).
     const [{ data: botRows }, { data: served }] = await Promise.all([
@@ -185,6 +228,23 @@ Deno.serve(async (req) => {
       (r: { norm_text: string }) => r.norm_text,
     );
 
+    if (suspended) {
+      await logSuspended("bot-definitions-v2", suspendedEventIO(admin));
+      // mesmo formato da resposta normal (o APK instalado lê definitions e
+      // fallbacks): sem candidata da IA, o cliente usa as reservas vetadas
+      return json({
+        definitions: [],
+        fallbacks: vetReserves(fallbacksIn, {
+          word,
+          meaning,
+          previous,
+          servedNorms,
+        }),
+        personas: choosePersonas(count, body?.personas),
+        gate: "skipped",
+      });
+    }
+
     // 1) Geração (uma tentativa, com o que a partida já usou no prompt) e
     // 2) filtros baratos — FORMA primeiro (texto cru do modelo), depois
     // vazamento lexical, servidos na rodada, partida e entre si. Faltando
@@ -212,8 +272,7 @@ Deno.serve(async (req) => {
       generate: (r) =>
         callChat({
           fetchFn: fetch,
-          apiKey,
-          url,
+          ...chatTarget,
           timeoutMs: r.timeoutMs,
           retries: r.retries,
           messages: buildMessages({
@@ -249,8 +308,7 @@ Deno.serve(async (req) => {
       const g0 = Date.now();
       const judged = await judgeCandidates({
         fetchFn: fetch,
-        apiKey,
-        url,
+        ...chatTarget,
         word,
         truth: meaning,
         candidates: items,
