@@ -27,8 +27,10 @@ type Profile = {
   keyEnv: string;
   /** Modelo quando AI_MODEL não vem; null = AI_MODEL obrigatório. */
   defaultModel: string | null;
-  /** URL do endpoint OpenAI-compatível; `missing` = envs que faltam. */
-  url: (get: Get) => { url: string } | { missing: string };
+  /** URL do endpoint (recebe o modelo resolvido); `missing` = envs que faltam. */
+  url: (get: Get, model: string) => { url: string } | { missing: string };
+  /** Formato do fio (ai.ts). Omitido = OpenAI-compatível. */
+  wire?: "workers-run";
   /** max_tokens explícito no corpo; null = não envia (padrão do provedor). */
   maxTokens: number | null;
   /** Rejeita marcadores de canal e finish_reason=length (ai.ts). */
@@ -69,17 +71,23 @@ export const AI_PROFILES: Readonly<Record<AiProviderId, Profile>> = {
     maxTokens: null,
     strictOutput: false,
   },
+  // API NATIVA (/ai/run/<modelo>) = mesma entrada do binding usado na N1-M:
+  // aceita guided_json (schema do modelo). Modelo padrão = o aprovado na
+  // N1-M (06/11/2026); a ativação continua barrada por AI_PROVIDERS_DISCLOSED.
   "workers-ai": {
     keyEnv: "CF_AI_TOKEN",
-    defaultModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    url: (get) => {
+    defaultModel: "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    url: (get, model) => {
       const account = str(get, "CF_ACCOUNT_ID");
       if (!/^[A-Za-z0-9]{1,64}$/.test(account))
         return { missing: "CF_ACCOUNT_ID" };
+      if (!/^@cf\/[a-z0-9._-]+\/[a-z0-9._-]+$/i.test(model))
+        return { missing: AI_MODEL_ENV };
       return {
-        url: `https://api.cloudflare.com/client/v4/accounts/${account}/ai/v1/chat/completions`,
+        url: `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`,
       };
     },
+    wire: "workers-run",
     // o padrão do Workers AI (256) corta o JSON dos bots
     maxTokens: 1024,
     strictOutput: true,
@@ -161,11 +169,11 @@ export function resolveAiProviderProfile(get: Get): ResolvedAiProvider {
   const apiKey = String(get(p.keyEnv) ?? "");
   if (!apiKey.trim()) invalid.push(p.keyEnv);
 
-  const u = p.url(get);
-  if ("missing" in u) invalid.push(u.missing);
-
   const model = str(get, AI_MODEL_ENV) || p.defaultModel || "";
   if (!model) invalid.push(AI_MODEL_ENV);
+
+  const u = p.url(get, model);
+  if ("missing" in u && !invalid.includes(u.missing)) invalid.push(u.missing);
 
   let maxTokens = p.maxTokens;
   const rawMax = str(get, AI_MAX_TOKENS_ENV);
@@ -196,6 +204,7 @@ export function resolveAiProviderProfile(get: Get): ResolvedAiProvider {
       model,
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
       ...(p.strictOutput ? { strictOutput: true } : {}),
+      ...(p.wire ? { wire: p.wire } : {}),
     },
   };
 }

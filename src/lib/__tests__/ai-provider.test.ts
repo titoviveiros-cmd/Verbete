@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callChat,
+  chatBody,
   GEMINI_CHAT_URL,
   GEMINI_MODEL,
+  readChatResponse,
 } from "../../../supabase/functions/_shared/ai.ts";
 import {
   AI_PROFILES,
@@ -20,7 +22,9 @@ import {
   forcedSuspensionFrom,
 } from "../../../supabase/functions/_shared/ai-mode.ts";
 import {
+  JUDGE_SCORES_SCHEMA,
   judgeCandidates,
+  judgeMessages,
   scoreGuess,
 } from "../../../supabase/functions/_shared/semantic.ts";
 import { evaluateDailyGuess, runDailyEvaluation } from "../daily-evaluation";
@@ -71,6 +75,20 @@ function fetchOk(content = "{}", finish?: string) {
     okResponse(content, finish),
   );
 }
+/** Resposta da API NATIVA do Workers AI (envelope { result, success }). */
+const runResponse = (result: unknown, success = true) =>
+  new Response(JSON.stringify({ result, success, errors: [], messages: [] }), {
+    status: 200,
+  });
+function fetchRun(content = "{}", finish?: string) {
+  return vi.fn(async (_u: string, _i: RequestInit) =>
+    runResponse({
+      choices: [
+        { message: { content }, ...(finish ? { finish_reason: finish } : {}) },
+      ],
+    }),
+  );
+}
 const call = (f: ReturnType<typeof fetchOk>, i = 0) =>
   f.mock.calls[i] as [string, RequestInit];
 
@@ -103,7 +121,7 @@ describe("tabela de perfis", () => {
   it("modelo padrão por perfil; AI_MODEL troca o modelo", () => {
     expect(resolved("gemini").target.model).toBe(GEMINI_MODEL);
     expect(resolved("workers-ai").target.model).toBe(
-      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "@cf/mistralai/mistral-small-3.1-24b-instruct",
     );
     expect(resolved("mistral").target.model).toBe("mistral-small-latest");
     expect(resolved("mistral", { AI_MODEL: " outro " }).target.model).toBe(
@@ -344,7 +362,7 @@ describe("saída dos perfis estritos (não Gemini)", () => {
   ])(
     "marcador de canal %j = invalid_response, sem nova tentativa",
     async (c) => {
-      const f = fetchOk(c);
+      const f = fetchRun(c);
       const res = await callChat({
         fetchFn: f,
         apiKey: strict.apiKey,
@@ -363,7 +381,7 @@ describe("saída dos perfis estritos (não Gemini)", () => {
   );
 
   it("finish_reason=length = invalid_response, sem nova tentativa", async () => {
-    const f = fetchOk('{"definitions":["a", "b', "length");
+    const f = fetchRun('{"definitions":["a", "b', "length");
     const res = await callChat({
       fetchFn: f,
       apiKey: strict.apiKey,
@@ -377,7 +395,7 @@ describe("saída dos perfis estritos (não Gemini)", () => {
   });
 
   it("choices[0].message.content normal (finish_reason=stop) passa", async () => {
-    const f = fetchOk('{"definitions":["a"]}', "stop");
+    const f = fetchRun('{"definitions":["a"]}', "stop");
     const res = await callChat({
       fetchFn: f,
       apiKey: strict.apiKey,
@@ -392,7 +410,7 @@ describe("saída dos perfis estritos (não Gemini)", () => {
   });
 
   it("Diário com marcador vira falha (tentativa não gasta), não nota", async () => {
-    const f = fetchOk('<|channel|>final<|message|>{"score": 95}');
+    const f = fetchRun('<|channel|>final<|message|>{"score": 95}');
     const r = await evaluateDailyGuess({
       fetchFn: f,
       apiKey: strict.apiKey,
@@ -428,18 +446,21 @@ describe("corpo e destino enviados por perfil", () => {
     };
   }
 
-  it("workers-ai: endpoint da conta, token Bearer, max_tokens explícito", async () => {
+  it("workers-ai: API NATIVA da conta (modelo na URL), token Bearer, max_tokens, sem model no corpo", async () => {
     const s = await send("workers-ai");
     expect(s.url).toBe(
-      `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/v1/chat/completions`,
+      `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/mistralai/mistral-small-3.1-24b-instruct`,
     );
     expect(s.auth).toBe(`Bearer ${SECRET}`);
-    expect(s.body).toEqual({
-      max_tokens: 1024,
-      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-      messages,
-      temperature: 0,
-    });
+    expect(s.body).toEqual({ max_tokens: 1024, messages, temperature: 0 });
+  });
+
+  it("workers-ai: AI_MODEL fora do formato @cf/<autor>/<modelo> = configuração inválida", () => {
+    const r = resolveAiProviderProfile(
+      env({ ...FULL["workers-ai"], AI_MODEL: "../../x" }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.invalid).toEqual(["AI_MODEL"]);
   });
 
   it("mistral: endpoint da Mistral e modelo padrão", async () => {
@@ -577,5 +598,142 @@ describe("nenhum segredo em log, erro ou evento", () => {
     expect(src).not.toMatch(
       /(?:env\.get\(|process\.env\.)"?(?:GEMINI_API_KEY|CF_AI_TOKEN|MISTRAL_API_KEY|AI_API_KEY)/,
     );
+  });
+});
+
+describe("JSON guiado do juiz (fio workers-run) — paridade com a N1-M", () => {
+  const SCHEMA_N1M = {
+    type: "object",
+    properties: {
+      scores: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { id: { type: "string" }, score: { type: "integer" } },
+          required: ["id", "score"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["scores"],
+    additionalProperties: false,
+  };
+  const cands = [
+    { id: "c1", text: "um" },
+    { id: "c2", text: "dois" },
+  ];
+  const okScores = '{"scores":[{"id":"c1","score":90},{"id":"c2","score":10}]}';
+
+  it("esquema do juiz = o da N1-M (piloto), byte a byte", () => {
+    expect(JSON.stringify(JUDGE_SCORES_SCHEMA)).toBe(
+      JSON.stringify(SCHEMA_N1M),
+    );
+  });
+
+  it("juiz multiplayer e Diário enviam guided_json; bots (callChat sem esquema) não", async () => {
+    const w = resolved("workers-ai");
+    const fj = fetchRun(okScores, "stop");
+    const j = await judgeCandidates({
+      fetchFn: fj,
+      apiKey: w.apiKey,
+      ...w.target,
+      word: "w",
+      truth: "t",
+      candidates: cands,
+    });
+    expect(j).toMatchObject({ ok: true, matches: ["c1"] });
+    const bj = JSON.parse(String(call(fj)[1].body));
+    expect(bj).toEqual({
+      max_tokens: 1024,
+      messages: judgeMessages("w", "t", cands),
+      temperature: 0,
+      guided_json: SCHEMA_N1M,
+    });
+    const fd = fetchRun('{"scores":[{"id":"palpite","score":85}]}', "stop");
+    const d = await evaluateDailyGuess({
+      fetchFn: fd,
+      apiKey: w.apiKey,
+      ...w.target,
+      word: "w",
+      truth: "t",
+      guess: "g",
+    });
+    expect(d).toMatchObject({ ok: true, similarity: 85 });
+    expect(JSON.parse(String(call(fd)[1].body)).guided_json).toEqual(
+      SCHEMA_N1M,
+    );
+    const fb = fetchRun('{"definitions":["a"]}', "stop");
+    await callChat({ fetchFn: fb, apiKey: w.apiKey, ...w.target, messages });
+    expect(JSON.parse(String(call(fb)[1].body))).not.toHaveProperty(
+      "guided_json",
+    );
+  });
+
+  it("Gemini: o juiz segue SEM guided_json e com o corpo de sempre", async () => {
+    const g = resolved("gemini");
+    const f = fetchOk(okScores);
+    await judgeCandidates({
+      fetchFn: f,
+      apiKey: g.apiKey,
+      ...g.target,
+      word: "w",
+      truth: "t",
+      candidates: cands,
+    });
+    expect(Object.keys(JSON.parse(String(call(f)[1].body))).sort()).toEqual([
+      "messages",
+      "model",
+      "temperature",
+    ]);
+  });
+
+  it("formatos da API nativa: choices (N1-M), response texto, response objeto; success=false e corte = falha", async () => {
+    const w = resolved("workers-ai");
+    const run = (result: unknown, success = true) =>
+      judgeCandidates({
+        fetchFn: vi.fn(async () => runResponse(result, success)),
+        apiKey: w.apiKey,
+        ...w.target,
+        word: "w",
+        truth: "t",
+        candidates: cands,
+        retries: 0,
+      });
+    expect(
+      await run({
+        choices: [{ message: { content: okScores }, finish_reason: "stop" }],
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await run({ response: okScores, usage: { completion_tokens: 30 } }),
+    ).toMatchObject({ ok: true });
+    expect(await run({ response: JSON.parse(okScores) })).toMatchObject({
+      ok: true,
+    });
+    expect(
+      await run({ choices: [{ message: { content: okScores } }] }, false),
+    ).toMatchObject({ ok: false, reason: "invalid_response" });
+    expect(
+      await run({ response: okScores, usage: { completion_tokens: 1024 } }),
+    ).toMatchObject({ ok: false, reason: "invalid_response" });
+    expect(
+      await run({
+        choices: [{ message: { content: okScores }, finish_reason: "length" }],
+      }),
+    ).toMatchObject({ ok: false, reason: "invalid_response" });
+  });
+
+  it("chatBody/readChatResponse no fio openai = exatamente o de antes", () => {
+    expect(chatBody({}, messages, 0, SCHEMA_N1M)).toEqual({
+      model: GEMINI_MODEL,
+      messages,
+      temperature: 0,
+    });
+    expect(
+      readChatResponse(
+        { choices: [{ message: { content: "x" }, finish_reason: "stop" }] },
+        {},
+      ),
+    ).toEqual({ content: "x", finish: "stop" });
   });
 });

@@ -74,6 +74,29 @@ const JUDGE_OUTPUT = `Avalie CADA candidata separadamente pela rubrica. Responda
 
 type Message = { role: "system" | "user"; content: string };
 
+/**
+ * Esquema da resposta do juiz — o MESMO formato que JUDGE_OUTPUT pede
+ * ({"scores":[{"id","score"}]}). Enviado como `guided_json` só no fio
+ * "workers-run" (ai.ts); Gemini segue sem ele. Sem minimum/maximum: a faixa
+ * 0–100 continua garantida por clampScore. Idêntico ao da N1-M (piloto).
+ */
+export const JUDGE_SCORES_SCHEMA = {
+  type: "object",
+  properties: {
+    scores: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, score: { type: "integer" } },
+        required: ["id", "score"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["scores"],
+  additionalProperties: false,
+} as const;
+
 /** Id do palpite do Diário na lista de candidatas (uma só). */
 export const DAILY_ID = "palpite";
 
@@ -184,6 +207,7 @@ export async function judgeCandidates(opts: ChatTarget & {
     ...pickTarget(opts),
     temperature: SEMANTIC_TEMPERATURE,
     messages: judgeMessages(opts.word, opts.truth, opts.candidates),
+    jsonSchema: JUDGE_SCORES_SCHEMA,
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
     ...(opts.retries !== undefined ? { retries: opts.retries } : {}),
     ...(opts.deadlineMs !== undefined ? { deadlineMs: opts.deadlineMs } : {}),
@@ -220,6 +244,7 @@ export async function scoreGuess(opts: ChatTarget & {
     ...pickTarget(opts),
     temperature: SEMANTIC_TEMPERATURE,
     messages: dailyMessages(opts.word, opts.truth, opts.guess),
+    jsonSchema: JUDGE_SCORES_SCHEMA,
     ...DAILY_BUDGET,
   });
   if (!chat.ok) return { ok: false, reason: chat.reason, status: chat.status, attempts: chat.attempts };

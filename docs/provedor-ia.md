@@ -11,11 +11,13 @@ Código: `supabase/functions/_shared/ai-provider.ts` — **um único módulo** c
 | `AI_PROVIDER` | Endpoint | Chave | Outras obrigatórias | Modelo padrão (`AI_MODEL` troca) | `max_tokens` | Saída estrita |
 |---|---|---|---|---|---|---|
 | *(ausente/vazio)* ou `gemini` | `GEMINI_CHAT_URL` (opcional) ou o endpoint OpenAI-compatível do Google | `GEMINI_API_KEY` | — | `gemini-flash-lite-latest` | não envia | não (idêntico ao atual) |
-| `workers-ai` | `https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/v1/chat/completions` | `CF_AI_TOKEN` | `CF_ACCOUNT_ID` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | 1024 | sim |
+| `workers-ai` | API **nativa** `https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/{AI_MODEL}` (fio `workers-run`) | `CF_AI_TOKEN` | `CF_ACCOUNT_ID` | `@cf/mistralai/mistral-small-3.1-24b-instruct` (aprovado na N1-M de 06/11/2026) | 1024 | sim |
 | `mistral` | `https://api.mistral.ai/v1/chat/completions` | `MISTRAL_API_KEY` | — | `mistral-small-latest` | 1024 | sim |
 | `openai-compatible` | `AI_CHAT_URL` (https; http só em localhost/127.0.0.1) | `AI_API_KEY` | `AI_CHAT_URL`, `AI_MODEL` | *(nenhum: AI_MODEL obrigatório)* | 1024 | sim |
 
-Os modelos padrão dos perfis novos são **pontos de partida não avaliados** no Verbete; definir `AI_MODEL` explicitamente ao trocar.
+Os modelos padrão de `mistral` e `openai-compatible` são **pontos de partida não avaliados**; o de `workers-ai` é o Mistral Small 3.1 24B, aprovado na N1-M (5 chamadas) e em validação na N2. Definir `AI_MODEL` explicitamente ao trocar.
+
+**JSON guiado do juiz (fio `workers-run`, 06/11/2026):** no perfil `workers-ai` a chamada vai à API nativa do modelo (a mesma entrada do binding usado na N1-M): modelo na URL, sem `model` no corpo, resposta no envelope `{ result, success }` (aceita `choices[0]` e `response`). As chamadas do **juiz** (multiplayer, gate dos bots v2 e Diário) enviam `guided_json` = `JUDGE_SCORES_SCHEMA` (`_shared/semantic.ts`), o mesmo formato que o prompt já pede; a geração dos bots não envia esquema. No Gemini nada muda (sem `guided_json`).
 
 Opcionais para qualquer perfil:
 
