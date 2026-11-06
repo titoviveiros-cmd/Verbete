@@ -2,11 +2,13 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  AI_PROVIDER,
   ANDROID_PACKAGE,
   CONTACT_EMAIL,
   DELETE_ACCOUNT_PATH,
   contactMailto,
 } from "@/lib/legal";
+import { TERMS_VERSION } from "@/lib/terms-record";
 
 // Páginas legais (rodada 2A da conformidade Google Play, 27/10/2026): o
 // contato oficial é decisão do proprietário, os fatos do Suporte foram
@@ -203,23 +205,137 @@ describe("Termos 2026-10-27 — o que a política de UGC exige", () => {
       /bandeira 🚩/,
       /Denunciar jogador/,
       /banir/,
-      /Gemini/,
+      /AI_PROVIDER\.name/,
       /novo aceite/,
       /licença gratuita e não exclusiva/,
     ])
       expect(t).toMatch(topic);
   });
 
-  it("a Política cita o Gemini sem identificadores e os provedores reais", () => {
+  it("a Política cita o provedor de IA sem identificadores e os provedores reais", () => {
     const p = read(ROUTES.privacy);
     for (const fact of [
-      /Gemini/,
+      /AI_PROVIDER\.name/,
       /Supabase/,
       /Cloudflare/,
       /fontes do jogo/,
       /Não enviamos/,
     ])
       expect(p).toMatch(fact);
+  });
+});
+
+// 05/11/2026: provedor de IA num PONTO ÚNICO (AI_PROVIDER em src/lib/legal.ts).
+// Hoje: Google Gemini no plano gratuito — pelos termos da Gemini API, o Google
+// usa o conteúdo para melhorar os produtos dele, com revisão humana (Data
+// Safety: compartilhamento). Trocar o provedor (ex.: Workers AI) ou o plano =
+// editar AI_PROVIDER + ESTE bloco; o teste de amarração ao código falha se o
+// código trocar de provedor sem o texto acompanhar.
+const AI_CODE = [
+  "supabase/functions/_shared/ai.ts",
+  "src/lib/daily-evaluation.ts",
+  "src/lib/daily.functions.ts",
+];
+/** Provedor que o CÓDIGO chama (Edges + Worker do Diário). */
+function providerInCode(): string[] {
+  const src = AI_CODE.map(read).join(" ");
+  const found: string[] = [];
+  if (/generativelanguage\.googleapis\.com|GEMINI_API_KEY/.test(src))
+    found.push("Google Gemini");
+  if (/@cf\/|\/ai\/run\/|env\.AI\.run|workers-ai/i.test(src))
+    found.push("Cloudflare Workers AI");
+  if (/api\.openai\.com|api\.anthropic\.com/.test(src)) found.push("outro");
+  return found;
+}
+
+describe("provedor de IA — ponto único (AI_PROVIDER)", () => {
+  it("hoje: Google Gemini no plano gratuito, com os termos e a política do Google", () => {
+    expect(AI_PROVIDER).toEqual({
+      name: "Google Gemini",
+      shortName: "Gemini",
+      termsLabel: "termos da API Gemini",
+      termsUrl: "https://ai.google.dev/gemini-api/terms",
+      privacyLabel: "Política de Privacidade do Google",
+      privacyUrl: "https://policies.google.com/privacy",
+      ownUseNotice: expect.stringMatching(/plano gratuito da API Gemini/),
+    });
+    expect(AI_PROVIDER.ownUseNotice).toMatch(
+      /melhorar e desenvolver os produtos e serviços dele/,
+    );
+    expect(AI_PROVIDER.ownUseNotice).toMatch(/revisores humanos podem ler/);
+  });
+
+  it("o texto acompanha o provedor que o código chama", () => {
+    expect(providerInCode()).toEqual([AI_PROVIDER.name]);
+  });
+
+  it("trocar o provedor exige revisar os Termos (TERMS_VERSION)", () => {
+    // Os Termos citam AI_PROVIDER: novo provedor = novo texto aceito. Ao
+    // trocar, mudar a data de /terms (TERMS_VERSION) e este par juntos.
+    expect({ provider: AI_PROVIDER.name, terms: TERMS_VERSION }).toEqual({
+      provider: "Google Gemini",
+      terms: "2026-10-27",
+    });
+  });
+
+  it("as páginas usam só a constante — nenhum provedor escrito à mão", () => {
+    for (const path of [ROUTES.privacy, ROUTES.terms, ROUTES.support]) {
+      // sem comentários (podem citar o provedor de hoje para contexto)
+      const src = readFileSync(resolve(ROOT, path), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      expect(src, path).toMatch(/AI_PROVIDER\.name/);
+      expect(src, path).not.toMatch(
+        /Gemini|googleapis|Workers AI|OpenAI|ChatGPT|Anthropic|Claude/,
+      );
+    }
+  });
+
+  it("a Política mostra o uso próprio (quando houver), a orientação e os links do provedor", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/AI_PROVIDER\.ownUseNotice/);
+    expect(p).toMatch(/Não escreva dados pessoais/);
+    expect(p).toMatch(/href=\{AI_PROVIDER\.termsUrl\}/);
+    expect(p).toMatch(/href=\{AI_PROVIDER\.privacyUrl\}/);
+  });
+
+  it("a Política vale também com a IA desligada (contenção), sem prometer interruptor", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(
+      /Quando os recursos de inteligência artificial estão ligados/,
+    );
+    expect(p).toMatch(/indisponível ou desligada/);
+    expect(p).toMatch(/os bots usam definições de reserva/);
+    // a reserva local dos bots existe hoje
+    expect(read("src/lib/room.ts")).toMatch(/BOT_FAKE_DEFINITIONS_TEMPLATES/);
+  });
+});
+
+// V2 do Diário (20261105150000_daily_guard_v2.sql): daily_eval_claims
+// (user_id + hora) e ai_quota (chave daily_user:<uid>) ficam até 3 dias e NÃO
+// saem em deleteAccountData — as páginas têm de dizer isso.
+describe("V2 do Diário — registros de limite de uso na Política e na exclusão", () => {
+  it("a migration guarda por 3 dias e a exclusão de conta não toca essas tabelas", () => {
+    const m = read("supabase/migrations/20261105150000_daily_guard_v2.sql");
+    expect(m).toMatch(
+      /DELETE FROM public\.daily_eval_claims WHERE updated_at < now\(\) - interval '3 days'/,
+    );
+    expect(m).toMatch(
+      /DELETE FROM public\.ai_quota WHERE window_start < now\(\) - interval '3 days'/,
+    );
+    const lib = read("src/lib/account-deletion.ts");
+    expect(lib).not.toMatch(/daily_eval_claims|ai_quota/);
+  });
+
+  it("Política e Excluir conta citam os registros, a finalidade e os 3 dias", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/Limite de uso do Desafio Diário/);
+    expect(p).toMatch(/evitar avaliações duplicadas e abuso/);
+    expect(p).toMatch(/apagados automaticamente depois de 3 dias/);
+    expect(p).toMatch(/expiram sozinhos em 3 dias/);
+    const d = read(ROUTES.deleteAccount);
+    expect(d).toMatch(/limite de uso do Desafio Diário/);
+    expect(d).toMatch(/expiram sozinhos em 3 dias/);
   });
 });
 
