@@ -6,6 +6,14 @@
 // envia a resposta, evitando que ela seja interceptada / usada para cheating.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
+import {
+  createAiModeReader,
+  createSuspendedLogger,
+  loadAiModeValue,
+  skipJudgeSuspended,
+  suspendedEventIO,
+  forcedSuspensionFrom,
+} from "../_shared/ai-mode.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import { decideJudge, decideLease, judgeGuardEvent } from "../_shared/judge-guard.ts";
 import { GUARD_MODE_KEY, parseGuardMode } from "../_shared/room-guard.ts";
@@ -24,6 +32,13 @@ const json = (body: unknown) =>
   new Response(JSON.stringify(body), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+
+// Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
+const logSuspended = createSuspendedLogger();
 
 // Telemetria nunca derruba o pedido.
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
@@ -134,6 +149,28 @@ Deno.serve(async (req) => {
       const late = decideJudge(mode, (again ?? {}) as { judged_at?: string | null }, Date.now());
       if (late.reason) await logEvent(admin, judgeGuardEvent(late));
       if (late.skip) return json({ matches: [], skipped: late.reason });
+    }
+
+    // Contenção (PR #43) DEPOIS das travas da V3: a rodada já julgada sai antes,
+    // e a suspensa é marcada dentro da reserva única (solta no finally).
+    // IA suspensa: rodada julgada SEM bônus, sem chamar o provedor e sem
+    // "error" na resposta (o reenvio do banco não insiste).
+    if ((await readAiMode(() => loadAiModeValue(admin))) === "suspenso") {
+      return json(
+        await skipJudgeSuspended({
+          markJudged: async () => {
+            const at = new Date().toISOString();
+            const { error } = await admin
+              .from("rounds")
+              .update({ judged_at: at })
+              .eq("room_id", roomId)
+              .eq("round", round)
+              .is("judged_at", null);
+            if (error) throw new Error(`rounds.judged_at ${error.code ?? "?"}`);
+          },
+          logSuspended: () => logSuspended("score-similarity", suspendedEventIO(admin)),
+        }),
+      );
     }
 
     let word = "";

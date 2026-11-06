@@ -44,7 +44,15 @@ import {
   outcomeEvent,
   regenEventFields,
   servedRows,
+  vetReserves,
 } from "../bot-definitions/logic.ts";
+import {
+  createAiModeReader,
+  createSuspendedLogger,
+  loadAiModeValue,
+  suspendedEventIO,
+  forcedSuspensionFrom,
+} from "../_shared/ai-mode.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
 
@@ -64,6 +72,13 @@ const GATE_TIMEOUT_MS = 3500;
 const TOTAL_BUDGET_MS = 9500;
 /** Pede algumas candidatas a mais: filtros e juiz podem descartar. */
 const EXTRA_CANDIDATES = 3;
+
+// Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
+const readAiMode = createAiModeReader({
+  // corte sem banco: AI_FORCE_SUSPEND ou chave do provedor ausente
+  forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
+});
+const logSuspended = createSuspendedLogger();
 
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
   try {
@@ -170,8 +185,12 @@ Deno.serve(async (req) => {
         404,
       );
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
+    // IA suspensa (docs/contencao-ia.md): sem geração e sem juiz; saem só as
+    // reservas do servidor pelos filtros lexicais (o "gate failed" de sempre).
+    const suspended =
+      (await readAiMode(() => loadAiModeValue(admin))) === "suspenso";
+    const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
+    if (!apiKey && !suspended) throw new Error("GEMINI_API_KEY missing");
     const url = Deno.env.get("GEMINI_CHAT_URL") ?? undefined;
 
     // Memória da PARTIDA (rodadas anteriores, só bots) e da RODADA (servidos).
@@ -204,6 +223,23 @@ Deno.serve(async (req) => {
     const servedNorms: string[] = (served ?? []).map(
       (r: { norm_text: string }) => r.norm_text,
     );
+
+    if (suspended) {
+      await logSuspended("bot-definitions-v2", suspendedEventIO(admin));
+      // mesmo formato da resposta normal (o APK instalado lê definitions e
+      // fallbacks): sem candidata da IA, o cliente usa as reservas vetadas
+      return json({
+        definitions: [],
+        fallbacks: vetReserves(fallbacksIn, {
+          word,
+          meaning,
+          previous,
+          servedNorms,
+        }),
+        personas: choosePersonas(count, body?.personas),
+        gate: "skipped",
+      });
+    }
 
     // 1) Geração (uma tentativa, com o que a partida já usou no prompt) e
     // 2) filtros baratos — FORMA primeiro (texto cru do modelo), depois
