@@ -14,7 +14,6 @@ import {
   MIN_ROUND_LIMIT,
   parseGuardMode,
   parseRoundLimit,
-  QUOTA_WINDOW_S,
   quotaKey,
   ROUND_LIMIT_KEY,
   runRoomGuard,
@@ -46,7 +45,13 @@ const MEMBERS: Record<string, string[]> = {
 
 function fakeDeps(
   config: Record<string, string | null>,
-  opts: { used?: number; memberError?: boolean; configError?: boolean } = {},
+  opts: {
+    used?: number;
+    memberError?: boolean;
+    configError?: boolean;
+    quotaError?: { code: string };
+    quotaReturn?: number;
+  } = {},
 ) {
   const counters = new Map<string, number>();
   const deps: GuardDeps = {
@@ -62,7 +67,12 @@ function fakeDeps(
       if (opts.memberError) throw new Error("players fora");
       return (MEMBERS[roomId] ?? []).includes(userId);
     }),
-    takeQuota: vi.fn(async (key: string) => {
+    takeQuota: vi.fn(async (roomId: string, round: number) => {
+      // como o PostgREST: erro de permissão vira objeto com code (ex.: 42501)
+      if (opts.quotaError)
+        throw Object.assign(new Error("permission denied"), opts.quotaError);
+      if (opts.quotaReturn !== undefined) return opts.quotaReturn;
+      const key = quotaKey(roomId, round);
       const n = (counters.get(key) ?? opts.used ?? 0) + 1;
       counters.set(key, n);
       return n;
@@ -174,10 +184,37 @@ describe("runRoomGuard — modo aplicar", () => {
       block: false,
       status: 200,
     });
-    expect(deps.takeQuota).toHaveBeenCalledWith(
-      quotaKey(ROOM, 1),
-      QUOTA_WINDOW_S,
-    );
+    expect(deps.takeQuota).toHaveBeenCalledWith(ROOM, 1);
+  });
+
+  it("CI #42: cota sem permissão (42501) → guard_error com etapa e código, sem lançar", async () => {
+    const { deps } = fakeDeps(cfg, { quotaError: { code: "42501" } });
+    const g = await runRoomGuard(deps, ask("jwt-convidado"));
+    expect(g).toEqual({
+      mode: "aplicar",
+      decision: "guard_error",
+      block: true,
+      status: 503,
+      stage: "quota",
+      errorCode: "42501",
+    });
+    expect(guardEvent("bot-definitions-v2", g).payload).toEqual({
+      fn: "bot-definitions-v2",
+      mode: "aplicar",
+      decision: "guard_error",
+      blocked: true,
+      stage: "quota",
+      error_code: "42501",
+    });
+  });
+
+  it("contador inválido do banco (null/0/NaN) nunca vira 'ok'", async () => {
+    for (const bad of [0, NaN, -1, 1.5]) {
+      const { deps } = fakeDeps(cfg, { quotaReturn: bad });
+      const g = await runRoomGuard(deps, ask("jwt-convidado"));
+      expect(g.decision).toBe("guard_error");
+      expect(g.stage).toBe("quota");
+    }
   });
 
   it("cota excedida → 429 (o pedido N+1 da rodada)", async () => {
@@ -241,11 +278,12 @@ describe("runRoomGuard — modo aplicar", () => {
   it("erro do banco na verificação → guard_error (nunca lança)", async () => {
     const { deps } = fakeDeps(cfg, { memberError: true });
     const g = await runRoomGuard(deps, ask("jwt-convidado"));
-    expect(g).toEqual({
+    expect(g).toMatchObject({
       mode: "aplicar",
       decision: "guard_error",
       block: true,
       status: 503,
+      stage: "member",
     });
   });
 });
@@ -427,7 +465,7 @@ describe("as edges usam a guarda ANTES da IA", () => {
     expect(s).toContain("json({ matches: [], skipped: judgeGuard.reason })");
   });
 
-  it("migration: só configuração, padrão observar, sem sobrescrever, nada para anon/authenticated", () => {
+  it("migration: config padrão observar sem sobrescrever; cota com função própria só para service_role", () => {
     const sql = readFileSync(
       join(
         __dirname,
@@ -440,7 +478,23 @@ describe("as edges usam a guarda ANTES da IA", () => {
       .join("\n");
     expect(sql).toMatch(/\('bots_auth_mode', 'observar'\)/);
     expect(sql).toMatch(/ON CONFLICT \(key\) DO NOTHING/);
-    expect(sql).not.toMatch(/\b(anon|authenticated)\b/);
-    expect(sql).not.toMatch(/CREATE|DROP|ALTER|UPDATE|DELETE/i);
+    // causa da falha da CI #42: ai_quota_add (V2) sem EXECUTE para service_role
+    expect(sql).not.toMatch(/ai_quota_add/);
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.bots_quota_take\(uuid, integer\) FROM PUBLIC, anon, authenticated;/,
+    );
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.bots_quota_take\(uuid, integer\) TO service_role;/,
+    );
+    expect(sql).not.toMatch(/GRANT[^;]*\b(anon|authenticated|PUBLIC)\b/);
+    expect(sql).toMatch(
+      /SECURITY DEFINER\s+SET search_path TO 'public', 'pg_temp'/,
+    );
+    expect(sql).not.toMatch(/\b(DROP|ALTER|UPDATE public|DELETE)\b/i);
+    // a chave montada no banco é a mesma que a edge documenta
+    expect(sql).toContain(
+      "'bots_round:' || p_room_id::text || ':' || p_round::text",
+    );
+    expect(quotaKey(ROOM, 2)).toBe(`bots_round:${ROOM}:2`);
   });
 });

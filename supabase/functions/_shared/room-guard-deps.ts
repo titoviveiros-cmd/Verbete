@@ -3,6 +3,13 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import type { GuardDeps, Identity } from "./room-guard.ts";
 
+/** Erro com o código do PostgREST/Postgres (ex.: 42501), sem mensagem do banco. */
+function dbError(stage: string, err: { code?: string } | null): Error {
+  return Object.assign(new Error(`${stage}: ${err?.code ?? "erro"}`), {
+    code: err?.code ?? "unknown",
+  });
+}
+
 export function supabaseGuardDeps(admin: SupabaseClient): GuardDeps {
   return {
     async readConfig(key) {
@@ -11,7 +18,7 @@ export function supabaseGuardDeps(admin: SupabaseClient): GuardDeps {
         .select("value")
         .eq("key", key)
         .maybeSingle();
-      if (error) throw new Error(`app_config: ${error.code ?? ""}`);
+      if (error) throw dbError("app_config", error);
       const v = (data as { value?: unknown } | null)?.value;
       return typeof v === "string" ? v : null;
     },
@@ -39,18 +46,18 @@ export function supabaseGuardDeps(admin: SupabaseClient): GuardDeps {
         .eq("user_id", userId)
         .is("kicked_at", null)
         .limit(1);
-      if (error) throw new Error(`players: ${error.code ?? ""}`);
+      if (error) throw dbError("players", error);
       return (data ?? []).length > 0;
     },
-    async takeQuota(key, windowS) {
-      const { data, error } = await admin.rpc("ai_quota_add", {
-        p_key: key,
-        p_window_s: windowS,
+    async takeQuota(roomId, round) {
+      // Função PRÓPRIA da V3 (migration 20261105180000), com EXECUTE explícito
+      // para service_role. Antes: ai_quota_add da V2 → 42501 (sem permissão).
+      const { data, error } = await admin.rpc("bots_quota_take", {
+        p_room_id: roomId,
+        p_round: round,
       });
-      if (error) throw new Error(`ai_quota_add: ${error.code ?? ""}`);
-      const n = Number(data);
-      if (!Number.isFinite(n)) throw new Error("ai_quota_add: retorno inválido");
-      return n;
+      if (error) throw dbError("bots_quota_take", error);
+      return Number(data);
     },
   };
 }

@@ -13,15 +13,16 @@
 | Arquivo | Mudança |
 |---|---|
 | `supabase/functions/_shared/room-guard.ts` | Lógica pura da guarda (modo, token, decisão, cota, evento). Sem Deno — testada no Vitest. |
-| `supabase/functions/_shared/room-guard-deps.ts` | Acesso real (service role): `app_config`, `auth.getUser(token)`, `players`, `ai_quota_add`. Só Deno. |
+| `supabase/functions/_shared/room-guard-deps.ts` | Acesso real (service role): `app_config`, `auth.getUser(token)`, `players`, RPC `bots_quota_take`. Erro do banco vira `guard_error` com etapa e código (ex.: `42501`). Só Deno. |
 | `supabase/functions/_shared/judge-guard.ts` | Lógica pura do "não julgar de novo" do `score-similarity`. |
 | `supabase/functions/bot-definitions/index.ts` | `room_id` (quando enviado) precisa ser a sala com o `word_id` ativo; guarda antes de buscar a palavra e antes do Gemini. |
 | `supabase/functions/bot-definitions-v2/index.ts` | Guarda antes de buscar a palavra e antes do Gemini (a v2 já filtrava a sala pelo `room_id`). |
 | `supabase/functions/score-similarity/index.ts` | Lê `judged_at`, `judge_attempts`, `scored_at` na mesma consulta da rodada; rodada já julgada/desistida/velha não vai à IA. |
 | `supabase/functions/_shared/ai.ts` | Só o tipo: novo `kind` de evento `ai_guard`. |
-| `supabase/migrations/20261105180000_bots_auth_guard_v3.sql` | **Só configuração**: `bots_auth_mode = 'observar'` e `bots_ai_round_limit = '60'` (`ON CONFLICT DO NOTHING`) + `GRANT EXECUTE ON ai_quota_add TO service_role` (explícito; nada para anon/authenticated). |
+| `supabase/migrations/20261105180000_bots_auth_guard_v3.sql` | Configuração `bots_auth_mode = 'observar'` e `bots_ai_round_limit = '60'` (`ON CONFLICT DO NOTHING`) + função `bots_quota_take(sala, rodada)` (SECURITY DEFINER, `search_path` fixo, EXECUTE **só** para `service_role`) sobre a tabela `ai_quota` da V2. Nenhuma tabela nova, nenhum dado de jogo. |
 | `supabase/rollback/bots_auth_guard_v3.sql` | Apaga as 2 chaves. |
-| `src/lib/__tests__/room-guard.test.ts` | 50 testes de unidade da decisão. |
+| `src/lib/__tests__/room-guard.test.ts` | 52 testes de unidade da decisão. |
+| `scripts/test-v3-quota-sql.mjs` | Cota no banco: permissões, contagem, concorrência real (12 conexões), idempotência e rollback (CI em Postgres real; local em PGlite). |
 | `scripts/test-edges-e2e.mjs` | Casos V3 com as edges servidas de verdade contra o Supabase local da CI. |
 
 **O que não muda:** client (web/APK), contrato das respostas de sucesso, pontuação, limiar 80 e +3 do juiz, memória da rodada/partida, reservas vetadas, `config.toml` (`verify_jwt` continua `false`).
@@ -30,7 +31,7 @@
 1. **`room_id` obrigatório** → senão `room_required` (400). O client sempre manda (`WriteDefinition.tsx:100`, `room.ts:843`, `room.ts:987`).
 2. **Sessão**: `Authorization: Bearer <jwt>` validado por `auth.getUser` (conta **ou** convidado anônimo). Sem token, chave anon, token vencido/forjado → `no_session` (401). Auth fora do ar → `auth_unavailable` (503).
 3. **Membro**: linha em `players` com `room_id` = a sala da palavra, `user_id` = o usuário, `kicked_at IS NULL` → senão `not_member` (403).
-4. **Cota**: `ai_quota_add('bots_round:<sala>:<rodada>', 86400)` > `bots_ai_round_limit` → `quota_exceeded` (429). Só conta quem passou de 1–3 (exatamente os pedidos que chegariam à IA em `aplicar`). Limite lido de `app_config`, limitado a [20, 1000], padrão 60 (12 jogadores × (💡 + sugestão automática + recargas) + bots do host).
+4. **Cota**: `bots_quota_take(sala, rodada)` (chave `bots_round:<sala>:<rodada>` montada no banco, janela de 1 dia) > `bots_ai_round_limit` → `quota_exceeded` (429). Só conta quem passou de 1–3 (exatamente os pedidos que chegariam à IA em `aplicar`). Limite lido de `app_config`, limitado a [20, 1000], padrão 60 (12 jogadores × (💡 + sugestão automática + recargas) + bots do host).
 5. Erro de banco na verificação → `guard_error` (503). A guarda nunca lança.
 
 Bloqueio = corpo `{ error, definitions: [], fallbacks: [] }` com o status acima — o client já trata não-2xx (`functions.invoke` devolve `data: null`) caindo nas reservas locais, como já fazia com o 403 antigo.
@@ -71,7 +72,7 @@ SELECT payload->>'fn' AS fn, payload->>'decision' AS decisao, payload->>'mode' A
 ```
 
 ## Ordem de deploy segura (cada passo com autorização própria)
-0. **Pré-requisito:** a migration da V2 (`20261105150000_daily_guard_v2.sql`) aplicada em produção — a V3 usa `public.ai_quota` e `ai_quota_add`. **NÃO VERIFICADO nesta rodada.** Sem ela a migration V3 falha no `GRANT` (função inexistente) — não aplicar fora de ordem.
+0. **Pré-requisito:** a migration da V2 (`20261105150000_daily_guard_v2.sql`) aplicada em produção — a V3 usa a tabela `public.ai_quota`. **NÃO VERIFICADO nesta rodada.** Sem ela a função `bots_quota_take` é criada mas falha ao contar (`guard_error`) — não aplicar fora de ordem.
 1. **Migration** V3 (`supabase db push` ou SQL Editor): só cria as 2 chaves em `observar`. Sem efeito até as edges novas entrarem.
 2. **Edges** (`supabase functions deploy bot-definitions bot-definitions-v2 score-similarity`), já em `observar`. O `config.toml` mantém `verify_jwt = false`.
 3. **Smoke** em `observar`: uma partida com convidado + bots; conferir `bot_ai_success` normais e **nenhum** `ai_guard` com `not_member`/`no_session` vindo de jogo legítimo; uma rodada com bônus 🧠 julgada normalmente.
@@ -81,8 +82,8 @@ SELECT payload->>'fn' AS fn, payload->>'decision' AS decisao, payload->>'mode' A
 ## Rollback
 - **Imediato, sem deploy:** `UPDATE public.app_config SET value = 'desligado', updated_at = now() WHERE key = 'bots_auth_mode';` → as edges novas voltam ao fluxo antigo no pedido seguinte. (`observar` também já não bloqueia nada.)
 - **Edges:** reimplantar as 3 functions a partir do commit anterior (`master` `0c6476b`), por exemplo num worktree desse commit.
-- **Migration:** `supabase/rollback/bots_auth_guard_v3.sql` (apaga as 2 chaves) — **só depois** das edges anteriores no ar ou com o modo em `desligado`; com as edges novas e as chaves apagadas o modo vira `observar` (não bloqueia). O `GRANT` não é revogado (já vinha dos privilégios padrão do Supabase e a V2 pode depender dele). Nenhum dado de jogo é tocado.
-- **Rollback da V2 com a V3 no ar:** o script da V2 apaga `ai_quota_add`. Antes, pôr a V3 em `desligado` (senão `aplicar` vira `guard_error`/503 nos bots; em `observar` só gera eventos).
+- **Migration:** `supabase/rollback/bots_auth_guard_v3.sql` (apaga `bots_quota_take` e as 2 chaves) — **só depois** das edges anteriores no ar ou com o modo em `desligado`. Nenhum dado de jogo é tocado.
+- **Rollback da V2 com a V3 no ar:** o script da V2 apaga a tabela `ai_quota`. Antes, pôr a V3 em `desligado` (senão `aplicar` vira `guard_error`/503 nos bots; em `observar` só gera eventos).
 
 ## Riscos e limites
 | Risco | Impacto | Evidência / prevenção | Situação |
@@ -97,6 +98,12 @@ SELECT payload->>'fn' AS fn, payload->>'decision' AS decisao, payload->>'mode' A
 | Latência extra | `getUser` + 1 consulta + 1 RPC antes da IA (estimativa não medida). | Medir em `observar` pelo `latency_ms`. | NÃO VERIFICADO |
 | Virada da janela da cota (0h UTC) | Contador da sala/rodada recomeça uma vez. | Chave já é por rodada; janela de 1 dia. | Aceito |
 
+## Falha da 1ª CI (PR #42, run 42141677897) — causa raiz e correção
+- **Sintoma:** em `aplicar`, o convidado anônimo legítimo da sala recebia `503 guard_error`, a cota ficava em `used=0` e a cota esgotada também dava 503 (não 429). Os casos sem token (401), outra sala (403) e expulso (403) passavam — ou seja, `getUser` e a consulta a `players` funcionavam; a falha era na etapa da **cota**.
+- **Evidência:** `❌ V3 ai_quota_add (cota das edges): só a chave de serviço executa — {"svc":false,"anon":false,"auth":false}`.
+- **Causa:** a edge chamava `ai_quota_add` (V2) pela API com a chave de serviço. A V2 faz `REVOKE ALL … FROM PUBLIC, anon, authenticated` e só concede EXECUTE explícito às funções do Diário; o `service_role` dependia do PUBLIC → `42501 permission denied` → `guard_error`. O `GRANT` avulso da 1ª versão da V3 não sobrevive a um DROP/CREATE da função da V2 — exatamente o que o rollback da V2 (e a suíte `test-daily-guard`, que roda antes) faz.
+- **Correção:** função **própria** da V3, `bots_quota_take(uuid, integer)`, com o GRANT dela (a V2 não a toca) e a chave montada no banco; a edge não usa mais `ai_quota_add`. O `guard_error` passa a registrar a etapa e o código (`stage`, `error_code`) no evento `ai_guard`, para o próximo diagnóstico não depender do log da CI.
+
 ## Verificação
-- **Local (CONFIRMADO, 05/11):** `npx tsc --noEmit` limpo; `npx eslint` no teste novo limpo (as edges ficam fora do eslint do projeto); `npx vitest run` 65 arquivos / 723 testes (50 novos em `room-guard.test.ts`); `node scripts/ci-deno-check.mjs` → DENO CHECK OK nas 3 edges.
-- **Só na CI (sem Docker local):** `scripts/test-edges-e2e.mjs` (job `integration`, Supabase local) com os casos V3: sem token/chave anon → 401 sem IA; outra sala → 403 sem IA; sem `room_id` → 400; expulso → 403; cota → 429 sem IA; convidado anônimo da própria sala → 200 com IA; `observar`/modo inválido/`desligado` não bloqueiam; `score-similarity` em `aplicar` não chama a IA para rodada já julgada; **a cadeia inteira do banco (pg_net, reenvios, desistência, cenários A–G) roda em `aplicar`**; `ai_quota_add` só para `service_role`.
+- **Local (CONFIRMADO, 05/11):** `npx tsc --noEmit` limpo; `npx eslint` no teste novo limpo (as edges ficam fora do eslint do projeto); `npx vitest run` 65 arquivos / 725 testes (52 em `room-guard.test.ts`); `node scripts/ci-deno-check.mjs` → DENO CHECK OK nas 3 edges; `node scripts/test-v3-quota-sql.mjs --pglite …` → 8/8 (PGlite, 1 conexão: concorrência só sequencial).
+- **Só na CI (sem Docker local):** `scripts/test-edges-e2e.mjs` (job `integration`, Supabase local) com os casos V3: sem token/chave anon → 401 sem IA; outra sala → 403 sem IA; sem `room_id` → 400; expulso → 403; cota → 429 sem IA; convidado anônimo da própria sala → 200 com IA; `observar`/modo inválido/`desligado` não bloqueiam; `score-similarity` em `aplicar` não chama a IA para rodada já julgada; **a cadeia inteira do banco (pg_net, reenvios, desistência, cenários A–G) roda em `aplicar`**; `bots_quota_take` só para `service_role`; 8 pedidos simultâneos com 5 vagas → 5 × 200 e 3 × 429. E `scripts/test-v3-quota-sql.mjs` em Postgres real, com 12 conexões simultâneas.

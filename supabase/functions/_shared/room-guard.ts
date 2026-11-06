@@ -28,9 +28,6 @@ export const DEFAULT_ROUND_LIMIT = 60;
 /** Nunca abaixo disso (config errada não pode derrubar os bots de uma sala cheia). */
 export const MIN_ROUND_LIMIT = 20;
 export const MAX_ROUND_LIMIT = 1000;
-/** Janela do contador de ai_quota: a chave já é por sala/rodada; 1 dia evita
- *  que a virada da janela zere o contador no meio de uma rodada (só à 0h UTC). */
-export const QUOTA_WINDOW_S = 86400;
 
 export function parseGuardMode(v: unknown): GuardMode {
   return v === "desligado" || v === "observar" || v === "aplicar"
@@ -50,6 +47,8 @@ export function bearerToken(header: string | null | undefined): string {
   return m?.[1] ?? "";
 }
 
+/** Chave do contador em public.ai_quota — montada no BANCO por
+ *  bots_quota_take (migration V3, janela de 1 dia); aqui só para conferência. */
 export function quotaKey(roomId: string, round: number): string {
   return `bots_round:${roomId}:${round}`;
 }
@@ -80,12 +79,18 @@ export const DECISION_STATUS: Record<GuardDecision, number> = {
   guard_error: 503,
 };
 
+/** Etapa que falhou num 'guard_error' (diagnóstico; nunca dado pessoal). */
+export type GuardStage = "identify" | "member" | "quota";
+
 export type GuardResult = {
   mode: GuardMode;
   decision: GuardDecision;
   /** true só no modo 'aplicar' com decisão ≠ ok: a edge responde `status` sem IA. */
   block: boolean;
   status: number;
+  /** Só em 'guard_error': etapa e código do erro (ex.: 42501 = sem permissão). */
+  stage?: GuardStage;
+  errorCode?: string;
 };
 
 /** Acesso ao banco/auth, injetado (Deno em produção, falsos nos testes). */
@@ -93,8 +98,8 @@ export type GuardDeps = {
   readConfig: (key: string) => Promise<string | null>;
   identify: (token: string) => Promise<Identity>;
   isMember: (roomId: string, userId: string) => Promise<boolean>;
-  /** Soma 1 ao contador e devolve o total da janela (atômico no banco). */
-  takeQuota: (key: string, windowS: number) => Promise<number>;
+  /** Soma 1 ao contador da sala/rodada e devolve o total (atômico no banco). */
+  takeQuota: (roomId: string, round: number) => Promise<number>;
 };
 
 export type GuardInput = {
@@ -132,25 +137,34 @@ export async function runRoomGuard(
     mode = "observar"; // leitura falhou: nunca 'aplicar' por acidente
   }
   if (mode === "desligado") return result(mode, "ok");
+  let stage: GuardStage = "identify";
   try {
     if (!input.askedRoomId) return result(mode, "room_required");
     if (!input.token) return result(mode, "no_session");
     const who = await deps.identify(input.token);
     if (who.kind === "none") return result(mode, "no_session");
     if (who.kind === "error") return result(mode, "auth_unavailable");
+    stage = "member";
     if (!(await deps.isMember(input.roomId, who.userId)))
       return result(mode, "not_member");
+    stage = "quota";
     const limit = parseRoundLimit(
       await deps.readConfig(ROUND_LIMIT_KEY).catch(() => null),
     );
-    const used = await deps.takeQuota(
-      quotaKey(input.roomId, input.round),
-      QUOTA_WINDOW_S,
-    );
+    const used = await deps.takeQuota(input.roomId, input.round);
+    if (!Number.isInteger(used) || used < 1)
+      throw new Error("contador da cota inválido");
     if (used > limit) return result(mode, "quota_exceeded");
     return result(mode, "ok");
-  } catch {
-    return result(mode, "guard_error");
+  } catch (e) {
+    const code = (e as { code?: unknown } | null)?.code;
+    return {
+      ...result(mode, "guard_error"),
+      stage,
+      ...(typeof code === "string" && /^[A-Za-z0-9_]{1,16}$/.test(code)
+        ? { errorCode: code }
+        : {}),
+    };
   }
 }
 
@@ -168,6 +182,8 @@ export function guardEvent(fn: string, g: GuardResult) {
       mode: g.mode,
       decision: g.decision,
       blocked: g.block,
+      ...(g.stage ? { stage: g.stage } : {}),
+      ...(g.errorCode ? { error_code: g.errorCode } : {}),
     },
   };
 }

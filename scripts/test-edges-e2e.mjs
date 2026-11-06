@@ -490,6 +490,29 @@ try {
       await db.query(`UPDATE public.players SET kicked_at = NULL WHERE id = $1`, [`edge_g_${tag}`]);
       check("aplicar: jogador expulso → 403", r.status === 403, `HTTP ${r.status}`);
       await setCfg("bots_ai_round_limit", "20");
+      // concorrência: faltando 5 para o limite, 8 pedidos SIMULTÂNEOS do
+      // convidado legítimo → exatamente 5 passam e 3 levam 429
+      await db.query(
+        `INSERT INTO public.ai_quota (key, window_start, used)
+         VALUES ($1, to_timestamp(floor(extract(epoch FROM now()) / 86400) * 86400), 15)
+         ON CONFLICT (key, window_start) DO UPDATE SET used = 15`,
+        [`bots_round:${ridG}:1`],
+      );
+      const burst = await Promise.all(
+        Array.from({ length: 8 }, () => callEdgeAs(guest.token, body(ridG))),
+      );
+      const burstUsed = await row(
+        `SELECT coalesce(sum(used), 0)::int AS n FROM public.ai_quota WHERE key = $1`,
+        [`bots_round:${ridG}:1`],
+      );
+      const st = burst.map((x) => x.status).sort();
+      check(
+        "aplicar: 8 pedidos simultâneos com 5 vagas → 5 × 200 e 3 × 429 (o limite não estoura)",
+        st.filter((s) => s === 200).length === 5 &&
+          st.filter((s) => s === 429).length === 3 &&
+          burstUsed.n === 23,
+        `status=${st.join(",")} used=${burstUsed.n}`,
+      );
       await db.query(
         `INSERT INTO public.ai_quota (key, window_start, used)
          VALUES ($1, to_timestamp(floor(extract(epoch FROM now()) / 86400) * 86400), 20)
@@ -1161,12 +1184,12 @@ try {
     short(priv),
   );
   const quotaPriv = await row(
-    `SELECT has_function_privilege('service_role', 'public.ai_quota_add(text,integer)', 'EXECUTE') AS svc,
-          has_function_privilege('anon', 'public.ai_quota_add(text,integer)', 'EXECUTE') AS anon,
-          has_function_privilege('authenticated', 'public.ai_quota_add(text,integer)', 'EXECUTE') AS auth`,
+    `SELECT has_function_privilege('service_role', 'public.bots_quota_take(uuid,integer)', 'EXECUTE') AS svc,
+          has_function_privilege('anon', 'public.bots_quota_take(uuid,integer)', 'EXECUTE') AS anon,
+          has_function_privilege('authenticated', 'public.bots_quota_take(uuid,integer)', 'EXECUTE') AS auth`,
   );
   check(
-    "V3 ai_quota_add (cota das edges): só a chave de serviço executa",
+    "V3 bots_quota_take (cota das edges): só a chave de serviço executa",
     quotaPriv.svc && !quotaPriv.anon && !quotaPriv.auth,
     short(quotaPriv),
   );
