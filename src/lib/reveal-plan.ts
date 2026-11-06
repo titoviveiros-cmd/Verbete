@@ -127,7 +127,7 @@ export function bluffQuip(
   if (maxPossible >= 2 && votes >= maxPossible)
     return pick(["enganou todo mundo!", "golpe perfeito"], s);
   if (maxPossible >= 3 && votes === maxPossible - 1)
-    return pick(["quase acertou", "por um triz, todos"], s);
+    return pick(["quase perfeito", "por um triz, todos"], s);
   if (votes === 1)
     return pick(["pegou um", "fez uma vítima", "um caiu direitinho"], s);
   return pick(["essa convenceu", "colou bonito", `${votes} caíram`], s);

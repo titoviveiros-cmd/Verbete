@@ -1,4 +1,4 @@
-// 2.1.4 — "🤏 Quase lá! Faltou precisão." (nota 50–79 do juiz 🧠, sem bônus).
+// 2.1.4 — "🤏 Quase acertou! Faltou precisão." (era "Quase lá!" até 05/11/2026) (nota 50–79 do juiz 🧠, sem bônus).
 // A edge grava a marca com service_role (apply_similarity_near_miss); o autor
 // lê só a própria, da rodada atual, a partir da revelação (get_my_near_miss).
 // Sessões simuladas via SET LOCAL request.jwt.claims (como test-identity).
