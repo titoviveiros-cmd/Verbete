@@ -24,6 +24,7 @@ import {
   loadAiModeValue,
   suspendedEventIO,
 } from "../../supabase/functions/_shared/ai-mode.ts";
+import { resolveAiProvider } from "../../supabase/functions/_shared/ai-provider.ts";
 
 export { DAILY_EVAL_UNAVAILABLE } from "./daily-evaluation";
 
@@ -112,9 +113,12 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
             truth: "",
           },
         );
+        // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER =
+        // Gemini de sempre. Configuração incompleta = missing_key, sem IA.
+        const ai = resolveAiProvider((k) => process.env[k]);
         return evaluateDailyGuess({
           fetchFn: fetch,
-          apiKey: process.env.GEMINI_API_KEY,
+          ...(ai.ok ? { apiKey: ai.apiKey, ...ai.target } : { apiKey: "" }),
           word,
           truth,
           guess: data.guess,

@@ -7,6 +7,8 @@
 // nem do Node: coberto pelos testes Vitest em src/lib/__tests__/ai-mode.test.ts.
 // Ativação/rollback e riscos: docs/contencao-ia.md.
 
+import { resolveAiProvider } from "./ai-provider.ts";
+
 export type AiMode = "ligado" | "suspenso";
 
 export const AI_MODE_KEY = "ai_mode";
@@ -21,7 +23,10 @@ export const AI_SUSPENDED_EVENT_WINDOW_MS = 10 * 60_000;
  * mesmo com o Supabase fora ou num isolate novo (falha FECHADA).
  */
 export const AI_FORCE_SUSPEND_ENV = "AI_FORCE_SUSPEND";
-/** Chave do provedor atual; sem ela não há como chamar a IA → suspenso, sem erro. */
+/**
+ * Chave do perfil PADRÃO (gemini). Com AI_PROVIDER, vale a chave do perfil
+ * ativo (ai-provider.ts: CF_AI_TOKEN, MISTRAL_API_KEY, AI_API_KEY…).
+ */
 export const AI_PROVIDER_KEY_ENV = "GEMINI_API_KEY";
 
 export function isForcedSuspension(v: unknown): boolean {
@@ -32,16 +37,17 @@ export function isForcedSuspension(v: unknown): boolean {
 }
 
 /**
- * Suspensão forçada pelo ambiente: AI_FORCE_SUSPEND ligado OU chave do
- * provedor ausente/vazia (revogar/remover a chave = mesma pausa limpa do
- * interruptor, em vez de erro 5xx e reenvios).
+ * Suspensão forçada pelo ambiente: AI_FORCE_SUSPEND ligado OU provedor ativo
+ * sem configuração completa — chave DO PERFIL ATIVO ausente/vazia (sem
+ * AI_PROVIDER = GEMINI_API_KEY, como antes), AI_PROVIDER desconhecido ou
+ * variável obrigatória do perfil faltando (ai-provider.ts). Revogar/remover a
+ * chave = mesma pausa limpa do interruptor, em vez de erro 5xx e reenvios.
  */
 export function forcedSuspensionFrom(
   get: (k: string) => string | undefined | null,
 ): boolean {
   return (
-    isForcedSuspension(get(AI_FORCE_SUSPEND_ENV)) ||
-    !String(get(AI_PROVIDER_KEY_ENV) ?? "").trim()
+    isForcedSuspension(get(AI_FORCE_SUSPEND_ENV)) || !resolveAiProvider(get).ok
   );
 }
 

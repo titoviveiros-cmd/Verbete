@@ -13,6 +13,7 @@ import {
   suspendedEventIO,
   forcedSuspensionFrom,
 } from "../_shared/ai-mode.ts";
+import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import { bearerToken, blockedBody, guardEvent, runRoomGuard } from "../_shared/room-guard.ts";
 import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
@@ -168,8 +169,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing");
+    // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER = Gemini
+    const ai = resolveAiProvider((k) => Deno.env.get(k));
+    if (!ai.ok) throw new Error(aiConfigError(ai));
 
     // Garante uma persona por definição (rotaciona se faltar)
     const chosen: string[] = Array.from({ length: count }, (_, i) => {
@@ -219,8 +221,8 @@ Tudo em minúsculas, SEM acentos. NUNCA use abreviações (s.m., s.f., adj., v.,
     // 1 nova tentativa em falha transitória (timeout, rede, 429, 5xx).
     const chat = await callChat({
       fetchFn: fetch,
-      apiKey,
-      url: Deno.env.get("GEMINI_CHAT_URL"),
+      apiKey: ai.apiKey,
+      ...ai.target,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

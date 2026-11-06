@@ -441,13 +441,16 @@ describe("corte FECHADO pelo ambiente (não depende do Supabase)", () => {
     expect(src).toMatch(
       /createAiModeReader\(\{\s*\/\/[^\n]*\n\s*forced: \(\) => forcedSuspensionFrom\(/,
     );
-    // o modo é lido ANTES de qualquer uso da chave do provedor
+    // o modo é lido ANTES de qualquer uso da chave do provedor — que só é
+    // lida pelo adaptador (resolveAiProvider, docs/provedor-ia.md)
     const iModo = src.indexOf("readAiMode(");
-    const iChave =
-      src.indexOf(`env.get("${AI_PROVIDER_KEY_ENV}")`) >= 0
-        ? src.indexOf(`env.get("${AI_PROVIDER_KEY_ENV}")`)
-        : src.indexOf(`process.env.${AI_PROVIDER_KEY_ENV}`);
+    const iChave = src.indexOf("resolveAiProvider(");
     expect(iModo).toBeGreaterThan(0);
     expect(iChave).toBeGreaterThan(iModo);
+    expect(src).not.toMatch(
+      new RegExp(
+        `env\\.get\\("${AI_PROVIDER_KEY_ENV}"\\)|process\\.env\\.${AI_PROVIDER_KEY_ENV}`,
+      ),
+    );
   });
 });

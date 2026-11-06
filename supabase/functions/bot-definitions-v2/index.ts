@@ -53,6 +53,7 @@ import {
   suspendedEventIO,
   forcedSuspensionFrom,
 } from "../_shared/ai-mode.ts";
+import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
 
@@ -189,9 +190,12 @@ Deno.serve(async (req) => {
     // reservas do servidor pelos filtros lexicais (o "gate failed" de sempre).
     const suspended =
       (await readAiMode(() => loadAiModeValue(admin))) === "suspenso";
-    const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
-    if (!apiKey && !suspended) throw new Error("GEMINI_API_KEY missing");
-    const url = Deno.env.get("GEMINI_CHAT_URL") ?? undefined;
+    // provedor por configuração (docs/provedor-ia.md); sem AI_PROVIDER = Gemini
+    const ai = resolveAiProvider((k) => Deno.env.get(k));
+    if (!ai.ok && !suspended) throw new Error(aiConfigError(ai));
+    const chatTarget = ai.ok
+      ? { apiKey: ai.apiKey, ...ai.target }
+      : { apiKey: "" };
 
     // Memória da PARTIDA (rodadas anteriores, só bots) e da RODADA (servidos).
     const [{ data: botRows }, { data: served }] = await Promise.all([
@@ -268,8 +272,7 @@ Deno.serve(async (req) => {
       generate: (r) =>
         callChat({
           fetchFn: fetch,
-          apiKey,
-          url,
+          ...chatTarget,
           timeoutMs: r.timeoutMs,
           retries: r.retries,
           messages: buildMessages({
@@ -305,8 +308,7 @@ Deno.serve(async (req) => {
       const g0 = Date.now();
       const judged = await judgeCandidates({
         fetchFn: fetch,
-        apiKey,
-        url,
+        ...chatTarget,
         word,
         truth: meaning,
         candidates: items,
