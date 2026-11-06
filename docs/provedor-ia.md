@@ -47,7 +47,7 @@ Configurar só um dos lados deixa edges e Diário em provedores diferentes (ou u
 
 **Antes de trocar:** confirmar que `AI_PROVIDER`, `AI_MODEL`, `AI_MAX_TOKENS` e `AI_RESPONSE_FORMAT` **não existem hoje** nos secrets das edges e do Worker (listar só os nomes) — se existirem com outro propósito, o comportamento muda.
 
-**Textos legais:** as páginas de Termos/Privacidade citam o provedor (`AI_PROVIDER` em `src/lib/legal.ts`, PR #41 — constante de código, não esta variável de ambiente). Trocar o provedor por configuração **não** atualiza esses textos nem a ficha de Data Safety: revisar juntos antes de trocar em produção.
+**Textos legais (trava de código, 06/11/2026):** as páginas de Termos/Privacidade citam o provedor (`AI_PROVIDER` em `src/lib/legal.ts`, PR #41 — constante de código, não esta variável de ambiente). Para o texto nunca ficar para trás, `AI_PROVIDERS_DISCLOSED` em `_shared/ai-provider.ts` lista os provedores **com texto publicado** (hoje só `gemini`). Perfil válido fora da lista = **IA suspensa** (falha fechada; erro `AI provider config (<id>): sem texto legal publicado`), mesmo com todas as variáveis certas. Trocar de provedor, portanto, exige **código + deploy** antes dos segredos: incluir o id na lista, atualizar `AI_PROVIDER`/`ownUseNotice` e `TERMS_VERSION` (novo aceite), Data Safety e ficha da loja — `legal-pages.test.ts` falha se a lista e o texto divergirem. Só então configurar os segredos (passos 1–3).
 
 ## Rollback
 

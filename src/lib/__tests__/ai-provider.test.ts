@@ -9,8 +9,10 @@ import {
 } from "../../../supabase/functions/_shared/ai.ts";
 import {
   AI_PROFILES,
+  AI_PROVIDERS_DISCLOSED,
   aiConfigError,
   resolveAiProvider,
+  resolveAiProviderProfile,
   type AiProviderId,
 } from "../../../supabase/functions/_shared/ai-provider.ts";
 import {
@@ -73,7 +75,8 @@ const call = (f: ReturnType<typeof fetchOk>, i = 0) =>
   f.mock.calls[i] as [string, RequestInit];
 
 function resolved(id: AiProviderId, extra: Env = {}) {
-  const r = resolveAiProvider(env({ ...FULL[id], ...extra }));
+  // perfil puro (sem a trava do texto legal, testada à parte)
+  const r = resolveAiProviderProfile(env({ ...FULL[id], ...extra }));
   if (!r.ok) throw new Error(`perfil ${id} não resolveu: ${r.invalid}`);
   return r;
 }
@@ -116,7 +119,9 @@ describe("tabela de perfis", () => {
       id: "gemini",
     });
     expect(
-      resolveAiProvider(env({ ...FULL.mistral, AI_PROVIDER: " Mistral " })),
+      resolveAiProviderProfile(
+        env({ ...FULL.mistral, AI_PROVIDER: " Mistral " }),
+      ),
     ).toMatchObject({ ok: true, id: "mistral" });
   });
 });
@@ -214,8 +219,16 @@ describe("padrão = Gemini IDÊNTICO ao de antes", () => {
 });
 
 describe("contenção: chave DO PERFIL ATIVO ausente = suspenso", () => {
-  it.each(IDS)("%s completo = segue o banco; sem a chave = suspenso", (id) => {
-    expect(forcedSuspensionFrom(env(FULL[id]))).toBe(false);
+  it.each(IDS)("%s completo = perfil válido; sem a chave = suspenso", (id) => {
+    expect(resolveAiProviderProfile(env(FULL[id])).ok).toBe(true);
+    expect(
+      resolveAiProviderProfile(env({ ...FULL[id], [KEY_ENV[id]]: undefined }))
+        .ok,
+    ).toBe(false);
+    // completo só segue o banco se o provedor tiver texto legal publicado
+    expect(forcedSuspensionFrom(env(FULL[id]))).toBe(
+      !AI_PROVIDERS_DISCLOSED.includes(id),
+    );
     expect(
       forcedSuspensionFrom(env({ ...FULL[id], [KEY_ENV[id]]: undefined })),
     ).toBe(true);
@@ -285,6 +298,38 @@ describe("contenção: chave DO PERFIL ATIVO ausente = suspenso", () => {
     });
     expect(await read(load)).toBe("suspenso");
     expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe("trava do texto legal (AI_PROVIDERS_DISCLOSED)", () => {
+  it("hoje só o Gemini tem texto legal publicado", () => {
+    expect(AI_PROVIDERS_DISCLOSED).toEqual(["gemini"]);
+  });
+
+  it.each(IDS.filter((id) => !AI_PROVIDERS_DISCLOSED.includes(id)))(
+    "%s completo, mas sem texto legal = suspenso, sem chamar a IA",
+    async (id) => {
+      const r = resolveAiProvider(env(FULL[id]));
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.undisclosed).toBe(true);
+      expect(aiConfigError(r)).toBe(
+        `AI provider config (${id}): sem texto legal publicado (AI_PROVIDERS_DISCLOSED)`,
+      );
+      expect(aiConfigError(r)).not.toContain(SECRET);
+      expect(forcedSuspensionFrom(env(FULL[id]))).toBe(true);
+      const load = vi.fn(async () => "ligado");
+      const read = createAiModeReader({
+        forced: () => forcedSuspensionFrom(env(FULL[id])),
+      });
+      expect(await read(load)).toBe("suspenso");
+      expect(load).not.toHaveBeenCalled();
+    },
+  );
+
+  it("Gemini (padrão) segue intacto", () => {
+    expect(resolveAiProvider(env(FULL.gemini)).ok).toBe(true);
+    expect(forcedSuspensionFrom(env(FULL.gemini))).toBe(false);
   });
 });
 

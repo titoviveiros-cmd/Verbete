@@ -116,6 +116,8 @@ export type ResolvedAiProvider =
       id: AiProviderId | null;
       /** NOMES das variáveis ausentes/inválidas — nunca os valores. */
       invalid: string[];
+      /** Perfil válido, mas sem texto legal publicado (AI_PROVIDERS_DISCLOSED). */
+      undisclosed?: true;
     };
 
 function isProviderId(v: string): v is AiProviderId {
@@ -123,10 +125,32 @@ function isProviderId(v: string): v is AiProviderId {
 }
 
 /**
- * Perfil ativo a partir do ambiente. Nunca lança por conta própria (um `get`
- * que lança propaga — o leitor da contenção trata). Não registra log.
+ * Provedores com TEXTO LEGAL publicado (Termos/Privacidade/Data Safety citam
+ * AI_PROVIDER de src/lib/legal.ts — constante de código). Perfil fora desta
+ * lista = configuração inválida → IA SUSPENSA (falha fechada): ligar outro
+ * provedor só por variável de ambiente, sem o texto acompanhar, não chama a IA.
+ * Trocar = incluir o id aqui + AI_PROVIDER/TERMS_VERSION em legal.ts + deploy
+ * (legal-pages.test.ts amarra os dois). docs/provedor-ia.md.
+ */
+export const AI_PROVIDERS_DISCLOSED: readonly AiProviderId[] = ["gemini"];
+
+/**
+ * Perfil ativo a partir do ambiente, com a trava do texto legal. Nunca lança
+ * por conta própria (um `get` que lança propaga — o leitor da contenção
+ * trata). Não registra log.
  */
 export function resolveAiProvider(get: Get): ResolvedAiProvider {
+  const r = resolveAiProviderProfile(get);
+  if (r.ok && !AI_PROVIDERS_DISCLOSED.includes(r.id))
+    return { ok: false, id: r.id, invalid: [AI_PROVIDER_ENV], undisclosed: true };
+  return r;
+}
+
+/**
+ * Só a leitura do perfil (sem a trava do texto legal) — usada pelos testes
+ * dos perfis. Código de produção usa resolveAiProvider.
+ */
+export function resolveAiProviderProfile(get: Get): ResolvedAiProvider {
   const rawId = str(get, AI_PROVIDER_ENV).toLowerCase() || "gemini";
   if (!isProviderId(rawId))
     return { ok: false, id: null, invalid: [AI_PROVIDER_ENV] };
@@ -180,5 +204,7 @@ export function resolveAiProvider(get: Get): ResolvedAiProvider {
 export function aiConfigError(
   r: Extract<ResolvedAiProvider, { ok: false }>,
 ): string {
+  if (r.undisclosed)
+    return `AI provider config (${r.id}): sem texto legal publicado (AI_PROVIDERS_DISCLOSED)`;
   return `AI provider config (${r.id ?? "desconhecido"}): ${r.invalid.join(", ")}`;
 }

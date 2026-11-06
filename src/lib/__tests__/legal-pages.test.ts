@@ -9,6 +9,10 @@ import {
   contactMailto,
 } from "@/lib/legal";
 import { TERMS_VERSION } from "@/lib/terms-record";
+import {
+  AI_PROVIDERS_DISCLOSED,
+  type AiProviderId,
+} from "../../../supabase/functions/_shared/ai-provider.ts";
 
 // Páginas legais (rodada 2A da conformidade Google Play, 27/10/2026): o
 // contato oficial é decisão do proprietário, os fatos do Suporte foram
@@ -263,6 +267,21 @@ describe("provedor de IA — ponto único (AI_PROVIDER)", () => {
       /melhorar e desenvolver os produtos e serviços dele/,
     );
     expect(AI_PROVIDER.ownUseNotice).toMatch(/revisores humanos podem ler/);
+  });
+
+  it("backend só liga provedor com texto legal: AI_PROVIDERS_DISCLOSED = AI_PROVIDER", () => {
+    // ai-provider.ts troca de provedor por variável de ambiente (PR #46); a
+    // trava AI_PROVIDERS_DISCLOSED suspende a IA para qualquer perfil sem
+    // texto publicado. Este par mantém a lista e as páginas juntas.
+    const NOME: Record<AiProviderId, string> = {
+      gemini: "Google Gemini",
+      "workers-ai": "Cloudflare Workers AI",
+      mistral: "Mistral AI",
+      "openai-compatible": "provedor genérico (sem texto legal)",
+    };
+    expect(AI_PROVIDERS_DISCLOSED.map((id) => NOME[id])).toEqual([
+      AI_PROVIDER.name,
+    ]);
   });
 
   it("o texto acompanha o provedor que o código chama", () => {
