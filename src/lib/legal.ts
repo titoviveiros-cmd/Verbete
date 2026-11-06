@@ -15,5 +15,14 @@ export function contactMailto(subject: string, body?: string): string {
 /** Página pública de exclusão de conta (URL do campo do Google Play). */
 export const DELETE_ACCOUNT_PATH = "/delete-account";
 
+/**
+ * Termos adicionais da API Gemini (vigência de 23/03/2026; hoje redireciona
+ * para aistudio.google.com/docs/terms) e Política de Privacidade do Google,
+ * citados na /privacy: no plano gratuito o Google usa o conteúdo enviado
+ * para melhorar os produtos dele, com revisão humana.
+ */
+export const GEMINI_TERMS_URL = "https://ai.google.dev/gemini-api/terms";
+export const GOOGLE_PRIVACY_URL = "https://policies.google.com/privacy";
+
 /** Identificador do app Android na Play (capacitor.config.ts → appId). */
 export const ANDROID_PACKAGE = "app.verbete.game";

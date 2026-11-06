@@ -14,6 +14,8 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 // comportamento REAL (src/lib/account-deletion.ts, docs/exclusao-de-conta.md)
 // — mudar um sem o outro é mentir para o jogador. Prazos de retenção = os da
 // migration 20261027200000 (provados em scripts/test-data-retention.mjs);
+// registros da V2 do Diário (daily_eval_claims/ai_quota) NÃO saem em
+// deleteAccountData: expiram em 3 dias (20261105150000_daily_guard_v2.sql);
 // prazo de atendimento dos pedidos: nenhum definido.
 export const Route = createFileRoute("/delete-account")({
   head: () => ({
@@ -148,8 +150,11 @@ function DeleteAccountPage() {
             <li>
               <strong>Registros técnicos:</strong> eventos de erro e de saúde do
               jogo, sem nome, e-mail ou IP, apagados automaticamente após 30
-              dias; e os registros dos provedores de infraestrutura (Supabase e
-              Cloudflare), pelos prazos de cada um.
+              dias; os registros de limite de uso do Desafio Diário (hora das
+              tentativas e contagem de avaliações, ligados ao código interno da
+              sessão ou da conta), que não são apagados na hora mas expiram
+              sozinhos em 3 dias; e os registros dos provedores de
+              infraestrutura (Supabase e Cloudflare), pelos prazos de cada um.
             </li>
           </ul>
           <p className="mt-2">

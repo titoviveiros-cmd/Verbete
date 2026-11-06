@@ -1,87 +1,107 @@
 # Google Play — Segurança dos dados (Data safety): RASCUNHO
 
-> Rodada 2A · 27/10/2026 · base `7413031`. **Rascunho para o proprietário — o
-> Play Console NÃO foi preenchido.** Estar só no teste interno não dispensa o
-> formulário: ele é exigido para teste fechado/aberto e produção.
-> Legenda de certeza: **COMPROVADO** (código/migrations desta base) ·
-> **NÃO VERIFICADO** (depende de configuração de produção ou de provedor) ·
-> **DEPENDE DO PROPRIETÁRIO** (decisão ou informação que só o Tito tem).
-> Detalhe da exclusão e das tabelas: `docs/exclusao-de-conta.md`.
+> Atualizado em 05/11/2026 · base `0c6476b` (substitui o rascunho da rodada
+> 2A, 27/10, base `7413031`). **Rascunho para o proprietário — o Play
+> Console NÃO foi preenchido.** O formulário é exigido para teste
+> fechado/aberto e produção.
+> Legenda: **COMPROVADO** (código/migrations desta base) · **NÃO
+> VERIFICADO** (depende de produção ou de provedor) · **DEPENDE DO
+> PROPRIETÁRIO**. Detalhe da exclusão: `docs/exclusao-de-conta.md`; mapa:
+> `docs/privacy-data-map.md`.
 
 ## 1. Visão geral (respostas de topo do formulário)
 
 | Pergunta | Resposta proposta | Certeza |
 |---|---|---|
-| O app coleta ou compartilha algum dos tipos de dados exigidos? | Sim | COMPROVADO |
-| Todos os dados são criptografados em trânsito? | Sim — HTTPS/WSS para Supabase, Worker (Cloudflare), Gemini e fontes | COMPROVADO (URLs `https://` / `wss://`; nenhum `http://` em produção) |
-| Há como pedir a exclusão dos dados? | Sim — no app (Perfil → Zona de perigo), no site e por e-mail; URL web: `https://jogo.verbete.workers.dev/delete-account` (**publicar o site antes de informar a URL**) | COMPROVADO no código; página ainda NÃO publicada |
-| Dados de conta: o app permite criar conta? | Sim (e-mail/senha e Google); conta é opcional | COMPROVADO |
-| Compartilhamento com terceiros | Nenhum, se Supabase, Cloudflare e Google (Gemini) contarem como **prestadores de serviço**; o Gemini depende do plano (ver §4) | DEPENDE DO PROPRIETÁRIO |
-| Revisão de segurança independente | Não | COMPROVADO (nenhuma registrada) |
-| Política de Famílias | Não se aplica: público-alvo pretendido = 13 anos ou mais (decisão de 27/10/2026), sem a faixa de 9–12; a classificação indicativa virá do IARC/ClassInd e pode diferir | DECIDIDO (preencher só na rodada do Console) |
+| O app coleta ou compartilha algum dos tipos de dados exigidos? | **Sim** | COMPROVADO |
+| Todos os dados são criptografados em trânsito? | **Sim** — HTTPS/WSS para Supabase, Worker (Cloudflare), Gemini e fontes; `allowMixedContent: false` | COMPROVADO |
+| O app permite criar conta? | **Sim** — "Nome de usuário e senha" (e-mail) e "OAuth" (Google); conta opcional (convidado joga sem conta) | COMPROVADO |
+| URL de exclusão de conta | `https://jogo.verbete.workers.dev/delete-account` (rota em `0c6476b`; abrir no navegador antes de colar) | COMPROVADO no código; no ar: NÃO VERIFICADO |
+| Pode pedir exclusão de alguns dados sem excluir a conta? | **Sim** — por e-mail e "zerar estatísticas" no Perfil | COMPROVADO |
+| Revisão de segurança independente (MASA) | **Não** | COMPROVADO |
+| Política de Famílias | Não participa (público-alvo 13+) | DECIDIDO (27/10) |
+
+**Compartilhamento:** Supabase e Cloudflare = prestadores de serviço (não
+contam). Exibir apelido/definições na sala e nome no ranking = ação
+iniciada pelo usuário (isenta). **Google Gemini no plano gratuito =
+compartilhamento** do "Outro conteúdo gerado pelo usuário", porque o
+Google usa o conteúdo para os próprios fins (melhorar produtos, revisão
+humana). Se o faturamento for ativado e o Google passar a atuar só como
+prestador, mudar para "Não" — junto com a `/privacy`.
 
 ## 2. Por tipo de dado
 
-| Tipo (categoria do Play) | Coletado? | Compartilhado? | Obrigatório? | Finalidade | Processamento / retenção conhecida | Exclusão | Evidência | Certeza |
-|---|---|---|---|---|---|---|---|---|
-| **Info pessoal → Nome** (apelido; nome exibido; nome do Google) | Sim | Não (exibição aos jogadores da sala e no ranking é a função do app) | Apelido: obrigatório para jogar; nome do Google: opcional | Funcionalidade, gestão da conta | apelido nas salas até 30 dias após o encerramento da sala; perfil até excluir (convidado: 30 dias sem uso) | perfil sim; apelido nas salas **não** (pedido por e-mail) | `players.nickname`, `profiles.display_name`, `handle_new_user` | COMPROVADO (classificação da exibição pública: DEPENDE DO PROPRIETÁRIO) |
-| **Info pessoal → E-mail** | Sim, só com conta | Não | Opcional | Gestão da conta, login | até excluir a conta | sim | `login.tsx` (signUp/OAuth), Supabase Auth | COMPROVADO |
-| **Info pessoal → IDs de usuário** (UUID da sessão/conta) | Sim — sessão anônima criada no boot | Não | Obrigatório | Funcionalidade, segurança (autoria das ações), prevenção de abuso | sessão anônima apagada após 30 dias sem uso; UUID fica em `players.user_id` (até a sala sair) e nas denúncias (até 180 dias após a resolução) | conta sim; UUID residual nas salas/denúncias não | `__root.tsx:268-272`, `20260720120000:25` | COMPROVADO |
-| **Info pessoal → Outras** (foto de perfil do Google, em metadados do login) | Provável, só com login Google | Não | Opcional | Login | junto da conta | sim (com a conta) | padrão do provedor Google no Supabase Auth; o app não lê a foto | NÃO VERIFICADO |
-| **Atividade no app → Interações** (partidas, votos, pontuação, XP, conquistas, histórico) | Sim | Não | Obrigatório para jogar | Funcionalidade, ranking | progresso até excluir (convidado: 30 dias sem uso); votos/pontuação nas salas até 30 dias após o encerramento | progresso sim; salas não | `user_stats`, `match_history`, `votes`, `players.score` | COMPROVADO |
-| **Atividade no app → Outro conteúdo gerado pelo usuário** (definições, palpites do Desafio) | Sim | Enviado ao Google Gemini para julgamento — prestador de serviço **ou** compartilhamento, conforme o plano | Obrigatório para jogar | Funcionalidade (bônus 🧠, Desafio), moderação | definições da última partida por sala até 30 dias após o encerramento; palpites até excluir (convidado: 30 dias sem uso) | palpites sim; definições não | `score-similarity`, `daily.functions.ts`, `_shared/semantic.ts` | COMPROVADO (classificação: DEPENDE DO PROPRIETÁRIO §4) |
-| **Mensagens → Outras mensagens no app** (chat) | **Não desde 20/10/2026** (chat removido); mensagens anteriores guardadas | Não | — | — | antigas: saem com a sala (30 dias após o encerramento) | não (pedido por e-mail) | `room.ts` (chat removido), `room_messages` | COMPROVADO |
-| **Info e desempenho do app → Registros de falhas / Diagnóstico** | Sim (mensagem, stack, rota e versão; hashes de sessão/sala) | Não | Obrigatório (automático) | Análise/estabilidade | **30 dias** (limpeza automática) | automática | `src/lib/ops.ts`, `ops_events` | COMPROVADO |
-| **IDs do dispositivo ou outros** (código de jogador gerado na instalação) | Sim | Não | Obrigatório | Funcionalidade, prevenção de abuso (banimento por aparelho) | salas: 30 dias após o encerramento; denúncias: 180 dias após a resolução (pendentes ficam); banimentos: sem prazo | não automaticamente | `src/lib/player-id.ts`, `banned_players` | COMPROVADO |
-| Localização (aprox./precisa) | Não (o app não deriva localização; provedores registram IP nos próprios logs) | — | — | — | logs dos provedores: prazos deles | — | permissões só INTERNET e VIBRATE | COMPROVADO (logs de IP dos provedores: NÃO VERIFICADO) |
-| Financeiro, saúde, fotos/vídeos, áudio, arquivos, agenda, contatos, navegação, apps instalados, histórico de busca | Não | — | — | — | — | — | `AndroidManifest.xml`; nenhum SDK que colete | COMPROVADO |
+| Categoria → tipo | Coletado | Compartilhado | Efêmero? | Obrigatório | Finalidades | Retenção | Evidência |
+|---|---|---|---|---|---|---|---|
+| Informações pessoais → **Nome** (apelido, nome exibido, nome do Google) | Sim | Não | Não | Obrigatório (apelido) | Funcionalidade do app; Gerenciamento da conta | salas: 30 d após encerrar; perfil: até excluir (convidado 30 d sem uso) | `players.nickname`, `profiles.display_name` |
+| Informações pessoais → **Endereço de e-mail** | Sim | Não | Não | Opcional | Gerenciamento da conta | até excluir | `login.tsx`, Supabase Auth |
+| Informações pessoais → **IDs do usuário** (UUID da sessão/conta) | Sim | Não | Não | Obrigatório | Funcionalidade do app; Prevenção de fraudes, segurança e conformidade | convidado 30 d sem uso; UUID residual em salas (30 d) e denúncias (180 d após resolução); **registros de limite do Desafio: 3 d** | `auth-session.ts`, `players.user_id`, `daily_eval_claims`, `ai_quota` |
+| Fotos e vídeos → **Fotos** (foto do Google nos metadados do login; não exibida) | Sim (conservador) | Não | Não | Opcional | Gerenciamento da conta | com a conta | padrão do Supabase Auth — NÃO VERIFICADO |
+| Atividade no app → **Interações no app** (partidas, votos, pontuação, XP, conquistas, reações) | Sim | Não | Não | Obrigatório | Funcionalidade do app | progresso até excluir; salas 30 d | `user_stats`, `match_history`, `votes` |
+| Atividade no app → **Outro conteúdo gerado pelo usuário** (definições, palpites do Desafio) | Sim | **Sim — Google (Gemini API, plano gratuito)** | Não | Obrigatório | Funcionalidade do app | definições: última partida da sala, 30 d após encerrar; palpites: até excluir | `score-similarity`, `daily.functions.ts`, `_shared/semantic.ts` |
+| Mensagens → Outras mensagens no app | **Não** (chat removido em 20/10/2026) | — | — | — | — | mensagens antigas saem com a sala | `room.ts` |
+| Informações e desempenho → **Registros de falhas** | Sim | Não | Não | Obrigatório (automático) | Análise | 30 dias | `src/lib/ops.ts`, `ops_events` |
+| Informações e desempenho → **Diagnóstico** | Sim | Não | Não | Obrigatório | Análise | 30 dias | idem |
+| IDs do dispositivo ou outros → **IDs do dispositivo ou outros** (código de jogador da instalação) | Sim | Não | Não | Obrigatório | Funcionalidade do app; Prevenção de fraudes, segurança e conformidade | salas 30 d; denúncias 180 d; banimentos sem prazo | `player-id.ts`, `banned_players` |
+| Local, Financeiro, Saúde, Áudio, Arquivos, Agenda, Contatos, Apps instalados, Navegação, Histórico de pesquisa | **Não** | — | — | — | — | — | manifesto: só INTERNET e VIBRATE |
+
+**Finalidade do compartilhamento com o Google:** "Funcionalidade do app"
+(o envio existe para avaliar definições/palpites e gerar bots). O uso
+pelo Google para melhorar os próprios produtos é descrito na `/privacy`.
 
 ## 3. SDKs e terceiros
 
 | Componente | Onde roda | Dados | Observação | Certeza |
 |---|---|---|---|---|
-| `@supabase/supabase-js` | app/site | sessão, conteúdo do jogo, conta | é o backend (prestador) | COMPROVADO |
-| Capacitor (`core`, `app`, `share`, `splash-screen`, `status-bar`) | app Android | nenhum envio próprio | `share` só abre a folha de compartilhar do sistema | COMPROVADO |
-| AndroidX (appcompat, coordinatorlayout, core-splashscreen) | app Android | nenhum | — | COMPROVADO |
-| Google Services / Firebase | — | — | plugin só aplicaria com `google-services.json`, que **não existe** | COMPROVADO |
-| Google Fonts (`fonts.googleapis.com`) | app e site | IP e user agent chegam ao Google | recomendação técnica: hospedar as fontes no app elimina o envio | COMPROVADO |
-| Google Gemini (`generativelanguage.googleapis.com`) | só no servidor (edge functions e Worker) | ver §4 | — | COMPROVADO |
-| Login com Google (OAuth via Supabase) | navegador externo | nome, e-mail, foto (padrão do provedor) | opcional | COMPROVADO (campos exatos: NÃO VERIFICADO) |
-| Cloudflare Workers | servidor web | requisições (IP nos logs do provedor) | sem Workers Logs configurado no `wrangler.jsonc` | NÃO VERIFICADO (configuração da conta) |
+| `@supabase/supabase-js` | app/site | sessão, conteúdo do jogo, conta | backend (prestador) | COMPROVADO |
+| Capacitor (`core`, `app`, `share`, `splash-screen`, `status-bar`) | app Android | nenhum envio próprio | `share` só abre a folha do sistema | COMPROVADO |
+| AndroidX | app Android | nenhum | — | COMPROVADO |
+| Google Services / Firebase | — | — | não aplicado (sem `google-services.json`) | COMPROVADO |
+| Google Fonts | app e site | IP e user agent chegam ao Google | — | COMPROVADO |
+| Google Gemini (`generativelanguage.googleapis.com`) | só servidor (Edges e Worker) | ver §4 | único provedor de IA | COMPROVADO |
+| Login com Google (OAuth via Supabase) | navegador externo | nome, e-mail, foto | opcional | COMPROVADO (campos exatos: NÃO VERIFICADO) |
+| Cloudflare Workers | servidor web | requisições (IP nos logs do provedor) | — | NÃO VERIFICADO (configuração da conta) |
 | Anúncios, analytics, crash reporting de terceiros | — | — | nenhum SDK | COMPROVADO |
 
-## 4. Gemini — o que vai, de onde, e o que falta
+## 4. Gemini — o que vai e como o Google trata
 
 | Fluxo | Onde | Envia | Não envia |
 |---|---|---|---|
-| Julgamento 🧠 (multiplayer) | edge `score-similarity` | palavra, definição verdadeira, `{id da definição, texto}` de cada definição da rodada (inclusive as humanas) | nome, apelido, e-mail, user_id, player_id |
-| Desafio Diário | Worker, `src/lib/daily.functions.ts` | palavra, verdadeira, palpite (id fixo `DAILY_ID`) | idem |
-| Definições dos bots | edges `bot-definitions` e `bot-definitions-v2` | palavra, verdadeira, categoria, estilos e definições anteriores **dos próprios bots** | nenhum texto humano |
+| Julgamento 🧠 | edge `score-similarity` | palavra, verdadeira, `{id, texto}` das definições da rodada (inclusive humanas) | nome, apelido, e-mail, user_id, player_id |
+| Desafio Diário | Worker, `daily.functions.ts` | palavra, verdadeira, palpite | idem |
+| Bots | edges `bot-definitions` e `-v2` | palavra, verdadeira, categoria, estilos, definições anteriores **dos bots** | nenhum texto humano |
 
-- Corpo da requisição: só `model`, `messages`, `temperature`; cabeçalho só a
-  chave da API (`supabase/functions/_shared/ai.ts:41-53`). COMPROVADO.
-- Logs próprios: `console.error` só com motivo/status; `ops_events` com
-  contagens, latência, motivo e `room_id` (no erro do juiz) — **sem texto de
-  jogo**. COMPROVADO.
-- **DECISÃO/VERIFICAÇÃO DO PROPRIETÁRIO:** confirmar o **plano/faturamento da
-  API Gemini** do projeto. Sem faturamento (gratuito), os termos do Google
-  permitem usar o conteúdo para melhorar produtos — isso pode tornar o envio
-  das definições um **compartilhamento** no formulário e exige ajuste na
-  Política. Com faturamento, o Google atua como prestador.
+- Corpo = `model`, `messages`, `temperature`; cabeçalho = só a chave
+  (`_shared/ai.ts`). COMPROVADO.
+- **Plano gratuito** (informação do dono). Termos adicionais da Gemini API
+  (vigência 23/03/2026, https://ai.google.dev/gemini-api/terms): no plano
+  gratuito o Google usa o conteúdo e as respostas para fornecer, melhorar e
+  desenvolver produtos; revisores humanos podem ler. → compartilhamento no
+  formulário; `/privacy` atualizada em 05/11/2026 com link para os termos e a
+  Política de Privacidade do Google, e orientação para não escrever dados
+  pessoais.
+- Os mesmos termos exigem 18+ e vedam uso em serviço direcionado a ou
+  provavelmente acessado por menores de 18. **Decisão pendente do dono**
+  (público-alvo 13+); este rascunho não a resolve.
 
-## 5. Pendências antes de preencher
+## 5. V2 do Diário — registros de limite de uso
 
-1. Publicar o site com `/delete-account` (deploy autorizado) e só então usar a
-   URL no campo de exclusão.
-2. Confirmar o plano da API Gemini (§4).
-3. Retenção DECIDIDA e implementada na Rodada 2B
-   (`docs/retencao-e-privacidade-tecnica.md`) — **só vale depois de aplicar a
-   migration `20261027200000` em produção**; até lá, os prazos novos não são
-   verdade.
-4. Idade: público-alvo pretendido decidido (13 anos ou mais); responder o
-   IARC de forma factual e aceitar a classificação resultante, que pode ser
-   diferente do público-alvo.
-5. Teste de recebimento do e-mail oficial (gate do contato).
-6. `android:allowBackup="true"`: o backup automático do Android pode copiar o
-   armazenamento do WebView (código de jogador, sessão) para o backup do
-   usuário — avaliar `false` ou regras de backup (P2, não muda o formulário).
+| Tabela | Conteúdo | Ligado a | Retenção | Na exclusão de conta |
+|---|---|---|---|---|
+| `daily_eval_claims` | hora do desafio, `claim_id`, estado, falhas | `user_id` | 3 dias após `updated_at` (cron horário) | não apagada na hora; expira |
+| `ai_quota` | contador por janela (`daily_user:<uid>`, `daily_origin:…`, `daily_provider_fail`) | `user_id` na chave | 3 dias após `window_start` | idem |
+
+Fonte: `supabase/migrations/20261105150000_daily_guard_v2.sql` (§8 limpeza,
+§10 cron). Sem palpite, palavra ou definição. Entra no formulário dentro de
+"IDs do usuário" (Prevenção de fraudes, segurança e conformidade).
+
+## 6. Pendências antes de preencher
+
+1. Nome do responsável na `/privacy` (igual ao da conta do Play Console) —
+   DEPENDE DO PROPRIETÁRIO.
+2. Decisão sobre a cláusula 18+ dos termos da Gemini API × público 13+ —
+   DEPENDE DO PROPRIETÁRIO.
+3. Publicar o site com a `/privacy` nova (deploy autorizado) antes de colar
+   o formulário, para os dois dizerem a mesma coisa.
+4. Teste de recebimento do e-mail oficial.
+5. `android:allowBackup="true"` (P2, não muda o formulário).

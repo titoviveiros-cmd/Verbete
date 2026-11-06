@@ -5,6 +5,8 @@ import {
   ANDROID_PACKAGE,
   CONTACT_EMAIL,
   DELETE_ACCOUNT_PATH,
+  GEMINI_TERMS_URL,
+  GOOGLE_PRIVACY_URL,
   contactMailto,
 } from "@/lib/legal";
 
@@ -220,6 +222,60 @@ describe("Termos 2026-10-27 — o que a política de UGC exige", () => {
       /Não enviamos/,
     ])
       expect(p).toMatch(fact);
+  });
+});
+
+// 05/11/2026: a chave Gemini está no plano gratuito — pelos termos da Gemini
+// API, o Google usa o conteúdo para melhorar os produtos dele, com revisão
+// humana. A Política tem de dizer isso (e o Data Safety declara
+// compartilhamento). Ativar faturamento = mudar este teste, a Política e
+// docs/google-play-data-safety-draft.md juntos.
+describe("Gemini no plano gratuito — a Política conta o uso pelo Google", () => {
+  it("diz o plano, a melhoria de produtos, a revisão humana e orienta a não escrever dados pessoais", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/plano gratuito da API Gemini/);
+    expect(p).toMatch(/melhorar e desenvolver os produtos e serviços dele/);
+    expect(p).toMatch(/revisores humanos podem ler/);
+    expect(p).toMatch(/não escreva dados pessoais/);
+    expect(p).toMatch(/href=\{GEMINI_TERMS_URL\}/);
+    expect(p).toMatch(/href=\{GOOGLE_PRIVACY_URL\}/);
+    expect(GEMINI_TERMS_URL).toBe("https://ai.google.dev/gemini-api/terms");
+    expect(GOOGLE_PRIVACY_URL).toBe("https://policies.google.com/privacy");
+  });
+
+  it("o único provedor de IA no código é o Gemini (o texto não pode citar outro)", () => {
+    const ai = read("supabase/functions/_shared/ai.ts");
+    expect(ai).toMatch(/generativelanguage\.googleapis\.com/);
+    for (const path of [ROUTES.privacy, ROUTES.terms, ROUTES.support])
+      expect(read(path), path).not.toMatch(/OpenAI|ChatGPT|Anthropic|Claude/);
+  });
+});
+
+// V2 do Diário (20261105150000_daily_guard_v2.sql): daily_eval_claims
+// (user_id + hora) e ai_quota (chave daily_user:<uid>) ficam até 3 dias e NÃO
+// saem em deleteAccountData — as páginas têm de dizer isso.
+describe("V2 do Diário — registros de limite de uso na Política e na exclusão", () => {
+  it("a migration guarda por 3 dias e a exclusão de conta não toca essas tabelas", () => {
+    const m = read("supabase/migrations/20261105150000_daily_guard_v2.sql");
+    expect(m).toMatch(
+      /DELETE FROM public\.daily_eval_claims WHERE updated_at < now\(\) - interval '3 days'/,
+    );
+    expect(m).toMatch(
+      /DELETE FROM public\.ai_quota WHERE window_start < now\(\) - interval '3 days'/,
+    );
+    const lib = read("src/lib/account-deletion.ts");
+    expect(lib).not.toMatch(/daily_eval_claims|ai_quota/);
+  });
+
+  it("Política e Excluir conta citam os registros, a finalidade e os 3 dias", () => {
+    const p = read(ROUTES.privacy);
+    expect(p).toMatch(/Limite de uso do Desafio Diário/);
+    expect(p).toMatch(/evitar avaliações duplicadas e abuso/);
+    expect(p).toMatch(/apagados automaticamente depois de 3 dias/);
+    expect(p).toMatch(/expiram sozinhos em 3 dias/);
+    const d = read(ROUTES.deleteAccount);
+    expect(d).toMatch(/limite de uso do Desafio Diário/);
+    expect(d).toMatch(/expiram sozinhos em 3 dias/);
   });
 });
 

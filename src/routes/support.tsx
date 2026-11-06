@@ -46,7 +46,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "O que é o Desafio Diário?",
-    a: "Uma palavra rara para você adivinhar o significado. Vale um palpite por hora; a inteligência artificial avalia o quanto o palpite chegou perto.",
+    a: "Uma palavra rara para você adivinhar o significado. Vale um palpite por hora; a inteligência artificial (Google Gemini) avalia o quanto o palpite chegou perto. Não escreva dados pessoais no palpite — veja na Política de Privacidade como o Google trata esse texto.",
   },
   {
     q: "Encontrei uma definição ofensiva. O que faço?",

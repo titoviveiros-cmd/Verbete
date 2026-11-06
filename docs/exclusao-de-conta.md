@@ -44,6 +44,8 @@
 | `reports` (denúncias) | reporter_user_id, offender_user_id, offender_player_id, offender_nickname, trecho | **nenhuma** | **fica** | registro de moderação | 20260518221956:46-66 |
 | `banned_players` | player_id e/ou user_id | nenhuma | **fica** | banimento por aparelho segue valendo | 20260518221956:92-102 |
 | `ops_events` (telemetria) | hash de sessão/sala | — | fica | **apagada após 30 dias** | 20261021180000:786 |
+| `daily_eval_claims` (V2 do Diário: hora, estado, falhas; sem palpite) | user_id | nenhuma | **fica** (não está em `deleteAccountData`) | **apagada 3 dias após `updated_at`** (cron horário `verbete-daily-guard-cleanup`) | 20261105150000:35-48,337-343,360-367 |
+| `ai_quota` (V2: contador `daily_user:<uid>` por janela) | user_id na chave | nenhuma | **fica** | **apagada 3 dias após `window_start`** | 20261105150000:53-59,343 |
 | Sessões anônimas anteriores da mesma pessoa | outro UUID | — | **não são tocadas** | cada uma com perfil + stats próprios | `handle_new_user` 20260510124439:51-71 |
 | Aparelho (`localStorage`) | player-id, apelido, avatar, cor, tema, aceite | — | fica no aparelho | não é dado do servidor | src/lib/player-id.ts |
 
@@ -56,9 +58,13 @@
   `votes`, `reactions`, `rounds`, `round_extensions`, `rooms.host_id`,
   `room_messages` antigas), denúncias e banimentos, `user_roles` (admin),
   sessões anônimas anteriores, telemetria por até 30 dias, presença por até
-  2 dias.
+  2 dias, registros de limite do Desafio (`daily_eval_claims`, `ai_quota`)
+  por até 3 dias (atualização 05/11/2026; `/privacy` e `/delete-account`
+  dizem isso).
 - **C) Com `user_id`:** `players.user_id`, `reports.reporter_user_id`,
-  `reports.offender_user_id`, `banned_players.user_id`, `user_roles.user_id`.
+  `reports.offender_user_id`, `banned_players.user_id`, `user_roles.user_id`,
+  `daily_eval_claims.user_id` e a chave `daily_user:<uid>` de `ai_quota`
+  (3 dias).
 - **D) Com `player_id`:** `players.id`, `definitions.player_id`,
   `votes.voter_id`, `reactions.player_id`, `rounds.coordinator_id`,
   `round_extensions.player_id`, `rooms.host_id/current_coordinator`,
