@@ -19,7 +19,11 @@ import type { GuardMode } from "./room-guard.ts";
 /** Janela do reenvio (15 min) + folga larga para o pg_net e o relógio. */
 export const JUDGE_STALE_MS = 30 * 60 * 1000;
 
-export type JudgeSkipReason = "already_judged" | "gave_up" | "stale";
+export type JudgeSkipReason =
+  | "already_judged"
+  | "gave_up"
+  | "stale"
+  | "in_progress";
 
 export type JudgeRoundState = {
   judged_at?: string | null;
@@ -53,6 +57,24 @@ export function decideJudge(
   if (mode === "desligado") return { mode, reason: null, skip: false };
   const reason = judgeSkipReason(r, nowMs);
   return { mode, reason, skip: mode === "aplicar" && reason !== null };
+}
+
+/**
+ * Reserva da rodada (judge_lease_take, migration V3): uma avaliação por vez.
+ * `took` = true (reservou), false (outra avaliação em andamento) ou null
+ * (falha ao reservar → segue SEM reserva: a reserva protege custo/justiça,
+ * nunca pode impedir o julgamento legítimo do banco).
+ * Em 'aplicar', a ocupada responde COM "error" (judge_in_progress): para o
+ * reenvio do banco é falha, e ele tenta de novo depois — se a outra avaliação
+ * der certo, a rodada já estará julgada e nada se repete.
+ */
+export function decideLease(
+  mode: GuardMode,
+  took: boolean | null,
+): JudgeGuard {
+  if (mode === "desligado" || took !== false)
+    return { mode, reason: null, skip: false };
+  return { mode, reason: "in_progress", skip: mode === "aplicar" };
 }
 
 export function judgeGuardEvent(g: JudgeGuard) {

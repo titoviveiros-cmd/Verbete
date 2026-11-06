@@ -665,6 +665,41 @@ try {
           (await score(P_NEAR)) === 3,
         `${short(r.json)} chamadas=${calls.length - before}`,
       );
+
+      // V3: 3 invocações SIMULTÂNEAS da mesma rodada ainda não julgada (o juiz
+      // demora 2 s) → uma só avaliação; as outras saem com judge_in_progress
+      const k = await mkRound("reveal", true, `edge_k1_${tag}`, `edge_k2_${tag}`);
+      await db.query(
+        `UPDATE public.definitions SET text = 'TARDIO: fruto seco do cerrado brasileiro' WHERE id = $1`,
+        [k.near],
+      );
+      const beforeK = calls.length;
+      const trio = await Promise.all(
+        [0, 1, 2].map(() => callEdge({ room_id: k.rid, round: 1, candidates: [{ id: k.near }] })),
+      );
+      const judgedK = trio.filter((x) => (x.json?.matches ?? []).length === 1);
+      const busyK = trio.filter((x) => x.json?.error === "judge_in_progress");
+      const leaseLeft = await row(
+        `SELECT count(*)::int AS n FROM public.ai_quota WHERE key = $1`,
+        [`judge_lease:${k.rid}:1`],
+      );
+      check(
+        "V3 aplicar: 3 juízes simultâneos da mesma rodada → 1 avaliação (1 chamada à IA), 2 × judge_in_progress, +3 uma vez, reserva solta",
+        judgedK.length === 1 &&
+          busyK.length === 2 &&
+          calls.length - beforeK === 1 &&
+          (await score(`edge_k1_${tag}`)) === 3 &&
+          leaseLeft.n === 0,
+        `${short(trio.map((x) => x.json))} chamadas=${calls.length - beforeK} reserva=${leaseLeft.n}`,
+      );
+      // a rodada ficou julgada: a próxima chamada nem chega à reserva
+      r = await callEdge({ room_id: k.rid, round: 1, candidates: [{ id: k.near }] });
+      check(
+        "V3 aplicar: depois da avaliação única, a rodada já julgada responde skipped",
+        r.json?.skipped === "already_judged",
+        short(r.json),
+      );
+      await db.query(`UPDATE public.rounds SET judge_attempts = 4 WHERE room_id = $1`, [k.rid]);
     } finally {
       await setCfg("bots_auth_mode", "observar");
     }

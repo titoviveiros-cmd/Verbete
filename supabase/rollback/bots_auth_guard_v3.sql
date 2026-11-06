@@ -11,7 +11,10 @@
 --      'aplicar' viraria guard_error (503); 'observar' só registraria.
 --
 -- Dados de jogo e a tabela ai_quota (V2) não são tocados (os contadores
--- 'bots_round:*' saem sozinhos na limpeza da V2, em 3 dias).
+-- 'bots_round:*' — fora as reservas 'judge_lease:*', apagadas aqui — saem sozinhos na limpeza da V2, em 3 dias).
 
+DROP FUNCTION IF EXISTS public.judge_lease_release(uuid, integer);
+DROP FUNCTION IF EXISTS public.judge_lease_take(uuid, integer, integer);
 DROP FUNCTION IF EXISTS public.bots_quota_take(uuid, integer);
+DELETE FROM public.ai_quota WHERE key LIKE 'judge_lease:%';  -- reservas em aberto (operacionais)
 DELETE FROM public.app_config WHERE key IN ('bots_auth_mode', 'bots_ai_round_limit');

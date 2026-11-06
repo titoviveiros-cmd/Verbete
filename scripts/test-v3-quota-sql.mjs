@@ -203,7 +203,8 @@ await t("8. ROLLBACK da V3: some a função e as chaves; ai_quota (V2) intacta",
   try {
     const antes = (await db.q(`SELECT count(*)::int AS n FROM public.ai_quota`))[0].n;
     await db.exec(ROLLBACK);
-    eq((await db.q(`SELECT to_regprocedure($1) AS f`, [FN]))[0].f, null, "função");
+    for (const f of [FN, "public.judge_lease_take(uuid,integer,integer)", "public.judge_lease_release(uuid,integer)"])
+      eq((await db.q(`SELECT to_regprocedure($1) AS f`, [f]))[0].f, null, f);
     eq((await db.q(`SELECT count(*)::int AS n FROM public.app_config WHERE key IN ('bots_auth_mode','bots_ai_round_limit')`))[0].n, 0, "chaves");
     eq((await db.q(`SELECT count(*)::int AS n FROM public.ai_quota`))[0].n, antes, "ai_quota");
   } finally {
@@ -212,8 +213,77 @@ await t("8. ROLLBACK da V3: some a função e as chaves; ai_quota (V2) intacta",
   eq((await db.q(`SELECT to_regprocedure($1)::text AS f`, [FN]))[0].f, "bots_quota_take(uuid,integer)", "desfeito");
 });
 
+// ---------------------------------------------------------------- juiz
+const LT = "public.judge_lease_take(uuid,integer,integer)";
+const LR = "public.judge_lease_release(uuid,integer)";
+const leaseTake = async (room, round, q = db.q) => (await q(`SELECT public.judge_lease_take($1, $2) AS ok`, [room, round]))[0].ok;
+const leaseRelease = async (room, round) => db.q(`SELECT public.judge_lease_release($1, $2)`, [room, round]);
+
+await t("9. reserva do juiz: só service_role executa (take/release)", async () => {
+  for (const f of [LT, LR]) {
+    for (const r of ["anon", "authenticated"])
+      eq((await db.q(`SELECT has_function_privilege($1, $2, 'EXECUTE') AS p`, [r, f]))[0].p, false, `${r} ${f}`);
+    eq((await db.q(`SELECT has_function_privilege('service_role', $1, 'EXECUTE') AS p`, [f]))[0].p, true, f);
+  }
+});
+
+await t("10. reserva: 1ª toma, 2ª recusa, solta → toma de novo; rodada/sala diferentes são independentes", async () => {
+  const sala = novaSala();
+  eq(await leaseTake(sala, 1), true, "1ª");
+  eq(await leaseTake(sala, 1), false, "2ª (em andamento)");
+  eq(await leaseTake(sala, 2), true, "outra rodada");
+  eq(await leaseTake(novaSala(), 1), true, "outra sala");
+  await leaseRelease(sala, 1);
+  eq(await leaseTake(sala, 1), true, "depois de soltar");
+});
+
+await t("11. reserva vencida (edge caiu sem soltar) libera sozinha depois do prazo", async () => {
+  const sala = novaSala();
+  eq(await leaseTake(sala, 1), true, "1ª");
+  await db.q(`UPDATE public.ai_quota SET window_start = now() - interval '31 seconds' WHERE key = $1`, [`judge_lease:${sala}:1`]);
+  eq(await leaseTake(sala, 1), true, "vencida → toma");
+  eq(await leaseTake(sala, 1), false, "nova reserva vale");
+  eq((await db.q(`SELECT count(*)::int AS n FROM public.ai_quota WHERE key = $1`, [`judge_lease:${sala}:1`]))[0].n, 1, "uma linha só");
+});
+
+await t("12. concorrência: N avaliações simultâneas da mesma rodada → exatamente 1 reserva", async () => {
+  const sala = novaSala();
+  const N = 10;
+  let res;
+  if (modePg) {
+    const conns = await Promise.all(Array.from({ length: N }, () => db.conn()));
+    try {
+      res = await Promise.all(
+        conns.map(async (c) => {
+          await c.query("BEGIN");
+          await c.query("SET LOCAL ROLE service_role");
+          const v = (await c.query(`SELECT public.judge_lease_take($1, 1) AS ok`, [sala])).rows[0].ok;
+          await c.query("COMMIT");
+          return v;
+        }),
+      );
+    } finally {
+      await Promise.all(conns.map((c) => c.end()));
+    }
+  } else {
+    res = [];
+    for (let i = 0; i < N; i++) res.push(await leaseTake(sala, 1));
+  }
+  eq(res.filter(Boolean).length, 1, `reservas: ${JSON.stringify(res)}`);
+});
+
+await t("13. sala/rodada nulas: erro 22023", async () => {
+  let code = null;
+  try {
+    await leaseTake(null, 1);
+  } catch (e) {
+    code = e.code ?? null;
+  }
+  eq(code, "22023");
+});
+
 // limpeza (o banco da CI segue para as outras suítes)
-await db.q(`DELETE FROM public.ai_quota WHERE key LIKE ANY($1)`, [salas.map((s) => `bots_round:${s}:%`)]);
+await db.q(`DELETE FROM public.ai_quota WHERE key LIKE ANY($1)`, [salas.flatMap((s) => [`bots_round:${s}:%`, `judge_lease:${s}:%`])]);
 await db.close();
 console.log(fail ? `\n${fail}/${pass + fail} FALHAS` : `\nV3 COTA SQL OK — ${pass}/${pass}`);
 process.exit(fail ? 1 : 0);

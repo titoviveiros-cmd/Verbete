@@ -54,6 +54,7 @@ Em `aplicar`: responde `{ matches: [], skipped: <motivo> }` **sem `error`** e se
 | Cota da sala/rodada esgotada | fluxo antigo | IA chamada + evento `quota_exceeded` | **429, sem IA** |
 | Convidado/conta da própria sala | fluxo antigo | normal | normal |
 | Juiz: rodada já julgada/desistida/velha | IA chamada | IA chamada + evento | **sem IA**, `skipped` |
+| Juiz: 2ª avaliação simultânea da mesma rodada | IA chamada | IA chamada + evento `in_progress` | **sem IA**, `error: judge_in_progress` (o reenvio do banco tenta de novo) |
 | Custo extra por pedido | 1 leitura | 1 leitura + `getUser` + 1 consulta + 1 RPC | idem |
 
 - **`observar` NÃO protege**: é só observabilidade. Nada é bloqueado; os eventos mostram o que `aplicar` bloquearia.
@@ -93,10 +94,27 @@ SELECT payload->>'fn' AS fn, payload->>'decision' AS decisao, payload->>'mode' A
 | Jogador que troca de conta no meio da partida (`players.user_id` antigo) | `not_member` → reservas locais. As ações de jogo dele já falham pela guarda de identidade do M1. | `assert_actor_identity`. | Aceito (consistente) |
 | Membro malicioso esgota a cota da própria sala | Bots e 💡 daquela sala/rodada caem nas reservas locais até a rodada virar. | Cota por sala/rodada (limite de custo); por usuário fica para depois. | Aceito |
 | Atacante cria salas próprias com bots | Ainda gasta IA, mas no máximo `bots_ai_round_limit` pedidos por sala/rodada e só durante a escrita de partida que ele mesmo conduz. | Próximo passo: cota por usuário/hora em `ai_quota` (mesmo padrão). | Residual |
-| `score-similarity` ainda público | Pode ser chamado para rodada em julgamento (janela de segundos até `judged_at`) — no máx. as mesmas 4 chamadas que o reenvio do banco já faria. | `judged_at`/`gave_up`/`stale`. | Residual pequeno |
+| `score-similarity` ainda público | Pode ser chamado para rodada em julgamento. Com a reserva, só UMA avaliação por vez; as demais não chamam a IA (em `aplicar`). | `judged_at`/`gave_up`/`stale` + reserva por rodada. | Residual pequeno |
+| Pedido de fora segurando a reserva quando o banco dispara | A tentativa legítima sai `judge_in_progress` e gasta 1 das 3 tentativas do reenvio. Mas a avaliação de fora usa os MESMOS dados do banco (texto do chamador é ignorado) e, se der certo, marca `judged_at` — a rodada fica julgada do mesmo jeito. | Reserva de 30 s, solta no fim; IA fora do ar nos dois casos é o único cenário de perda (o mesmo de hoje). | Aceito |
 | Script manual de re-julgamento (`scripts/retro-pindaiba.mjs`) | Em `aplicar`, re-julgar rodada já julgada vira `skipped`. | Para uso manual: modo `desligado` temporário ou `judged_at = NULL` naquela rodada. | Documentado |
 | Latência extra | `getUser` + 1 consulta + 1 RPC antes da IA (estimativa não medida). | Medir em `observar` pelo `latency_ms`. | NÃO VERIFICADO |
 | Virada da janela da cota (0h UTC) | Contador da sala/rodada recomeça uma vez. | Chave já é por rodada; janela de 1 dia. | Aceito |
+
+## Concorrência do juiz (score-similarity)
+**Risco (sim, existia):** duas invocações simultâneas da MESMA rodada ainda não julgada (antes de `judged_at` ser gravado — a avaliação leva até ~17 s) rodavam duas avaliações completas.
+- **Custo:** até 4 + 4 chamadas Gemini.
+- **Justiça:** a nota da IA varia entre chamadas. Quem dispara pedidos em paralelo ganhava "segundas chances" de ≥ 80 para o +3 de uma definição.
+- **O que NÃO acontecia:** pontuação em dobro. `apply_similarity_bonus` marca `near_truth` de forma atômica.
+- **Caminho legítimo:** só raramente concorrente (resposta do pg_net perdida e reenvio disparado com a 1ª ainda rodando).
+
+**Correção (commit separado, pequena):** `judge_lease_take(sala, rodada)` / `judge_lease_release`, ambas na migration V3.
+- **Como a reserva funciona:** linha `judge_lease:<sala>:<rodada>` em `ai_quota`, com trava consultiva por rodada (`pg_advisory_xact_lock`). Prazo de 30 s (o juiz leva no máximo 17 s); a edge solta a reserva no `finally`.
+- **Ordem na edge:** checa `judged_at` → reserva → relê `judged_at` (fecha a janela entre a 1ª leitura e a reserva) → IA.
+- **Reserva ocupada:**
+  - em `aplicar`, responde `{ matches: [], error: "judge_in_progress" }`. Com `error`, o reenvio do banco conta a tentativa como falha e tenta de novo depois; se a outra avaliação deu certo, a rodada já está julgada.
+  - em `observar`, só registra.
+- **Falha ao reservar:** segue SEM reserva (fail-open). A reserva protege custo e justiça e nunca impede o juiz legítimo.
+- **Sem mudança em pontuação, limiar 80, +3 ou `apply_similarity_bonus`.**
 
 ## Falha da 1ª CI (PR #42, run 42141677897) — causa raiz e correção
 - **Sintoma:** em `aplicar`, o convidado anônimo legítimo da sala recebia `503 guard_error`, a cota ficava em `used=0` e a cota esgotada também dava 503 (não 429). Os casos sem token (401), outra sala (403) e expulso (403) passavam — ou seja, `getUser` e a consulta a `players` funcionavam; a falha era na etapa da **cota**.
@@ -105,5 +123,5 @@ SELECT payload->>'fn' AS fn, payload->>'decision' AS decisao, payload->>'mode' A
 - **Correção:** função **própria** da V3, `bots_quota_take(uuid, integer)`, com o GRANT dela (a V2 não a toca) e a chave montada no banco; a edge não usa mais `ai_quota_add`. O `guard_error` passa a registrar a etapa e o código (`stage`, `error_code`) no evento `ai_guard`, para o próximo diagnóstico não depender do log da CI.
 
 ## Verificação
-- **Local (CONFIRMADO, 05/11):** `npx tsc --noEmit` limpo; `npx eslint` no teste novo limpo (as edges ficam fora do eslint do projeto); `npx vitest run` 65 arquivos / 725 testes (52 em `room-guard.test.ts`); `node scripts/ci-deno-check.mjs` → DENO CHECK OK nas 3 edges; `node scripts/test-v3-quota-sql.mjs --pglite …` → 8/8 (PGlite, 1 conexão: concorrência só sequencial).
-- **Só na CI (sem Docker local):** `scripts/test-edges-e2e.mjs` (job `integration`, Supabase local) com os casos V3: sem token/chave anon → 401 sem IA; outra sala → 403 sem IA; sem `room_id` → 400; expulso → 403; cota → 429 sem IA; convidado anônimo da própria sala → 200 com IA; `observar`/modo inválido/`desligado` não bloqueiam; `score-similarity` em `aplicar` não chama a IA para rodada já julgada; **a cadeia inteira do banco (pg_net, reenvios, desistência, cenários A–G) roda em `aplicar`**; `bots_quota_take` só para `service_role`; 8 pedidos simultâneos com 5 vagas → 5 × 200 e 3 × 429. E `scripts/test-v3-quota-sql.mjs` em Postgres real, com 12 conexões simultâneas.
+- **Local (CONFIRMADO, 05/11):** `npx tsc --noEmit` limpo; `npx eslint` no teste novo limpo (as edges ficam fora do eslint do projeto); `npx vitest run` 65 arquivos / 728 testes (55 em `room-guard.test.ts`); `node scripts/ci-deno-check.mjs` → DENO CHECK OK nas 3 edges; `node scripts/test-v3-quota-sql.mjs --pglite …` → 13/13 (PGlite, 1 conexão: concorrência só sequencial).
+- **Só na CI (sem Docker local):** `scripts/test-edges-e2e.mjs` (job `integration`, Supabase local) com os casos V3: sem token/chave anon → 401 sem IA; outra sala → 403 sem IA; sem `room_id` → 400; expulso → 403; cota → 429 sem IA; convidado anônimo da própria sala → 200 com IA; `observar`/modo inválido/`desligado` não bloqueiam; `score-similarity` em `aplicar` não chama a IA para rodada já julgada; **a cadeia inteira do banco (pg_net, reenvios, desistência, cenários A–G) roda em `aplicar`**; `bots_quota_take` só para `service_role`; 8 pedidos simultâneos com 5 vagas → 5 × 200 e 3 × 429. 3 juízes simultâneos da mesma rodada → 1 avaliação e 2 × `judge_in_progress`. E `scripts/test-v3-quota-sql.mjs` em Postgres real: 12 conexões simultâneas na cota e 10 na reserva do juiz (exatamente 1 reserva).

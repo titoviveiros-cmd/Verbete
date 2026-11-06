@@ -7,7 +7,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
-import { decideJudge, judgeGuardEvent } from "../_shared/judge-guard.ts";
+import { decideJudge, decideLease, judgeGuardEvent } from "../_shared/judge-guard.ts";
 import { GUARD_MODE_KEY, parseGuardMode } from "../_shared/room-guard.ts";
 import { supabaseGuardDeps } from "../_shared/room-guard-deps.ts";
 import { JUDGE_BUDGET, judgeCandidates, nearMissIds } from "../_shared/semantic.ts";
@@ -43,6 +43,8 @@ Deno.serve(async (req) => {
   // anônimos (convidados) precisam poder ganhar o bônus de equivalência ≥80%.
   const t0 = Date.now();
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  // V3: reserva da rodada tomada por ESTA invocação (solta no finally)
+  let leased: { roomId: string; round: number } | null = null;
   try {
     const body = await readJsonObject(req);
     const roomId = isUuid(body?.room_id) ? body.room_id : "";
@@ -99,6 +101,40 @@ Deno.serve(async (req) => {
     );
     if (judgeGuard.reason) await logEvent(admin, judgeGuardEvent(judgeGuard));
     if (judgeGuard.skip) return json({ matches: [], skipped: judgeGuard.reason });
+
+    // V3: uma avaliação por rodada de cada vez. Duas invocações simultâneas
+    // antes do judged_at davam duas notas da IA (custo em dobro e "segunda
+    // chance" de ≥ 80 para quem dispara em paralelo). Falha ao reservar =
+    // segue sem reserva: nunca impede o julgamento legítimo do banco.
+    let took: boolean | null = null;
+    if (mode !== "desligado") {
+      try {
+        const { data: tk, error: leaseError } = await admin.rpc("judge_lease_take", {
+          p_room_id: roomId,
+          p_round: round,
+        });
+        if (leaseError) console.warn("judge_lease_take failed", leaseError.code);
+        else took = tk === true;
+      } catch (e) {
+        console.warn("judge_lease_take failed", e);
+      }
+      if (took) leased = { roomId, round };
+    }
+    const lease = decideLease(mode, took);
+    if (lease.reason) await logEvent(admin, judgeGuardEvent(lease));
+    if (lease.skip) return json({ matches: [], error: "judge_in_progress" });
+    if (took) {
+      // relê: outra avaliação pode ter terminado entre a 1ª leitura e a reserva
+      const { data: again } = await admin
+        .from("rounds")
+        .select("judged_at")
+        .eq("room_id", roomId)
+        .eq("round", round)
+        .maybeSingle();
+      const late = decideJudge(mode, (again ?? {}) as { judged_at?: string | null }, Date.now());
+      if (late.reason) await logEvent(admin, judgeGuardEvent(late));
+      if (late.skip) return json({ matches: [], skipped: late.reason });
+    }
 
     let word = "";
     const { data: w1 } = await admin.from("words").select("word").eq("id", wid).maybeSingle();
@@ -270,5 +306,17 @@ Deno.serve(async (req) => {
     console.error("score-similarity error", e);
     await logEvent(admin, exceptionEvent("judge_ai_error", "score-similarity", e, Date.now() - t0));
     return json({ matches: [], error: "internal_error" });
+  } finally {
+    if (leased) {
+      try {
+        const { error } = await admin.rpc("judge_lease_release", {
+          p_room_id: leased.roomId,
+          p_round: leased.round,
+        });
+        if (error) console.warn("judge_lease_release failed", error.code); // vence sozinha em 30 s
+      } catch (e) {
+        console.warn("judge_lease_release failed", e);
+      }
+    }
   }
 });

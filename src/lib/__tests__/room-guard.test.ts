@@ -23,6 +23,7 @@ import {
 } from "../../../supabase/functions/_shared/room-guard.ts";
 import {
   decideJudge,
+  decideLease,
   JUDGE_STALE_MS,
   judgeGuardEvent,
   judgeSkipReason,
@@ -443,6 +444,33 @@ describe("score-similarity: rodada já julgada não volta à IA", () => {
   });
 });
 
+describe("score-similarity: uma avaliação por rodada de cada vez", () => {
+  it("ocupada: aplicar pula (com error, o reenvio tenta de novo); observar só registra", () => {
+    expect(decideLease("aplicar", false)).toEqual({
+      mode: "aplicar",
+      reason: "in_progress",
+      skip: true,
+    });
+    expect(decideLease("observar", false)).toEqual({
+      mode: "observar",
+      reason: "in_progress",
+      skip: false,
+    });
+  });
+
+  it("reservou, falhou ao reservar (null) ou desligado → segue (nunca impede o juiz legítimo)", () => {
+    for (const mode of ["aplicar", "observar", "desligado"] as const)
+      for (const took of [true, null]) {
+        expect(decideLease(mode, took)).toEqual({
+          mode,
+          reason: null,
+          skip: false,
+        });
+      }
+    expect(decideLease("desligado", false).skip).toBe(false);
+  });
+});
+
 describe("as edges usam a guarda ANTES da IA", () => {
   const src = (f: string) =>
     readFileSync(join(__dirname, "../../../supabase/functions", f), "utf8");
@@ -463,6 +491,23 @@ describe("as edges usam a guarda ANTES da IA", () => {
     expect(guard).toBeGreaterThan(0);
     expect(guard).toBeLessThan(s.indexOf("GEMINI_API_KEY"));
     expect(s).toContain("json({ matches: [], skipped: judgeGuard.reason })");
+  });
+
+  it("score-similarity: reserva da rodada depois do judged_at, antes do Gemini; solta no finally", () => {
+    const s = src("score-similarity/index.ts");
+    const judged = s.indexOf("decideJudge(");
+    const take = s.indexOf('admin.rpc("judge_lease_take"');
+    const recheck = s.indexOf('.select("judged_at")');
+    const gemini = s.indexOf("GEMINI_API_KEY");
+    expect(judged).toBeGreaterThan(0);
+    expect(take).toBeGreaterThan(judged);
+    expect(recheck).toBeGreaterThan(take);
+    expect(gemini).toBeGreaterThan(recheck);
+    // ocupada em 'aplicar' responde COM error: o reenvio do banco tenta de novo
+    expect(s).toContain('json({ matches: [], error: "judge_in_progress" })');
+    const fin = s.lastIndexOf("} finally {");
+    expect(fin).toBeGreaterThan(gemini);
+    expect(s.indexOf('admin.rpc("judge_lease_release"')).toBeGreaterThan(fin);
   });
 
   it("migration: config padrão observar sem sobrescrever; cota com função própria só para service_role", () => {
@@ -490,7 +535,21 @@ describe("as edges usam a guarda ANTES da IA", () => {
     expect(sql).toMatch(
       /SECURITY DEFINER\s+SET search_path TO 'public', 'pg_temp'/,
     );
-    expect(sql).not.toMatch(/\b(DROP|ALTER|UPDATE public|DELETE)\b/i);
+    expect(sql).not.toMatch(/\b(DROP|ALTER|UPDATE public)\b/i);
+    // DELETE só das reservas do juiz (linhas operacionais 'judge_lease:*')
+    for (const del of sql.match(/DELETE FROM[^;]*;/g) ?? [])
+      expect(del).toMatch(/^DELETE FROM public\.ai_quota\s+WHERE key = /);
+    for (const fn of [
+      "judge_lease_take(uuid, integer, integer)",
+      "judge_lease_release(uuid, integer)",
+    ]) {
+      expect(sql).toContain(
+        `REVOKE ALL ON FUNCTION public.${fn} FROM PUBLIC, anon, authenticated;`,
+      );
+      expect(sql).toContain(
+        `GRANT EXECUTE ON FUNCTION public.${fn} TO service_role;`,
+      );
+    }
     // a chave montada no banco é a mesma que a edge documenta
     expect(sql).toContain(
       "'bots_round:' || p_room_id::text || ':' || p_round::text",

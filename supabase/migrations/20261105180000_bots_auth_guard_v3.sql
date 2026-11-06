@@ -18,6 +18,8 @@
 --   2) bots_quota_take(sala, rodada): contador atômico da cota, na tabela
 --      public.ai_quota da V2, com a chave montada AQUI ('bots_round:<sala>:<rodada>',
 --      janela de 1 dia).
+--   3) judge_lease_take/judge_lease_release: uma avaliação do juiz por rodada de
+--      cada vez (score-similarity), também em public.ai_quota.
 --
 -- Por que uma função própria (CI do PR #42, run 42141677897): a 1ª versão chamava
 -- public.ai_quota_add (V2) pela API com a chave de serviço e recebia "permission
@@ -61,3 +63,49 @@ END $$;
 
 REVOKE ALL ON FUNCTION public.bots_quota_take(uuid, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.bots_quota_take(uuid, integer) TO service_role;
+
+-- 3) Reserva do juiz por rodada (score-similarity). Duas invocações simultâneas
+-- da MESMA rodada ainda não julgada (antes do judged_at) rodavam duas avaliações
+-- completas: custo em dobro e, pior, uma "segunda chance" de nota ≥ 80 para quem
+-- dispara pedidos em paralelo (a nota da IA varia entre chamadas). Só uma por vez:
+-- a reserva vale p_ttl_s (padrão 30 s > prazo do juiz, 17 s) e a edge a solta no
+-- fim. Linha em public.ai_quota (chave 'judge_lease:<sala>:<rodada>',
+-- window_start = início da reserva). Pontuação e bônus NÃO mudam.
+CREATE OR REPLACE FUNCTION public.judge_lease_take(p_room_id uuid, p_round integer, p_ttl_s integer DEFAULT 30)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+DECLARE
+  v_key text;
+  v_ttl integer := greatest(10, least(coalesce(p_ttl_s, 30), 120));
+BEGIN
+  IF p_room_id IS NULL OR p_round IS NULL THEN
+    RAISE EXCEPTION 'judge_lease_take: sala/rodada ausentes' USING ERRCODE = '22023';
+  END IF;
+  v_key := 'judge_lease:' || p_room_id::text || ':' || p_round::text;
+  -- serializa os pedidos da mesma rodada (a linha pode ainda não existir)
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_key, 0));
+  DELETE FROM public.ai_quota
+   WHERE key = v_key AND window_start < now() - make_interval(secs => v_ttl);  -- reserva vencida
+  IF EXISTS (SELECT 1 FROM public.ai_quota WHERE key = v_key) THEN
+    RETURN false;  -- outra avaliação desta rodada em andamento
+  END IF;
+  INSERT INTO public.ai_quota (key, window_start, used) VALUES (v_key, now(), 1);
+  RETURN true;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.judge_lease_release(p_room_id uuid, p_round integer)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+  DELETE FROM public.ai_quota WHERE key = 'judge_lease:' || p_room_id::text || ':' || p_round::text;
+$$;
+
+REVOKE ALL ON FUNCTION public.judge_lease_take(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.judge_lease_release(uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.judge_lease_take(uuid, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.judge_lease_release(uuid, integer) TO service_role;
