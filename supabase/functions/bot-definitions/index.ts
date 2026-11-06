@@ -6,6 +6,12 @@
 // ./logic.ts e ../_shared/ai.ts, cobertas por testes.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callChat, exceptionEvent, type OpsEvent } from "../_shared/ai.ts";
+import {
+  createAiModeReader,
+  createSuspendedLogger,
+  loadAiModeValue,
+  suspendedEventIO,
+} from "../_shared/ai-mode.ts";
 import { isUuid, readJsonObject } from "../_shared/input.ts";
 import {
   dropAlreadyServed,
@@ -45,6 +51,10 @@ const DEFAULT_PERSONAS = ["conciso", "analitico", "funcional", "descritivo", "co
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
+const readAiMode = createAiModeReader();
+const logSuspended = createSuspendedLogger();
 
 // Telemetria nunca derruba o pedido.
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
@@ -121,6 +131,15 @@ Deno.serve(async (req) => {
     if (!word) {
       return new Response(JSON.stringify({ error: "word not found", definitions: [] }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // IA suspensa (docs/contencao-ia.md): sem provedor; a tela fica com as
+    // sugestões locais, que já aparecem antes desta resposta.
+    if ((await readAiMode(() => loadAiModeValue(admin))) === "suspenso") {
+      await logSuspended("bot-definitions", suspendedEventIO(admin));
+      return new Response(JSON.stringify({ definitions: [] }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

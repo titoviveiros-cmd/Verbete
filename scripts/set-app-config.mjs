@@ -13,6 +13,8 @@ const RULES = {
   "client.maintenance_message": (v) => v.trim().length > 0 && v.length <= 200,
   "client.min_native_build": (v) => /^[1-9]\d{0,8}$/.test(v),
   "client.store_url": (v) => /^https:\/\/\S+$/.test(v),
+  // contenção da IA (docs/contencao-ia.md) — 'suspenso' exige autorização
+  ai_mode: (v) => v === "ligado" || v === "suspenso",
 };
 
 const [key, value] = process.argv.slice(2);
