@@ -1182,6 +1182,10 @@ export type Database = {
         };
         Returns: string;
       };
+      bots_quota_take: {
+        Args: { p_room_id: string; p_round: number };
+        Returns: number;
+      };
       cast_bot_votes: {
         Args: { p_actor_id: string; p_room_id: string; p_round: number };
         Returns: Json;
@@ -1439,6 +1443,14 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      judge_lease_release: {
+        Args: { p_room_id: string; p_round: number };
+        Returns: undefined;
+      };
+      judge_lease_take: {
+        Args: { p_room_id: string; p_round: number; p_ttl_s?: number };
+        Returns: boolean;
       };
       kick_player: {
         Args: {
