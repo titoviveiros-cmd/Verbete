@@ -15,6 +15,8 @@ const RULES = {
   "client.store_url": (v) => /^https:\/\/\S+$/.test(v),
   // contenção da IA (docs/contencao-ia.md) — 'suspenso' exige autorização
   ai_mode: (v) => v === "ligado" || v === "suspenso",
+  // Diário D1 (docs/diario-d1.md) — 'escolha' liga o modo de múltipla escolha: exige autorização
+  daily_mode: (v) => v === "juiz" || v === "escolha" || v === "pausa",
 };
 
 const [key, value] = process.argv.slice(2);

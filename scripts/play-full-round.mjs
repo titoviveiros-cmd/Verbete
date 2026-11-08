@@ -45,7 +45,7 @@ console.log(`round ${room.current_round}: coordinator = ${coordinator?.nickname}
 // 2) Escolhe palavra (como o client do coordenador — ou autopick — faria)
 const used = room.used_word_ids ?? [];
 const { rows: [word] } = await db.query(
-  "SELECT id, word FROM public.words WHERE NOT (id = ANY($1::uuid[])) ORDER BY random() LIMIT 1",
+  "SELECT id, word FROM public.words WHERE NOT (id = ANY($1::uuid[])) AND id IS DISTINCT FROM (SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())) ORDER BY random() LIMIT 1",
   [used],
 );
 console.log(`word: ${word.word}`);

@@ -22,6 +22,20 @@ import {
   type DailyReview,
 } from "@/lib/daily";
 import { submitDailyAttempt } from "@/lib/daily.functions";
+import {
+  startDailyChoice,
+  submitDailyChoice,
+} from "@/lib/daily-choice.functions";
+import {
+  CHOICE_PAUSED,
+  formatOption,
+  type ChoiceResultView,
+} from "@/lib/daily-choice";
+import {
+  ChoiceResultCard,
+  DailyChoiceFlow,
+  DailyPausePanel,
+} from "@/components/daily/DailyChoice";
 import { ServerFnResponseError } from "@/lib/server-fn-transport";
 import { burst, fireworks } from "@/lib/confetti";
 import { pushAchievement } from "@/components/AchievementToaster";
@@ -59,6 +73,8 @@ function DailyPage() {
   const fromProfile = search.from === "profile";
   const { user, loading } = useAuth();
   const submit = useServerFn(submitDailyAttempt);
+  const startChoice = useServerFn(startDailyChoice);
+  const submitChoice = useServerFn(submitDailyChoice);
   // O palpite põe o nome da conta no ranking do dia: aceite antes do envio.
   const terms = useTermsGate();
 
@@ -81,6 +97,16 @@ function DailyPage() {
     guess: string;
     timeSeconds: number;
     streak?: number;
+  } | null>(null);
+  // D1: resultado do modo escolha (múltipla escolha, sem IA)
+  const [choiceResult, setChoiceResult] = useState<ChoiceResultView | null>(
+    null,
+  );
+  // D1: no modo escolha a palavra só aparece junto com as alternativas
+  // (Red Team A1/A2): vem do servidor no início, nunca do carregamento da página
+  const [choiceWord, setChoiceWord] = useState<{
+    word: string;
+    category: string | null;
   } | null>(null);
   const [nowMs, setNowMs] = useState(() => msUntilNextChallenge());
   const [startedAt] = useState(() => Date.now());
@@ -200,14 +226,45 @@ function DailyPage() {
   };
 
   const playedAttempt = review?.played ? review.attempt : undefined;
-  const alreadyDone = !!playedAttempt || !!result;
+  const alreadyDone = !!playedAttempt || !!result || !!choiceResult;
+  // Modo vigente (app_config.daily_mode, via get_my_daily_review). Sem a
+  // informação (servidor antigo, erro) = juiz, o fluxo de sempre.
+  const dailyMode =
+    review?.daily_mode === "escolha" || review?.daily_mode === "pausa"
+      ? review.daily_mode
+      : "juiz";
+  const choiceDone =
+    !!choiceResult || (!!playedAttempt && playedAttempt.mode === "escolha");
+
+  const reloadReview = async () => {
+    if (!user) return;
+    const [fresh, lb] = await Promise.all([
+      fetchTodayAttempt(user.id),
+      fetchDailyLeaderboard(),
+    ]);
+    setReview(fresh);
+    setBoard(lb);
+  };
+
+  const onChoiceFinished = (r: ChoiceResultView) => {
+    setChoiceResult(r);
+    if (r.is_correct) burst({ particleCount: 120, spread: 90 });
+    if ((r.current_streak ?? 0) >= 7) fireworks();
+    (r.unlocked ?? []).forEach((code) => {
+      const a = achMap.get(code);
+      if (a) pushAchievement(a);
+    });
+    void reloadReview();
+  };
 
   useEffect(() => {
+    // envio automático do tempo esgotado: só no modo juiz (texto)
+    if (dailyMode !== "juiz") return;
     if (expired && !alreadyDone && !busy && !submitError) {
       onSubmit({ auto: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expired, alreadyDone, busy, submitError]);
+  }, [expired, alreadyDone, busy, submitError, dailyMode]);
 
   const displayResult = useMemo(() => {
     if (result) return result;
@@ -234,6 +291,20 @@ function DailyPage() {
 
   const sim = Math.max(0, Math.min(100, displayResult?.similarity ?? 0));
   const myId = user?.id;
+  // Palavra do topo. Modo escolha: só depois de abrir as alternativas (a do
+  // servidor, da mesma sessão); antes, "?". Já jogou: a da revisão.
+  const heroWord = playedAttempt
+    ? (review?.word ?? data.word.word)
+    : choiceResult || dailyMode === "escolha"
+      ? (choiceWord?.word ?? "?")
+      : data.word.word;
+  const heroCategory = playedAttempt
+    ? playedAttempt.mode === "escolha"
+      ? null
+      : data.word.category
+    : choiceResult || dailyMode === "escolha"
+      ? (choiceWord?.category ?? null)
+      : data.word.category;
 
   return (
     <div className="mobile-shell stage-wide pt-4 gap-4 overflow-y-auto pb-8">
@@ -274,15 +345,15 @@ function DailyPage() {
                 className="font-display font-black mt-1 leading-[1.1] capitalize"
                 style={verbeteWordmarkStyle("clamp(40px, 12vw, 64px)")}
               >
-                {data.word.word}
+                {heroWord}
               </h1>
-              {data.word.category && (
+              {heroCategory && (
                 <span className="chip mt-2 !bg-white/15 !border-white/30 text-white/90 uppercase tracking-wider !text-[10px]">
-                  {data.word.category}
+                  {heroCategory}
                 </span>
               )}
             </motion.div>
-            {!displayResult && (
+            {!displayResult && !choiceResult && (
               <div className="absolute -right-2 -bottom-6 lg:-right-6 lg:-bottom-8 pointer-events-none">
                 <Mascot mood="thinking" size={78} />
               </div>
@@ -290,7 +361,44 @@ function DailyPage() {
           </div>
 
           <AnimatePresence mode="wait">
-            {!alreadyDone ? (
+            {choiceDone ? (
+              <ChoiceResultCard
+                key="choice-result"
+                correct={
+                  choiceResult
+                    ? !!choiceResult.is_correct
+                    : !!playedAttempt?.is_correct
+                }
+                score={
+                  choiceResult
+                    ? (choiceResult.score ?? 0)
+                    : (playedAttempt?.score ?? 0)
+                }
+                truth={choiceResult?.truth ?? formatOption(review?.truth ?? "")}
+                chosen={choiceResult?.chosen ?? playedAttempt?.guess ?? ""}
+                streak={choiceResult?.current_streak}
+              />
+            ) : !alreadyDone && dailyMode === "escolha" ? (
+              <motion.div
+                key="choice"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <DailyChoiceFlow
+                  start={() => startChoice()}
+                  submit={(pos, hour) => submitChoice({ data: { pos, hour } })}
+                  onStarted={setChoiceWord}
+                  confirmTerms={() => terms.confirm()}
+                  assertTerms={assertTermsAccepted}
+                  consent={<TermsConsent gate={terms} />}
+                  onFinished={onChoiceFinished}
+                  onReload={() => void reloadReview()}
+                />
+              </motion.div>
+            ) : !alreadyDone && dailyMode === "pausa" ? (
+              <DailyPausePanel key="pause" message={CHOICE_PAUSED} />
+            ) : !alreadyDone ? (
               <motion.div
                 key="form"
                 initial={{ y: 20, opacity: 0 }}
