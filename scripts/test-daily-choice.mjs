@@ -151,6 +151,11 @@ if (!modePg) {
               VALUES ($1, '2026-01-01', '2026-01-01 10:00+00', 'palpite', true, 77, 12, 91)`, [old]);
   await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, total_score)
               VALUES ($1, 3, 9, '2026-01-01 10:00+00', 1234)`, [old]);
+  // como em produção (handle_new_user, migration 20261027200100): criar o usuário já cria user_stats
+  await db.exec(`
+    CREATE FUNCTION public.handle_new_user_stats() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS
+      $f$ BEGIN INSERT INTO public.user_stats (user_id) VALUES (NEW.id) ON CONFLICT (user_id) DO NOTHING; RETURN NEW; END $f$;
+    CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_stats();`);
   md5Antes = (await db.q(`SELECT md5(prosrc) AS m FROM pg_proc WHERE proname = 'submit_daily_attempt_scored'`))[0].m;
   estadoAntes = await db.q(`SELECT md5(string_agg(t::text, '|' ORDER BY t::text)) AS m FROM (
       SELECT user_id, current_streak, best_streak, last_played_hour, total_score FROM public.user_stats) t`);
@@ -175,6 +180,19 @@ const novoUsuario = async () => {
   await db.q(`INSERT INTO auth.users (id, is_anonymous) VALUES ($1, false)`, [id]);
   return id;
 };
+/**
+ * Estado de user_stats do jogador de teste, definido POR COMPLETO. Em produção a linha já
+ * existe (o gatilho handle_new_user a cria junto com o usuário), então é upsert: um INSERT
+ * puro colidia com user_stats_pkey (CI 42500287456). Não toca nenhuma função do D1.
+ */
+const definirStats = (u, { streak = 0, best = 0, horasAtras = null, total = 0 } = {}) =>
+  db.q(
+    `INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, total_score)
+     VALUES ($1, $2, $3, CASE WHEN $4::int IS NULL THEN NULL ELSE $5::timestamptz - make_interval(hours => $4::int) END, $6)
+     ON CONFLICT (user_id) DO UPDATE SET current_streak = EXCLUDED.current_streak, best_streak = EXCLUDED.best_streak,
+       last_played_hour = EXCLUDED.last_played_hour, total_score = EXCLUDED.total_score, updated_at = now()`,
+    [u, streak, best, horasAtras, HORA, total],
+  );
 const setModo = (m) =>
   db.q(`INSERT INTO public.app_config (key, value) VALUES ('daily_mode', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [m]);
 const novaPalavra = async (n, { status = "published", conjunto = "aprovado", meaning } = {}) => {
@@ -402,7 +420,7 @@ try {
 
   await t("11/17. erro = 0 pontos e CONTA como participação (sequência +1)", async () => {
     const u = await novoUsuario();
-    await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, total_score) VALUES ($1, 4, 4, $2::timestamptz - interval '1 hour', 100)`, [u, HORA]);
+    await definirStats(u, { streak: 4, best: 4, horasAtras: 1, total: 100 });
     await start(u);
     const s = await sessao(u);
     const r = await finish(u, (s.correct_pos + 1) % 4);
@@ -501,11 +519,23 @@ try {
     eq(await tentativas(u), 0);
   });
 
+  await t("gatilho real: usuário novo já tem user_stats zerado; 1ª participação = sequência 1 nos DOIS modos, sem erro", async () => {
+    const [e, j] = [await novoUsuario(), await novoUsuario()];
+    for (const u of [e, j]) eq(await stats(u), { current_streak: 0, best_streak: 0, last_played_hour: null, total_score: 0 }, "gatilho não criou a linha zerada");
+    await start(e);
+    const re = await finish(e, (await sessao(e)).correct_pos);
+    const rj = (await db.q(`SELECT public.submit_daily_attempt_scored($1, 'x', 10, 90) AS r`, [j]))[0].r;
+    eq([re.result.current_streak, rj.current_streak], [1, 1]);
+    eq((await stats(e)).total_score, re.result.score);
+    eq((await stats(j)).total_score, rj.score);
+    eq([await conquistas(e), await conquistas(j)], [["first_daily"], ["first_daily"]]);
+  });
+
   await t("10/13. sequência e conquistas com MISTURA de modos (juiz → escolha → juiz)", async () => {
     // juiz na hora anterior → escolha agora: +1, streak_3
     const a = await novoUsuario();
     await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, mode) VALUES ($1, ($2::timestamptz - interval '1 hour')::date, $2::timestamptz - interval '1 hour', 'p', 0, 'juiz')`, [a, HORA]);
-    await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour) VALUES ($1, 2, 2, $2::timestamptz - interval '1 hour')`, [a, HORA]);
+    await definirStats(a, { streak: 2, best: 2, horasAtras: 1 });
     await db.q(`INSERT INTO public.user_achievements (user_id, achievement_code) VALUES ($1, 'first_daily')`, [a]);
     await start(a);
     const ra = await finish(a, (await sessao(a)).correct_pos);
@@ -513,12 +543,12 @@ try {
     // escolha na hora anterior → juiz agora: +1
     const b = await novoUsuario();
     await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, mode) VALUES ($1, ($2::timestamptz - interval '1 hour')::date, $2::timestamptz - interval '1 hour', 'p', 10, 'escolha')`, [b, HORA]);
-    await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour) VALUES ($1, 6, 6, $2::timestamptz - interval '1 hour')`, [b, HORA]);
+    await definirStats(b, { streak: 6, best: 6, horasAtras: 1 });
     const rb = (await db.q(`SELECT public.submit_daily_attempt_scored($1, 'x', 10, 95) AS r`, [b]))[0].r;
     eq([rb.current_streak, rb.unlocked.sort()], [7, ["first_daily", "streak_3", "streak_7"]]);
     // hora pulada → volta a 1
     const c = await novoUsuario();
-    await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour) VALUES ($1, 9, 9, $2::timestamptz - interval '3 hours')`, [c, HORA]);
+    await definirStats(c, { streak: 9, best: 9, horasAtras: 3 });
     await start(c);
     const rc = await finish(c, 0);
     eq([rc.result.current_streak, (await stats(c)).best_streak], [1, 9]);
@@ -534,9 +564,7 @@ try {
           if (n++ >= 36) break;
           const [a, b] = [await novoUsuario(), await novoUsuario()];
           for (const u of [a, b]) {
-            await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, total_score)
-                        VALUES ($1, $2, $3, CASE WHEN $4::text IS NULL THEN NULL ELSE $5::timestamptz - make_interval(hours => $4::int) END, 50)`,
-              [u, s, s + 1, h, HORA]);
+            await definirStats(u, { streak: s, best: s + 1, horasAtras: h === null ? null : Number(h), total: 50 });
             if (comFirst) await db.q(`INSERT INTO public.user_achievements (user_id, achievement_code) VALUES ($1, 'first_daily')`, [u]);
           }
           const juiz = (await db.q(`SELECT public.submit_daily_attempt_scored($1, 'x', 10, 90) AS r`, [a]))[0].r;
@@ -594,7 +622,7 @@ try {
 
   await t("16. ranking global: soma UMA vez, sem fator extra (total_score += pontos do acerto)", async () => {
     const u = await novoUsuario();
-    await db.q(`INSERT INTO public.user_stats (user_id, total_score) VALUES ($1, 1000)`, [u]);
+    await definirStats(u, { total: 1000 });
     await start(u);
     await db.q(`UPDATE public.daily_choice_sessions SET issued_at = now() - interval '10 seconds' WHERE user_id = $1`, [u]);
     const r = await finish(u, (await sessao(u)).correct_pos);
