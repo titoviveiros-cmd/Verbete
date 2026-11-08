@@ -174,6 +174,7 @@ export type Database = {
           guess?: string;
           id?: string;
           is_correct?: boolean;
+          mode?: string;
           score?: number;
           similarity?: number;
           time_seconds?: number;
@@ -205,6 +206,85 @@ export type Database = {
           word_id?: string;
         };
         Relationships: [];
+      };
+      daily_choice_sessions: {
+        Row: {
+          challenge_hour: string;
+          correct_pos: number;
+          finished_at: string | null;
+          issued_at: string;
+          options: string[];
+          user_id: string;
+          word_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          challenge_hour: string;
+          correct_pos: number;
+          finished_at?: string | null;
+          issued_at?: string;
+          options: string[];
+          user_id: string;
+          word_id: string;
+        };
+        Update: {
+          challenge_hour?: string;
+          correct_pos?: number;
+          finished_at?: string | null;
+          issued_at?: string;
+          options?: string[];
+          user_id?: string;
+          word_id?: string;
+        };
+        Relationships: [];
+      };
+      daily_choice_sets: {
+        Row: {
+          created_at: string;
+          distractors: string[];
+          origem: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: string;
+          truth_snapshot: string;
+          updated_at: string;
+          validacao: NonNullable<Json>;
+          word_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          distractors: string[];
+          origem?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: string;
+          truth_snapshot: string;
+          updated_at?: string;
+          validacao?: NonNullable<Json>;
+          word_id: string;
+        };
+        Update: {
+          created_at?: string;
+          distractors?: string[];
+          origem?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: string;
+          truth_snapshot?: string;
+          updated_at?: string;
+          validacao?: NonNullable<Json>;
+          word_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "daily_choice_sets_word_id_fkey";
+            columns: ["word_id"];
+            isOneToOne: true;
+            referencedRelation: "words";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       daily_eval_claims: {
         Row: {
@@ -1265,16 +1345,28 @@ export type Database = {
         Args: { p_reviewer: string; p_status: string; p_word_ids: string[] };
         Returns: Json;
       };
+      daily_choice_cleanup: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       daily_choice_finish: {
         Args: { p_hour?: string; p_pos: number; p_user_id: string };
         Returns: Json;
+      };
+      daily_choice_fmt: { Args: { p: string }; Returns: string };
+      daily_choice_new_perm: {
+        Args: Record<PropertyKey, never>;
+        Returns: number[];
       };
       daily_choice_start: { Args: { p_user_id: string }; Returns: Json };
       daily_claim: {
         Args: { p_hour?: string; p_origin?: string; p_user_id: string };
         Returns: Json;
       };
-      daily_mode: { Args: Record<PropertyKey, never>; Returns: string };
+      daily_current_word_id: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
       daily_finish_fail: {
         Args: {
           p_claim_id: string;
@@ -1305,6 +1397,11 @@ export type Database = {
       };
       daily_guard_log: { Args: { p_payload: Json }; Returns: undefined };
       daily_guard_mode: { Args: Record<PropertyKey, never>; Returns: string };
+      daily_mode: { Args: Record<PropertyKey, never>; Returns: string };
+      daily_record_participation: {
+        Args: { p_hour: string; p_score: number; p_user_id: string };
+        Returns: Json;
+      };
       definition_reveal_tokens: { Args: { p_text: string }; Returns: string[] };
       definition_reveals_word: {
         Args: { p_text: string; p_word: string };
