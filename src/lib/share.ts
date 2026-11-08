@@ -13,6 +13,8 @@ export async function shareInvite(opts: {
   title: string;
   text: string;
   url: string;
+  /** título da folha de compartilhamento do Android */
+  dialogTitle?: string;
 }): Promise<ShareOutcome> {
   if (Capacitor.isNativePlatform()) {
     try {
@@ -21,7 +23,7 @@ export async function shareInvite(opts: {
         title: opts.title,
         text: opts.text,
         url: opts.url,
-        dialogTitle: "Convidar para o Verbete",
+        dialogTitle: opts.dialogTitle ?? "Convidar para o Verbete",
       });
       return "shared";
     } catch (e) {
@@ -29,7 +31,11 @@ export async function shareInvite(opts: {
     }
   } else if (typeof navigator !== "undefined" && navigator.share) {
     try {
-      await navigator.share(opts);
+      await navigator.share({
+        title: opts.title,
+        text: opts.text,
+        url: opts.url,
+      });
       return "shared";
     } catch (e) {
       if (isCancel(e)) return "dismissed";

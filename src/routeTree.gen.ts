@@ -24,6 +24,7 @@ import { Route as AdminDailyChoicesRouteImport } from './routes/admin.daily-choi
 import { Route as AdminOpsRouteImport } from './routes/admin.ops'
 import { Route as AdminReportsRouteImport } from './routes/admin.reports'
 import { Route as AdminWordsRouteImport } from './routes/admin.words'
+import { Route as RTokenRouteImport } from './routes/r.$token'
 import { Route as RoomCodeRouteImport } from './routes/room.$code'
 
 const IndexRoute = IndexRouteImport.update({
@@ -101,6 +102,11 @@ const AdminWordsRoute = AdminWordsRouteImport.update({
   path: '/admin/words',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RTokenRoute = RTokenRouteImport.update({
+  id: '/r/$token',
+  path: '/r/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RoomCodeRoute = RoomCodeRouteImport.update({
   id: '/room/$code',
   path: '/room/$code',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/words': typeof AdminWordsRoute
+  '/r/$token': typeof RTokenRoute
   '/room/$code': typeof RoomCodeRoute
 }
 export interface FileRoutesByTo {
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/words': typeof AdminWordsRoute
+  '/r/$token': typeof RTokenRoute
   '/room/$code': typeof RoomCodeRoute
 }
 export interface FileRoutesById {
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/words': typeof AdminWordsRoute
+  '/r/$token': typeof RTokenRoute
   '/room/$code': typeof RoomCodeRoute
 }
 export interface FileRouteTypes {
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/admin/ops'
     | '/admin/reports'
     | '/admin/words'
+    | '/r/$token'
     | '/room/$code'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/admin/ops'
     | '/admin/reports'
     | '/admin/words'
+    | '/r/$token'
     | '/room/$code'
   id:
     | '__root__'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/admin/ops'
     | '/admin/reports'
     | '/admin/words'
+    | '/r/$token'
     | '/room/$code'
   fileRoutesById: FileRoutesById
 }
@@ -235,6 +247,7 @@ export interface RootRouteChildren {
   AdminOpsRoute: typeof AdminOpsRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminWordsRoute: typeof AdminWordsRoute
+  RTokenRoute: typeof RTokenRoute
   RoomCodeRoute: typeof RoomCodeRoute
 }
 
@@ -345,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminWordsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/r/$token': {
+      id: '/r/$token'
+      path: '/r/$token'
+      fullPath: '/r/$token'
+      preLoaderRoute: typeof RTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/room/$code': {
       id: '/room/$code'
       path: '/room/$code'
@@ -371,6 +391,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminOpsRoute: AdminOpsRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminWordsRoute: AdminWordsRoute,
+  RTokenRoute: RTokenRoute,
   RoomCodeRoute: RoomCodeRoute,
 }
 export const routeTree = rootRouteImport

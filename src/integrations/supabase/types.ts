@@ -1327,6 +1327,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_match_share: { Args: { p_room_id: string }; Returns: Json };
       daily_choice_admin_add_drafts: {
         Args: { p_rows: Json };
         Returns: number;
@@ -1427,6 +1428,7 @@ export type Database = {
           user_id: string;
         }[];
       };
+      get_match_share: { Args: { p_token: string }; Returns: Json };
       get_my_daily_review: { Args: Record<PropertyKey, never>; Returns: Json };
       get_my_near_miss: {
         Args: { p_player_id: string; p_room_id: string };

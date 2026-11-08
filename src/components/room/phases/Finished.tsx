@@ -19,7 +19,12 @@ import { pushAchievement } from "@/components/AchievementToaster";
 import { hapticBigWin, hapticSuccess } from "@/lib/sound";
 import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 import { shareInvite } from "@/lib/share";
-import { APP_URL } from "@/lib/app-url";
+import {
+  prepareMatchShare,
+  shareMatchResult,
+  type PreparedShare,
+  type ShareResultState,
+} from "@/lib/match-share";
 
 export function Finished({
   room,
@@ -161,24 +166,57 @@ export function Finished({
     },
   ];
 
-  // Compartilhar o resultado (pódio digno de print): texto do campeão +
-  // link público do jogo — o mesmo helper do convite do Lobby.
-  const [shareNote, setShareNote] = useState<string | null>(null);
-  const handleShareResult = async () => {
-    const champion = teamWinner
-      ? teamWinner.name
-      : (winner?.nickname ?? "Alguém");
-    const pts = teamWinner ? teamWinner.score : (winner?.score ?? 0);
-    const outcome = await shareInvite({
-      title: "Verbete",
-      text: `🏆 ${champion} venceu no Verbete com ${pts} pts! Bora jogar? Blefe, vote e descubra palavras raras 👇`,
-      url: `${APP_URL}/`,
+  // Compartilhar o resultado (pódio digno de print): texto do campeão + link
+  // público DESTE resultado — o mesmo helper do convite do Lobby.
+  // Link do RESULTADO desta partida (antes ia para a Home). O retrato foi
+  // congelado pelo servidor no fim da partida; aqui só pegamos o link pronto —
+  // já ao abrir a tela, para o toque compartilhar sem esperar a rede (o
+  // Safari/iOS exige o gesto). Cliques repetidos usam o mesmo link.
+  const [prepared, setPrepared] = useState<PreparedShare | null>(null);
+  const [shareState, setShareState] = useState<ShareResultState | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const createShare = async () => {
+    const { supabase } = await import("@/integrations/supabase/client");
+    const { data, error } = await supabase.rpc("create_match_share", {
+      p_room_id: roomId,
     });
-    if (outcome === "copied") setShareNote("Link copiado! ✅");
-    else if (outcome === "failed")
-      setShareNote(`Não deu para abrir o compartilhamento. Link: ${APP_URL}/`);
-    else setShareNote(null);
-    if (outcome === "copied") setTimeout(() => setShareNote(null), 2500);
+    if (error) throw error;
+    return data;
+  };
+  useEffect(() => {
+    let vivo = true;
+    void prepareMatchShare(createShare).then((p) => {
+      if (vivo) setPrepared((cur) => cur ?? p);
+    });
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+  const handleShareResult = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const st = await shareMatchResult({
+        prepared,
+        createShare,
+        onPrepared: setPrepared,
+        share: (o) =>
+          shareInvite({ ...o, dialogTitle: "Compartilhar resultado" }),
+      });
+      setShareState(st);
+      if (
+        st.kind === "copied" ||
+        st.kind === "shared" ||
+        st.kind === "dismissed"
+      )
+        setTimeout(
+          () => setShareState((cur) => (cur === st ? null : cur)),
+          2500,
+        );
+    } finally {
+      setSharing(false);
+    }
   };
 
   // Festa curta (regra da coleção: nada permanente): o Livro comemora
@@ -397,15 +435,37 @@ export function Finished({
                 2026-10-20). */}
             <button
               type="button"
-              onClick={handleShareResult}
+              onClick={() => void handleShareResult()}
+              disabled={sharing}
+              aria-busy={sharing}
               className="glass-tile rounded-full text-xs font-display px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition"
             >
-              📲 Compartilhar resultado
+              {sharing ? "Gerando link..." : "📲 Compartilhar resultado"}
             </button>
-            {shareNote && (
-              <p role="status" className="text-[12px] text-mint font-bold">
-                {shareNote}
-              </p>
+            {shareState && (
+              <div
+                role="status"
+                className={
+                  "text-[12px] font-bold text-center " +
+                  (shareState.kind === "failed" ||
+                  shareState.kind === "link_failed"
+                    ? "text-destructive"
+                    : shareState.kind === "dismissed"
+                      ? "text-muted-foreground"
+                      : "text-mint")
+                }
+              >
+                <p>{shareState.note}</p>
+                {shareState.kind === "failed" && (
+                  <input
+                    readOnly
+                    value={shareState.url}
+                    aria-label="Link do resultado"
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="mt-1 w-full max-w-[18rem] bg-input rounded-lg px-2 py-1 text-[11px] font-normal text-foreground border border-white/10"
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { APP_URL } from "@/lib/app-url";
+import { shareTokenFromSearch } from "@/lib/match-share";
 import { APP_VERSION_LABEL } from "@/lib/app-version";
 import { TermsConsent } from "@/components/TermsConsent";
 import { useTermsGate } from "@/hooks/use-terms-gate";
@@ -89,13 +90,20 @@ function HomePage() {
   // mesmo se receber o link sem ter o app instalado/aberto.
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Resultado compartilhado: /?r=<token> → página do resultado (o APK 2.1.4,
+    // sem essa página, fica na Home — o link nunca abre tela de erro)
+    const shared = shareTokenFromSearch(window.location.search);
+    if (shared) {
+      void nav({ to: "/r/$token", params: { token: shared }, replace: true });
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const join = params.get("join");
     if (join && /^\d{4}$/.test(join)) {
       setCode(join);
       setMode("join");
     }
-  }, []);
+  }, [nav]); // nav é estável (useNavigate): roda uma vez
 
   const playerId = typeof window !== "undefined" ? getPlayerId() : "";
   // Aceite dos Termos antes do 1º conteúdo (apelido) — Criar e Entrar.

@@ -56,7 +56,7 @@ function PrivacyPage() {
         </Link>
         <h1 className="font-display text-3xl mt-2">Política de Privacidade</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Última atualização: 5 de novembro de 2026
+          Última atualização: 8 de novembro de 2026
         </p>
       </header>
 
@@ -240,6 +240,20 @@ function PrivacyPage() {
         </section>
 
         <section>
+          <h2 className="font-display text-lg mb-1">Resultado compartilhado</h2>
+          <p>
+            No fim de cada partida, o servidor guarda um retrato do resultado
+            final: apelidos, avatares, pontos, posições e equipes. Ele só
+            aparece para quem recebe o link que um participante cria em
+            "Compartilhar resultado" — sem precisar de conta. O retrato não tem
+            e-mail, identificadores, definições, votos nem o código da sala, e o
+            link não é listado em lugar nenhum. Retrato e link expiram 30 dias
+            depois do fim da partida e são apagados na hora se alguém que jogou
+            a partida excluir a conta.
+          </p>
+        </section>
+
+        <section>
           <h2 className="font-display text-lg mb-1">Denúncias e moderação</h2>
           <p>
             Uma denúncia guarda o trecho ou o apelido denunciado, a sala, a
@@ -263,6 +277,10 @@ function PrivacyPage() {
               dela, depois de 30 dias sem uso.
             </li>
             <li>Salas: 30 dias depois de encerradas.</li>
+            <li>
+              Resultado da partida (e o link compartilhado): 30 dias depois do
+              fim da partida.
+            </li>
             <li>
               Denúncias: 180 dias depois de resolvidas ou descartadas; as
               pendentes, até a análise. Banimentos: sem apagamento automático.
