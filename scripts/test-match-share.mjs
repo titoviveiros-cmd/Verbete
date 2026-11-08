@@ -417,6 +417,48 @@ try {
   );
 
   await t(
+    "Nova partida na mesma sala: link NOVO para a nova; o antigo continua mostrando a anterior",
+    async () => {
+      const S = await novaSala({
+        jogadores: [
+          { nick: "Ana", score: 9, user: H },
+          { nick: "Beto", score: 3, user: C },
+        ],
+      });
+      const a = await criar(H, S);
+      // revanche: reset_room zera finished_at; a nova partida termina com outro placar
+      await db.q(
+        `UPDATE public.rooms SET status = 'lobby', finished_at = NULL WHERE id = $1`,
+        [S],
+      );
+      await db.q(
+        `UPDATE public.players SET score = CASE nickname WHEN 'Ana' THEN 1 ELSE 20 END WHERE room_id = $1`,
+        [S],
+      );
+      await db.q(
+        `UPDATE public.rooms SET status = 'finished', finished_at = now() + interval '1 minute' WHERE id = $1`,
+        [S],
+      );
+      const b = await criar(C, S);
+      ok(
+        b.ok && b.token !== a.token,
+        "a revanche reaproveitou o link da partida anterior",
+      );
+      eq((await ler(a.token)).players[0].nickname, "Ana", "link antigo mudou");
+      eq(
+        (await ler(b.token)).players[0].nickname,
+        "Beto",
+        "link novo com retrato velho",
+      );
+      eq(
+        (await criar(H, S)).token,
+        b.token,
+        "repetir na mesma partida deveria dar o mesmo link",
+      );
+    },
+  );
+
+  await t(
     "retrato congelado: mudar a sala depois não altera o link; sala APAGADA continua visível",
     async () => {
       await db.q(

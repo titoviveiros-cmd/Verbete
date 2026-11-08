@@ -8,8 +8,9 @@
 -- aleatório (122 bits, não enumerável) e validade de 30 dias.
 --   * create_match_share(room_id): só quem JOGOU a partida até o fim (players.user_id = auth.uid(), não expulso,
 --     inclusive convidado com sessão anônima) e só partida encerrada de verdade
---     (status 'finished' sem finish_reason da limpeza). Idempotente: o mesmo link
---     enquanto válido (cliques repetidos e "regerar" devolvem o mesmo token).
+--     (status 'finished' sem finish_reason da limpeza). Idempotente POR PARTIDA: o mesmo
+--     link enquanto válido; "Nova partida" na mesma sala gera outro link e o antigo
+--     continua mostrando a partida anterior.
 --   * get_match_share(token): leitura pública (anon) do retrato; token inválido,
 --     inexistente ou vencido devolvem a MESMA resposta (null) — sem oráculo.
 --   * O retrato tem apelido, avatar, cor, pontos, posição e equipe. Nunca e-mail,
@@ -22,11 +23,15 @@
 
 CREATE TABLE IF NOT EXISTS public.match_shares (
   token                text        PRIMARY KEY CHECK (token ~ '^[0-9a-f]{32}$'),
-  room_id              uuid        NOT NULL UNIQUE,   -- sem FK: o retrato sobrevive à sala apagada
+  room_id              uuid        NOT NULL,          -- sem FK: o retrato sobrevive à sala apagada
+  -- a PARTIDA: "Nova partida" na mesma sala zera e refaz rooms.finished_at
+  -- (rooms_track_finished_at), então cada partida encerrada tem o seu link
+  room_finished_at     timestamptz NOT NULL,
   snapshot             jsonb       NOT NULL,
   participant_user_ids uuid[]      NOT NULL DEFAULT ARRAY[]::uuid[],
   created_at           timestamptz NOT NULL DEFAULT now(),
-  expires_at           timestamptz NOT NULL
+  expires_at           timestamptz NOT NULL,
+  UNIQUE (room_id, room_finished_at)
 );
 CREATE INDEX IF NOT EXISTS match_shares_expires_idx ON public.match_shares (expires_at);
 CREATE INDEX IF NOT EXISTS match_shares_participants_idx ON public.match_shares USING gin (participant_user_ids);
@@ -90,6 +95,7 @@ DECLARE
   v_room  public.rooms;
   v_share public.match_shares;
   v_token text;
+  v_fin   timestamptz;
 BEGIN
   IF v_uid IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'unauthorized');
@@ -110,20 +116,21 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'reason', 'not_participant');
   END IF;
 
+  v_fin := coalesce(v_room.finished_at, '-infinity'::timestamptz);
   PERFORM pg_advisory_xact_lock(hashtextextended('match_share|' || p_room_id::text, 0));
 
-  SELECT * INTO v_share FROM public.match_shares WHERE room_id = p_room_id;
+  SELECT * INTO v_share FROM public.match_shares WHERE room_id = p_room_id AND room_finished_at = v_fin;
   IF FOUND AND v_share.expires_at > now() THEN
     RETURN jsonb_build_object('ok', true, 'token', v_share.token, 'expires_at', v_share.expires_at);
   END IF;
 
   v_token := replace(gen_random_uuid()::text, '-', '');
-  INSERT INTO public.match_shares (token, room_id, snapshot, participant_user_ids, expires_at)
-  VALUES (v_token, p_room_id, public.match_share_snapshot(p_room_id),
+  INSERT INTO public.match_shares (token, room_id, room_finished_at, snapshot, participant_user_ids, expires_at)
+  VALUES (v_token, p_room_id, v_fin, public.match_share_snapshot(p_room_id),
           coalesce((SELECT array_agg(DISTINCT user_id) FROM public.players
                      WHERE room_id = p_room_id AND user_id IS NOT NULL), ARRAY[]::uuid[]),
           now() + interval '30 days')
-  ON CONFLICT (room_id) DO UPDATE                -- o anterior venceu: link novo, retrato novo
+  ON CONFLICT (room_id, room_finished_at) DO UPDATE   -- o anterior venceu: link novo, retrato novo
      SET token = EXCLUDED.token, snapshot = EXCLUDED.snapshot,
          participant_user_ids = EXCLUDED.participant_user_ids,
          created_at = now(), expires_at = EXCLUDED.expires_at
