@@ -22,6 +22,20 @@ import {
   type DailyReview,
 } from "@/lib/daily";
 import { submitDailyAttempt } from "@/lib/daily.functions";
+import {
+  startDailyChoice,
+  submitDailyChoice,
+} from "@/lib/daily-choice.functions";
+import {
+  CHOICE_PAUSED,
+  formatOption,
+  type ChoiceResultView,
+} from "@/lib/daily-choice";
+import {
+  ChoiceResultCard,
+  DailyChoiceFlow,
+  DailyPausePanel,
+} from "@/components/daily/DailyChoice";
 import { ServerFnResponseError } from "@/lib/server-fn-transport";
 import { burst, fireworks } from "@/lib/confetti";
 import { pushAchievement } from "@/components/AchievementToaster";
@@ -59,6 +73,8 @@ function DailyPage() {
   const fromProfile = search.from === "profile";
   const { user, loading } = useAuth();
   const submit = useServerFn(submitDailyAttempt);
+  const startChoice = useServerFn(startDailyChoice);
+  const submitChoice = useServerFn(submitDailyChoice);
   // O palpite põe o nome da conta no ranking do dia: aceite antes do envio.
   const terms = useTermsGate();
 
@@ -82,6 +98,10 @@ function DailyPage() {
     timeSeconds: number;
     streak?: number;
   } | null>(null);
+  // D1: resultado do modo escolha (múltipla escolha, sem IA)
+  const [choiceResult, setChoiceResult] = useState<ChoiceResultView | null>(
+    null,
+  );
   const [nowMs, setNowMs] = useState(() => msUntilNextChallenge());
   const [startedAt] = useState(() => Date.now());
 
@@ -200,14 +220,45 @@ function DailyPage() {
   };
 
   const playedAttempt = review?.played ? review.attempt : undefined;
-  const alreadyDone = !!playedAttempt || !!result;
+  const alreadyDone = !!playedAttempt || !!result || !!choiceResult;
+  // Modo vigente (app_config.daily_mode, via get_my_daily_review). Sem a
+  // informação (servidor antigo, erro) = juiz, o fluxo de sempre.
+  const dailyMode =
+    review?.daily_mode === "escolha" || review?.daily_mode === "pausa"
+      ? review.daily_mode
+      : "juiz";
+  const choiceDone =
+    !!choiceResult || (!!playedAttempt && playedAttempt.mode === "escolha");
+
+  const reloadReview = async () => {
+    if (!user) return;
+    const [fresh, lb] = await Promise.all([
+      fetchTodayAttempt(user.id),
+      fetchDailyLeaderboard(),
+    ]);
+    setReview(fresh);
+    setBoard(lb);
+  };
+
+  const onChoiceFinished = (r: ChoiceResultView) => {
+    setChoiceResult(r);
+    if (r.is_correct) burst({ particleCount: 120, spread: 90 });
+    if ((r.current_streak ?? 0) >= 7) fireworks();
+    (r.unlocked ?? []).forEach((code) => {
+      const a = achMap.get(code);
+      if (a) pushAchievement(a);
+    });
+    void reloadReview();
+  };
 
   useEffect(() => {
+    // envio automático do tempo esgotado: só no modo juiz (texto)
+    if (dailyMode !== "juiz") return;
     if (expired && !alreadyDone && !busy && !submitError) {
       onSubmit({ auto: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expired, alreadyDone, busy, submitError]);
+  }, [expired, alreadyDone, busy, submitError, dailyMode]);
 
   const displayResult = useMemo(() => {
     if (result) return result;
@@ -282,7 +333,7 @@ function DailyPage() {
                 </span>
               )}
             </motion.div>
-            {!displayResult && (
+            {!displayResult && !choiceResult && (
               <div className="absolute -right-2 -bottom-6 lg:-right-6 lg:-bottom-8 pointer-events-none">
                 <Mascot mood="thinking" size={78} />
               </div>
@@ -290,7 +341,43 @@ function DailyPage() {
           </div>
 
           <AnimatePresence mode="wait">
-            {!alreadyDone ? (
+            {choiceDone ? (
+              <ChoiceResultCard
+                key="choice-result"
+                correct={
+                  choiceResult
+                    ? !!choiceResult.is_correct
+                    : !!playedAttempt?.is_correct
+                }
+                score={
+                  choiceResult
+                    ? (choiceResult.score ?? 0)
+                    : (playedAttempt?.score ?? 0)
+                }
+                truth={choiceResult?.truth ?? formatOption(review?.truth ?? "")}
+                chosen={choiceResult?.chosen ?? playedAttempt?.guess ?? ""}
+                streak={choiceResult?.current_streak}
+              />
+            ) : !alreadyDone && dailyMode === "escolha" ? (
+              <motion.div
+                key="choice"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <DailyChoiceFlow
+                  start={() => startChoice()}
+                  submit={(pos) => submitChoice({ data: { pos } })}
+                  confirmTerms={() => terms.confirm()}
+                  assertTerms={assertTermsAccepted}
+                  consent={<TermsConsent gate={terms} />}
+                  onFinished={onChoiceFinished}
+                  onReload={() => void reloadReview()}
+                />
+              </motion.div>
+            ) : !alreadyDone && dailyMode === "pausa" ? (
+              <DailyPausePanel key="pause" message={CHOICE_PAUSED} />
+            ) : !alreadyDone ? (
               <motion.div
                 key="form"
                 initial={{ y: 20, opacity: 0 }}

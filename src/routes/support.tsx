@@ -46,7 +46,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "O que é o Desafio Diário?",
-    a: `Uma palavra rara para você adivinhar o significado. Vale um palpite por hora; a inteligência artificial (${AI_PROVIDER.name}) avalia o quanto o palpite chegou perto. Não escreva dados pessoais no palpite — veja na Política de Privacidade como esse texto é tratado.`,
+    a: `Uma palavra rara para você descobrir o significado — vale uma tentativa por hora. No modo de múltipla escolha, você escolhe a definição correta entre quatro, e quanto mais rápido acertar, mais pontos. No modo de escrita, você escreve sua definição e a inteligência artificial (${AI_PROVIDER.name}) avalia o quanto ela chegou perto: não escreva dados pessoais no palpite — veja na Política de Privacidade como esse texto é tratado.`,
   },
   {
     q: "Encontrei uma definição ofensiva. O que faço?",

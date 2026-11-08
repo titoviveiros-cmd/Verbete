@@ -35,9 +35,13 @@ export type DailyReview = {
     time_seconds: number;
     similarity: number;
     challenge_hour: string;
+    /** D1: 'juiz' (texto) ou 'escolha' (múltipla escolha) */
+    mode?: string;
   };
   truth?: string;
   word?: string;
+  /** D1: modo vigente do Diário (app_config.daily_mode) */
+  daily_mode?: string;
 };
 
 export async function fetchTodayAttempt(
