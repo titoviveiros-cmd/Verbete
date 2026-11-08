@@ -42,7 +42,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Como funciona a pontuação?",
-    a: "Você ganha pontos votando na definição verdadeira e a cada jogador que cai na definição que você inventou. Uma inventada que chega muito perto da verdadeira ganha o bônus 🧠.",
+    a: "Você ganha pontos votando na definição verdadeira e a cada jogador que cai na definição que você inventou. Quando a avaliação automática de proximidade está ativa, uma inventada que chega muito perto da verdadeira ganha o bônus 🧠.",
   },
   {
     q: "O que é o Desafio Diário?",

@@ -9,6 +9,7 @@ const SUITES = [
   "ci-deno-check.mjs",
   "test-identity.mjs",
   "test-e2e-round.mjs",
+  "test-match-sem-ia.mjs", // partida completa com ai_mode=suspenso, sem edges servidas (08/11/2026)
   "test-security-rest.mjs",
   "test-shuffling-deadlock.mjs",
   "test-similarity-bonus.mjs",
