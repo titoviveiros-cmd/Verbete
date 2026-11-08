@@ -261,6 +261,10 @@ AS $$
   SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())
 $$;
 
+-- A política vigente é "public read daily_challenges" USING (true) (20260520100117; a antiga
+-- "past read" foi removida em 20260520004732). Políticas de SELECT se SOMAM: é preciso trocar
+-- a liberal, não só criar outra.
+DROP POLICY IF EXISTS "public read daily_challenges" ON public.daily_challenges;
 DROP POLICY IF EXISTS "daily_challenges past read" ON public.daily_challenges;
 CREATE POLICY "daily_challenges past read" ON public.daily_challenges
   FOR SELECT TO anon, authenticated USING (challenge_hour < date_trunc('hour', now()));

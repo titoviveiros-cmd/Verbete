@@ -129,10 +129,10 @@ if (!modePg) {
     CREATE FUNCTION public.writing_phase_secs(p integer) RETURNS integer LANGUAGE sql IMMUTABLE AS $$ SELECT p + 10 $$;
     CREATE TABLE public.daily_challenges (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), challenge_date date,
       challenge_hour timestamptz NOT NULL UNIQUE, word_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
-    -- como em produção (20260519024409 + baseline de grants): leitura até a hora corrente
+    -- como em produção (20260520100117 + baseline de grants): leitura de TODAS as linhas
     ALTER TABLE public.daily_challenges ENABLE ROW LEVEL SECURITY;
     GRANT SELECT ON public.daily_challenges TO anon, authenticated;
-    CREATE POLICY "daily_challenges past read" ON public.daily_challenges FOR SELECT TO anon, authenticated USING (challenge_hour <= now());
+    CREATE POLICY "public read daily_challenges" ON public.daily_challenges FOR SELECT USING (true);
     CREATE TABLE public.daily_attempts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL,
       challenge_date date, challenge_hour timestamptz NOT NULL, guess text NOT NULL, is_correct boolean NOT NULL DEFAULT false,
       score integer NOT NULL DEFAULT 0, time_seconds integer NOT NULL DEFAULT 0, similarity integer NOT NULL DEFAULT 0,
@@ -527,6 +527,8 @@ try {
     eq([ch.word.id, ch.word.word, ch.word.category], [null, "?", null]);
     const lido = await comoUsuario(randomUUID(), `SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())`);
     eq(lido, [], "authenticated leu a palavra da hora corrente em daily_challenges");
+    const pols = await db.q(`SELECT policyname, cmd FROM pg_policies WHERE schemaname = 'public' AND tablename = 'daily_challenges' AND cmd IN ('SELECT', 'ALL') ORDER BY 1`);
+    eq(pols, [{ policyname: "daily_challenges past read", cmd: "SELECT" }], "outra política de leitura somaria acesso");
     await db.q(`INSERT INTO public.daily_challenges (challenge_date, challenge_hour, word_id) VALUES (($1::timestamptz - interval '5000 hours')::date, $1::timestamptz - interval '5000 hours', $2)`, [HORA, W3.id]);
     const passado = await comoUsuario(randomUUID(), `SELECT count(*)::int AS n FROM public.daily_challenges WHERE challenge_hour < date_trunc('hour', now())`);
     ok(passado[0].n >= 1, "horas encerradas deixaram de ser legíveis");

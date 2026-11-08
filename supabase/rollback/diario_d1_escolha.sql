@@ -198,8 +198,8 @@ AS $function$
 $function$;
 
 DROP POLICY IF EXISTS "daily_challenges past read" ON public.daily_challenges;
-CREATE POLICY "daily_challenges past read" ON public.daily_challenges
-  FOR SELECT TO anon, authenticated USING (challenge_hour <= now());
+CREATE POLICY "public read daily_challenges" ON public.daily_challenges
+  FOR SELECT USING (true);  -- política anterior (20260520100117)
 DROP FUNCTION IF EXISTS public.daily_current_word_id();
 
 DROP FUNCTION IF EXISTS public.daily_mode();
