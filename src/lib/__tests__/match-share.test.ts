@@ -1,19 +1,23 @@
 // Resultado compartilhado: link do RESULTADO (não da Home), retrato saneado,
-// desfechos do botão distintos e reaproveitamento do link.
+// campeões/empate do SERVIDOR, desfechos do botão distintos e link preparado.
 import { describe, expect, it, vi } from "vitest";
 import {
   MATCH_SHARE_TOKEN_RE,
   SHARE_LINK_FAILED,
+  joinNames,
   matchShareUrl,
+  prepareFromCreate,
   sanitizeMatchShare,
   shareMatchResult,
   shareResultNote,
+  shareTextFromChampions,
   shareTokenFromSearch,
-  shareUrlFromCreate,
+  type PreparedShare,
 } from "../match-share";
 import { APP_URL, CANONICAL_APP_URL } from "../app-url";
 
 const TOKEN = "0123456789abcdef0123456789abcdef";
+const ZE = { name: "Zé", emoji: "🐸", score: 15 };
 
 describe("link público do resultado", () => {
   it("é específico da partida e usa o domínio canônico (nunca a Home, localhost ou URL de versão)", () => {
@@ -44,21 +48,57 @@ describe("link público do resultado", () => {
     expect(shareTokenFromSearch("?join=1234")).toBeNull();
     expect(shareTokenFromSearch("")).toBeNull();
   });
-  it("resposta do servidor → URL só com ok:true e token válido", () => {
-    expect(shareUrlFromCreate({ ok: true, token: TOKEN })).toBe(
-      matchShareUrl(TOKEN),
+});
+
+describe("texto do compartilhamento: SÓ com o que o servidor decidiu (Red Team B)", () => {
+  it("campeão único, empate e sem dados", () => {
+    expect(shareTextFromChampions([ZE])).toBe(
+      "🏆 Zé venceu no Verbete com 15 pts! Veja o resultado da partida:",
     );
+    expect(shareTextFromChampions([{ ...ZE, name: "Bia" }, ZE])).toBe(
+      "🤝 Bia e Zé empataram no Verbete com 15 pts! Veja o resultado da partida:",
+    );
+    expect(shareTextFromChampions([])).toBe(
+      "🏆 Veja o resultado da partida no Verbete:",
+    );
+    expect(joinNames(["Ana", "Bia", "Zé"])).toBe("Ana, Bia e Zé");
+  });
+  it("resposta do servidor → link pronto com o texto; motivos com mensagem própria (Red Team E)", () => {
     expect(
-      shareUrlFromCreate({ ok: false, reason: "not_participant" }),
-    ).toBeNull();
-    expect(shareUrlFromCreate({ ok: true, token: "x" })).toBeNull();
-    expect(shareUrlFromCreate(null)).toBeNull();
+      prepareFromCreate({ ok: true, token: TOKEN, champions: [ZE] }),
+    ).toEqual({
+      ok: true,
+      url: matchShareUrl(TOKEN),
+      text: "🏆 Zé venceu no Verbete com 15 pts! Veja o resultado da partida:",
+    });
+    expect(prepareFromCreate({ ok: false, reason: "not_shareable" })).toEqual({
+      ok: false,
+      retry: false,
+      note: "Esta partida foi encerrada automaticamente — não há resultado para compartilhar.",
+    });
+    expect(
+      prepareFromCreate({ ok: false, reason: "not_participant" }),
+    ).toMatchObject({ ok: false, retry: false });
+    expect(prepareFromCreate({ ok: false, reason: "expired" })).toMatchObject({
+      ok: false,
+      retry: false,
+    });
+    expect(prepareFromCreate({ ok: true, token: "x" })).toEqual({
+      ok: false,
+      retry: true,
+      note: SHARE_LINK_FAILED,
+    });
+    expect(prepareFromCreate(null)).toEqual({
+      ok: false,
+      retry: true,
+      note: SHARE_LINK_FAILED,
+    });
   });
 });
 
 describe("retrato saneado (lista fechada de campos)", () => {
   const RAW = {
-    v: 1,
+    v: 2,
     mode: "solo",
     rounds: 3,
     finished_at: "2026-11-08T19:00:00Z",
@@ -86,16 +126,13 @@ describe("retrato saneado (lista fechada de campos)", () => {
       },
     ],
     teams: [],
+    champions: [{ name: "Zé", emoji: "🐸", score: 15, user_id: "u-1" }],
     room_code: "1234",
   };
   it("só os campos previstos; nada de e-mail, user_id ou código", () => {
     const s = sanitizeMatchShare(RAW)!;
-    expect(s.champion).toEqual({
-      name: "Zé",
-      emoji: "🐸",
-      score: 15,
-      kind: "player",
-    });
+    expect(s.champions).toEqual([ZE]);
+    expect(s.tie).toBe(false);
     expect(Object.keys(s.players[0]!).sort()).toEqual([
       "avatar",
       "bot",
@@ -105,10 +142,19 @@ describe("retrato saneado (lista fechada de campos)", () => {
       "score",
       "team",
     ]);
-    const json = JSON.stringify(s);
-    expect(json).not.toMatch(/user_id|email|x@y\.z|room_code|1234/);
+    expect(JSON.stringify(s)).not.toMatch(
+      /user_id|email|x@y\.z|room_code|1234/,
+    );
   });
-  it("equipes: campeã é a equipe", () => {
+  it("empate: todos os campeões do servidor", () => {
+    const s = sanitizeMatchShare({
+      ...RAW,
+      champions: [{ name: "Bia", emoji: "🦊", score: 15 }, ZE],
+    })!;
+    expect(s.tie).toBe(true);
+    expect(s.champions.map((c) => c.name)).toEqual(["Bia", "Zé"]);
+  });
+  it("equipes", () => {
     const s = sanitizeMatchShare({
       ...RAW,
       mode: "teams",
@@ -130,14 +176,10 @@ describe("retrato saneado (lista fechada de campos)", () => {
           members: 2,
         },
       ],
+      champions: [{ name: "Corujas", emoji: "🦉", score: 13 }],
     })!;
     expect(s.mode).toBe("teams");
-    expect(s.champion).toEqual({
-      name: "Corujas",
-      emoji: "🦉",
-      score: 13,
-      kind: "team",
-    });
+    expect(s.champions).toEqual([{ name: "Corujas", emoji: "🦉", score: 13 }]);
   });
   it("vazio/inválido = indisponível", () => {
     expect(sanitizeMatchShare(null)).toBeNull();
@@ -147,24 +189,24 @@ describe("retrato saneado (lista fechada de campos)", () => {
 });
 
 describe("botão Compartilhar resultado", () => {
-  const base = () => ({
-    cachedUrl: null as string | null,
-    createShare: vi.fn(async () => ({ ok: true, token: TOKEN })),
-    share: vi.fn(async () => "shared" as const),
-    champion: "Zé",
-    points: 15,
-  });
-  it("envia o link DO RESULTADO com o texto do campeão", async () => {
-    const d = base();
-    const r = await shareMatchResult(d);
-    expect(d.share).toHaveBeenCalledWith({
+  const PRONTO: PreparedShare = {
+    ok: true,
+    url: matchShareUrl(TOKEN),
+    text: shareTextFromChampions([ZE]),
+  };
+  it("link já preparado: compartilha SEM chamar o servidor antes (gesto do Safari/iOS — Red Team D)", async () => {
+    const createShare = vi.fn();
+    const share = vi.fn(async () => "shared" as const);
+    const r = await shareMatchResult({ prepared: PRONTO, createShare, share });
+    expect(createShare).not.toHaveBeenCalled();
+    expect(share).toHaveBeenCalledWith({
       title: "Resultado no Verbete",
-      text: "🏆 Zé venceu no Verbete com 15 pts! Veja o resultado da partida:",
-      url: matchShareUrl(TOKEN),
+      text: PRONTO.text,
+      url: PRONTO.url,
     });
     expect(r).toEqual({
       kind: "shared",
-      url: matchShareUrl(TOKEN),
+      url: PRONTO.url,
       note: "Resultado compartilhado! ✅",
     });
   });
@@ -180,26 +222,46 @@ describe("botão Compartilhar resultado", () => {
   ] as const)("desfecho %s é distinto", (outcome, kind, note) => {
     expect(shareResultNote(outcome, "u")).toEqual({ kind, url: "u", note });
   });
-  it("cliques repetidos reaproveitam o link (não pedem outro)", async () => {
-    const d = { ...base(), cachedUrl: matchShareUrl(TOKEN) };
-    await shareMatchResult(d);
-    expect(d.createShare).not.toHaveBeenCalled();
+  it("sem link preparado (ou falha temporária): prepara no clique e guarda", async () => {
+    const onPrepared = vi.fn();
+    const share = vi.fn(async () => "copied" as const);
+    const r = await shareMatchResult({
+      prepared: { ok: false, retry: true, note: SHARE_LINK_FAILED },
+      createShare: async () => ({ ok: true, token: TOKEN, champions: [ZE] }),
+      share,
+      onPrepared,
+    });
+    expect(onPrepared).toHaveBeenCalledWith(PRONTO);
+    expect(r.kind).toBe("copied");
   });
-  it("servidor recusou ou caiu: NÃO compartilha a Home; mensagem de falha do link", async () => {
-    for (const createShare of [
-      vi.fn(async () => ({ ok: false, reason: "not_participant" })),
-      vi.fn(async () => {
+  it("recusa definitiva (limpeza, não jogou): não insiste no servidor e NÃO compartilha a Home", async () => {
+    const createShare = vi.fn();
+    const share = vi.fn();
+    const note =
+      "Só quem jogou esta partida até o fim pode compartilhar o resultado.";
+    const r = await shareMatchResult({
+      prepared: { ok: false, retry: false, note },
+      createShare,
+      share,
+    });
+    expect(r).toEqual({ kind: "link_failed", url: null, note });
+    expect(createShare).not.toHaveBeenCalled();
+    expect(share).not.toHaveBeenCalled();
+  });
+  it("servidor caiu: mensagem de falha do link, sem compartilhar", async () => {
+    const share = vi.fn();
+    const r = await shareMatchResult({
+      prepared: null,
+      createShare: async () => {
         throw new Error("rede");
-      }),
-    ]) {
-      const d = { ...base(), createShare };
-      const r = await shareMatchResult(d);
-      expect(r).toEqual({
-        kind: "link_failed",
-        url: null,
-        note: SHARE_LINK_FAILED,
-      });
-      expect(d.share).not.toHaveBeenCalled();
-    }
+      },
+      share,
+    });
+    expect(r).toEqual({
+      kind: "link_failed",
+      url: null,
+      note: SHARE_LINK_FAILED,
+    });
+    expect(share).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import { Mascot } from "@/components/Mascot";
 import { APP_URL } from "@/lib/app-url";
 import {
   MATCH_SHARE_TOKEN_RE,
+  joinNames,
   sanitizeMatchShare,
   type MatchShare,
   type SharedPlayer,
@@ -156,20 +157,23 @@ function SharedResultPage() {
                 ? ` · ${d.rounds} ${d.rounds === 1 ? "rodada" : "rodadas"}`
                 : ""}
             </p>
-            {d.champion && (
+            {d.champions.length > 0 && (
               <h1 className="font-display text-[34px] lg:text-[44px] leading-tight mt-1">
-                {d.champion.kind === "team" && d.champion.emoji ? (
-                  <span className="mr-1">{d.champion.emoji}</span>
+                {d.mode === "teams" && !d.tie && d.champions[0]!.emoji ? (
+                  <span className="mr-1">{d.champions[0]!.emoji}</span>
                 ) : null}
                 <span className="text-gold-grad">
-                  {d.champion.name} venceu!
+                  {d.tie
+                    ? `Empate! ${joinNames(d.champions.map((c) => c.name))}`
+                    : `${d.champions[0]!.name} venceu!`}
                 </span>
               </h1>
             )}
-            {d.champion && (
+            {d.champions.length > 0 && (
               <p className="text-sm text-muted-foreground">
-                {d.champion.score} pts
-                {d.champion.kind === "team" ? " somando a equipe" : ""}
+                {d.champions[0]!.score} pts
+                {d.mode === "teams" ? " somando a equipe" : ""}
+                {d.tie ? " cada" : ""}
               </p>
             )}
           </motion.div>

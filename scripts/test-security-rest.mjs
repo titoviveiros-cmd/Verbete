@@ -511,7 +511,8 @@ const DENY = [
   "daily_choice_admin_list", "daily_choice_admin_get", "daily_choice_admin_pool", "daily_choice_admin_add_drafts",
   "daily_choice_admin_edit", "daily_choice_admin_review", "daily_choice_cleanup",
   // resultado compartilhado (09/11/2026): retrato e limpeza são internos
-  "match_share_snapshot", "match_shares_forget_user", "match_shares_cleanup",
+  "match_share_snapshot", "match_share_participants", "match_share_store", "match_share_on_finish",
+  "match_shares_forget_user", "match_shares_cleanup",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",

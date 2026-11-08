@@ -19,7 +19,12 @@ import { pushAchievement } from "@/components/AchievementToaster";
 import { hapticBigWin, hapticSuccess } from "@/lib/sound";
 import { RING_GUTTER, scrollbarClip } from "@/lib/utils";
 import { shareInvite } from "@/lib/share";
-import { shareMatchResult, type ShareResultState } from "@/lib/match-share";
+import {
+  prepareMatchShare,
+  shareMatchResult,
+  type PreparedShare,
+  type ShareResultState,
+} from "@/lib/match-share";
 
 export function Finished({
   room,
@@ -163,35 +168,42 @@ export function Finished({
 
   // Compartilhar o resultado (pódio digno de print): texto do campeão + link
   // público DESTE resultado — o mesmo helper do convite do Lobby.
-  // Link do RESULTADO desta partida (antes ia para a Home): o servidor monta o
-  // retrato e devolve um token; cliques repetidos reaproveitam o mesmo link.
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  // Link do RESULTADO desta partida (antes ia para a Home). O retrato foi
+  // congelado pelo servidor no fim da partida; aqui só pegamos o link pronto —
+  // já ao abrir a tela, para o toque compartilhar sem esperar a rede (o
+  // Safari/iOS exige o gesto). Cliques repetidos usam o mesmo link.
+  const [prepared, setPrepared] = useState<PreparedShare | null>(null);
   const [shareState, setShareState] = useState<ShareResultState | null>(null);
   const [sharing, setSharing] = useState(false);
+  const createShare = async () => {
+    const { supabase } = await import("@/integrations/supabase/client");
+    const { data, error } = await supabase.rpc("create_match_share", {
+      p_room_id: roomId,
+    });
+    if (error) throw error;
+    return data;
+  };
+  useEffect(() => {
+    let vivo = true;
+    void prepareMatchShare(createShare).then((p) => {
+      if (vivo) setPrepared((cur) => cur ?? p);
+    });
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
   const handleShareResult = async () => {
     if (sharing) return;
     setSharing(true);
     try {
-      const champion = teamWinner
-        ? teamWinner.name
-        : (winner?.nickname ?? "Alguém");
-      const pts = teamWinner ? teamWinner.score : (winner?.score ?? 0);
       const st = await shareMatchResult({
-        cachedUrl: shareUrl,
-        createShare: async () => {
-          const { supabase } = await import("@/integrations/supabase/client");
-          const { data, error } = await supabase.rpc("create_match_share", {
-            p_room_id: roomId,
-          });
-          if (error) throw error;
-          return data;
-        },
+        prepared,
+        createShare,
+        onPrepared: setPrepared,
         share: (o) =>
           shareInvite({ ...o, dialogTitle: "Compartilhar resultado" }),
-        champion,
-        points: pts,
       });
-      if (st.url) setShareUrl(st.url);
       setShareState(st);
       if (
         st.kind === "copied" ||

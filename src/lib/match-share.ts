@@ -53,12 +53,9 @@ export type MatchShare = {
   expiresAt: string | null;
   players: SharedPlayer[];
   teams: SharedTeam[];
-  champion: {
-    name: string;
-    emoji: string;
-    score: number;
-    kind: "player" | "team";
-  } | null;
+  /** campeões do servidor; empate = todos */
+  champions: Champion[];
+  tie: boolean;
 };
 
 const str = (v: unknown, max = 40) =>
@@ -67,6 +64,28 @@ const int = (v: unknown) =>
   Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0;
 const date = (v: unknown) =>
   typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null;
+
+export type Champion = { name: string; emoji: string; score: number };
+
+/** Campeões decididos pelo SERVIDOR (empate = todos), lista fechada de campos. */
+export function sanitizeChampions(v: unknown): Champion[] {
+  return (Array.isArray(v) ? v : [])
+    .map((x) => {
+      const c = (x ?? {}) as Record<string, unknown>;
+      return {
+        name: str(c.name, 40),
+        emoji: str(c.emoji, 16),
+        score: int(c.score),
+      };
+    })
+    .filter((c) => c.name.length > 0);
+}
+
+/** "Zé" · "Bia e Zé" · "Ana, Bia e Zé" */
+export function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`;
+}
 
 export function sanitizeMatchShare(raw: unknown): MatchShare | null {
   if (!raw || typeof raw !== "object") return null;
@@ -100,7 +119,21 @@ export function sanitizeMatchShare(raw: unknown): MatchShare | null {
   );
   if (players.length === 0) return null;
   const mode = r.mode === "teams" && teams.length > 0 ? "teams" : "solo";
-  const top = mode === "teams" ? teams[0] : players[0];
+  let champions = sanitizeChampions(r.champions);
+  if (champions.length === 0)
+    // retrato sem a lista: os 1º lugares do próprio retrato (também do servidor)
+    champions =
+      mode === "teams"
+        ? teams
+            .filter((t) => t.rank === 1)
+            .map((t) => ({ name: t.name, emoji: t.emoji, score: t.score }))
+        : players
+            .filter((p) => p.rank === 1)
+            .map((p) => ({
+              name: p.nickname,
+              emoji: p.avatar,
+              score: p.score,
+            }));
   return {
     mode,
     rounds: Math.max(0, int(r.rounds)),
@@ -108,29 +141,27 @@ export function sanitizeMatchShare(raw: unknown): MatchShare | null {
     expiresAt: date(r.expires_at),
     players,
     teams: mode === "teams" ? teams : [],
-    champion: top
-      ? mode === "teams"
-        ? {
-            name: (top as SharedTeam).name,
-            emoji: (top as SharedTeam).emoji,
-            score: top.score,
-            kind: "team",
-          }
-        : {
-            name: (top as SharedPlayer).nickname,
-            emoji: (top as SharedPlayer).avatar,
-            score: top.score,
-            kind: "player",
-          }
-      : null,
+    champions,
+    tie: champions.length > 1,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Botão: cria (ou reaproveita) o link e chama o compartilhamento
+// Botão: link preparado ao abrir a tela final; o clique só compartilha
 // ---------------------------------------------------------------------------
 export const SHARE_LINK_FAILED =
   "Não foi possível gerar o link do resultado agora — tente de novo em instantes.";
+const REASON_NOTE: Record<string, string> = {
+  not_shareable:
+    "Esta partida foi encerrada automaticamente — não há resultado para compartilhar.",
+  not_participant:
+    "Só quem jogou esta partida até o fim pode compartilhar o resultado.",
+  expired: "O link deste resultado já expirou.",
+};
+
+export type PreparedShare =
+  | { ok: true; url: string; text: string }
+  | { ok: false; note: string; retry: boolean };
 
 export type ShareResultState =
   | { kind: "shared"; url: string; note: string }
@@ -159,43 +190,71 @@ export function shareResultNote(
   }
 }
 
-/** Resposta de create_match_share → URL pública, ou null (sem link). */
-export function shareUrlFromCreate(raw: unknown): string | null {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  if (
-    r.ok !== true ||
-    typeof r.token !== "string" ||
-    !MATCH_SHARE_TOKEN_RE.test(r.token)
-  )
-    return null;
-  return matchShareUrl(r.token);
+/** Texto do compartilhamento SÓ com o que o servidor decidiu (empate incluso). */
+export function shareTextFromChampions(champions: Champion[]): string {
+  if (champions.length === 0)
+    return "🏆 Veja o resultado da partida no Verbete:";
+  const pts = champions[0]!.score;
+  const quem = joinNames(champions.map((c) => c.name));
+  return champions.length > 1
+    ? `🤝 ${quem} empataram no Verbete com ${pts} pts! Veja o resultado da partida:`
+    : `🏆 ${quem} venceu no Verbete com ${pts} pts! Veja o resultado da partida:`;
 }
 
+/** Resposta de create_match_share → link pronto (URL + texto do servidor) ou o motivo. */
+export function prepareFromCreate(raw: unknown): PreparedShare {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  if (
+    r.ok === true &&
+    typeof r.token === "string" &&
+    MATCH_SHARE_TOKEN_RE.test(r.token)
+  )
+    return {
+      ok: true,
+      url: matchShareUrl(r.token),
+      text: shareTextFromChampions(sanitizeChampions(r.champions)),
+    };
+  const reason = typeof r.reason === "string" ? r.reason : "";
+  const note = REASON_NOTE[reason];
+  return note
+    ? { ok: false, note, retry: false }
+    : { ok: false, note: SHARE_LINK_FAILED, retry: true };
+}
+
+export async function prepareMatchShare(
+  createShare: () => Promise<unknown>,
+): Promise<PreparedShare> {
+  try {
+    return prepareFromCreate(await createShare());
+  } catch {
+    return { ok: false, note: SHARE_LINK_FAILED, retry: true };
+  }
+}
+
+/**
+ * Clique: com o link já preparado, chama o compartilhamento SEM esperar a rede
+ * antes (o Safari/iOS exige o gesto do toque). Sem link preparado, prepara agora.
+ */
 export async function shareMatchResult(deps: {
-  /** URL já gerada nesta tela (cliques repetidos não pedem outro link) */
-  cachedUrl: string | null;
+  prepared: PreparedShare | null;
   createShare: () => Promise<unknown>;
   share: (opts: {
     title: string;
     text: string;
     url: string;
   }) => Promise<ShareOutcome>;
-  champion: string;
-  points: number;
+  onPrepared?: (p: PreparedShare) => void;
 }): Promise<ShareResultState> {
-  let url = deps.cachedUrl;
-  if (!url) {
-    try {
-      url = shareUrlFromCreate(await deps.createShare());
-    } catch {
-      url = null;
-    }
+  let p = deps.prepared;
+  if (!p || (!p.ok && p.retry)) {
+    p = await prepareMatchShare(deps.createShare);
+    deps.onPrepared?.(p);
   }
-  if (!url) return { kind: "link_failed", url: null, note: SHARE_LINK_FAILED };
+  if (!p.ok) return { kind: "link_failed", url: null, note: p.note };
   const outcome = await deps.share({
     title: "Resultado no Verbete",
-    text: `🏆 ${deps.champion} venceu no Verbete com ${deps.points} pts! Veja o resultado da partida:`,
-    url,
+    text: p.text,
+    url: p.url,
   });
-  return shareResultNote(outcome, url);
+  return shareResultNote(outcome, p.url);
 }

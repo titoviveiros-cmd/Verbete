@@ -242,13 +242,14 @@ function PrivacyPage() {
         <section>
           <h2 className="font-display text-lg mb-1">Resultado compartilhado</h2>
           <p>
-            No fim de uma partida, quem jogou pode tocar em "Compartilhar
-            resultado". O servidor cria um link com o resultado final: apelidos,
-            avatares, pontos, posições e equipes. Quem tiver o link vê esse
-            resultado sem precisar de conta. O link não mostra e-mail,
-            identificadores, definições, votos nem o código da sala, e não é
-            listado em lugar nenhum. Ele expira 30 dias depois de criado e é
-            apagado na hora se alguém que jogou a partida excluir a conta.
+            No fim de cada partida, o servidor guarda um retrato do resultado
+            final: apelidos, avatares, pontos, posições e equipes. Ele só
+            aparece para quem recebe o link que um participante cria em
+            "Compartilhar resultado" — sem precisar de conta. O retrato não tem
+            e-mail, identificadores, definições, votos nem o código da sala, e o
+            link não é listado em lugar nenhum. Retrato e link expiram 30 dias
+            depois do fim da partida e são apagados na hora se alguém que jogou
+            a partida excluir a conta.
           </p>
         </section>
 
@@ -276,7 +277,10 @@ function PrivacyPage() {
               dela, depois de 30 dias sem uso.
             </li>
             <li>Salas: 30 dias depois de encerradas.</li>
-            <li>Resultado compartilhado: 30 dias depois de criado o link.</li>
+            <li>
+              Resultado da partida (e o link compartilhado): 30 dias depois do
+              fim da partida.
+            </li>
             <li>
               Denúncias: 180 dias depois de resolvidas ou descartadas; as
               pendentes, até a análise. Banimentos: sem apagamento automático.

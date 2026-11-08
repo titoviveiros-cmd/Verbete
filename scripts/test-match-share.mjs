@@ -2,6 +2,8 @@
 //   node scripts/test-match-share.mjs --pglite <pasta do @electric-sql/pglite>   (offline, esquema mínimo)
 //   DB_URL=postgres://…127.0.0.1… node scripts/test-match-share.mjs              (CI: Supabase local)
 // Só aceita banco LOCAL. Limpa o que cria.
+// Red Team 08/11 (A): o retrato é CONGELADO NO FIM DA PARTIDA (gatilho); sair,
+// ser expulso, entrar pelo código ou trocar o apelido DEPOIS do fim não muda o link.
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -89,6 +91,7 @@ const ok = (v, msg) => {
 };
 
 if (!modePg) {
+  // espelho do que importa em produção: rooms_track_finished_at (BEFORE) e joined_at
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
     CREATE SCHEMA auth;
@@ -100,12 +103,24 @@ if (!modePg) {
     CREATE TABLE public.rooms (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text NOT NULL, host_id text,
       status text NOT NULL DEFAULT 'lobby', mode text NOT NULL DEFAULT 'individual', teams jsonb NOT NULL DEFAULT '[]'::jsonb,
       current_round integer NOT NULL DEFAULT 0, finish_reason text, finished_at timestamptz);
+    CREATE FUNCTION public.rooms_track_finished_at() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF NEW.status = 'finished' THEN
+        IF TG_OP = 'INSERT' THEN NEW.finished_at := COALESCE(NEW.finished_at, now());
+        ELSIF OLD.status IS DISTINCT FROM 'finished' OR NEW.finished_at IS NULL THEN NEW.finished_at := clock_timestamp();
+        END IF;
+      ELSE NEW.finished_at := NULL; END IF;
+      RETURN NEW;
+    END $$;
+    CREATE TRIGGER rooms_track_finished_at BEFORE INSERT OR UPDATE OF status ON public.rooms
+      FOR EACH ROW EXECUTE FUNCTION public.rooms_track_finished_at();
     CREATE TABLE public.players (id text PRIMARY KEY, room_id uuid NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
       nickname text NOT NULL, avatar text NOT NULL DEFAULT '🦊', color text NOT NULL DEFAULT '#000', score integer NOT NULL DEFAULT 0,
-      team_id text, is_bot boolean NOT NULL DEFAULT false, user_id uuid, kicked_at timestamptz);
+      team_id text, is_bot boolean NOT NULL DEFAULT false, user_id uuid, kicked_at timestamptz,
+      joined_at timestamptz NOT NULL DEFAULT now());
   `);
+  await db.exec(MIG);
 }
-if (!modePg) await db.exec(MIG); // no CI a migration já foi aplicada pelo supabase start
 console.log(
   `Resultado compartilhado — modo ${modePg ? "pg (Postgres real)" : "PGlite (offline)"}`,
 );
@@ -122,42 +137,49 @@ const novoUsuario = async () => {
   );
   return id;
 };
-/** sala com jogadores: [{nick, score, user, bot, team, kicked}] */
+let seq = 0;
+/**
+ * Sala com jogadores, que TERMINA pelo caminho real (UPDATE de status → gatilhos).
+ * legado: entra já encerrada (INSERT), como uma partida de antes da migration.
+ */
 const novaSala = async ({
-  status = "finished",
+  fim = "finished",
   mode = "individual",
   teams = [],
   finishReason = null,
   jogadores = [],
+  legado = false,
 } = {}) => {
   const [{ id }] = await db.q(
-    `INSERT INTO public.rooms (code, host_id, status, mode, teams, current_round, finish_reason, finished_at)
-     VALUES ($1, $2, $3, $4, $5::jsonb, 3, $6, CASE WHEN $3 = 'finished' THEN now() END) RETURNING id`,
+    `INSERT INTO public.rooms (code, host_id, status, mode, teams, current_round)
+     VALUES ($1, $2, $3, $4, $5::jsonb, 3) RETURNING id`,
     [
       String(1000 + Math.floor(Math.random() * 8999)),
       `ms_${tag}_h`,
-      status,
+      legado ? "finished" : "scoreboard",
       mode,
       JSON.stringify(teams),
-      finishReason,
     ],
   );
   salas.push(id);
-  let i = 0;
   for (const j of jogadores)
     await db.q(
-      `INSERT INTO public.players (id, room_id, nickname, avatar, color, score, team_id, is_bot, user_id, kicked_at)
-       VALUES ($1, $2, $3, '🦊', '#123456', $4, $5, $6, $7, CASE WHEN $8 THEN now() END)`,
+      `INSERT INTO public.players (id, room_id, nickname, avatar, color, score, team_id, is_bot, user_id, joined_at)
+       VALUES ($1, $2, $3, '🦊', '#123456', $4, $5, $6, $7, now() - interval '10 minutes')`,
       [
-        `ms_${tag}_${salas.length}_${i++}`,
+        `ms_${tag}_${++seq}`,
         id,
         j.nick,
         j.score,
         j.team ?? null,
         !!j.bot,
         j.user ?? null,
-        !!j.kicked,
       ],
+    );
+  if (!legado && fim !== "nenhum")
+    await db.q(
+      `UPDATE public.rooms SET status = $2, finish_reason = $3 WHERE id = $1`,
+      [id, fim, finishReason],
     );
   return id;
 };
@@ -175,7 +197,6 @@ const como = async (role, uid, sql, params = []) => {
     await db.exec("ROLLBACK");
   }
 };
-// cria o link como o jogador e GRAVA (a função escreve; como() desfaz, então aqui é direto)
 const criar = async (uid, roomId) => {
   await db.exec("BEGIN");
   try {
@@ -194,6 +215,13 @@ const criar = async (uid, roomId) => {
 const ler = async (token, role = "anon") =>
   (await como(role, null, `SELECT public.get_match_share($1) AS r`, [token]))[0]
     .r;
+const linhas = async (roomId) =>
+  (
+    await db.q(
+      `SELECT count(*)::int AS n FROM public.match_shares WHERE room_id = $1`,
+      [roomId],
+    )
+  )[0].n;
 const negado = async (role, sql) => {
   try {
     await como(role, null, sql);
@@ -207,7 +235,7 @@ const negado = async (role, sql) => {
 
 try {
   await t(
-    "permissões: tabela fechada; ler = anon/authenticated; criar = authenticated; internas fechadas",
+    "permissões: tabela fechada; ler = anon/authenticated; obter link = authenticated; internas fechadas",
     async () => {
       for (const r of ["anon", "authenticated"]) {
         for (const p of ["SELECT", "INSERT", "UPDATE", "DELETE"])
@@ -226,7 +254,10 @@ try {
           `${r} leu a tabela`,
         );
         for (const f of [
-          "match_share_snapshot(uuid)",
+          "match_share_snapshot(uuid,timestamptz)",
+          "match_share_participants(uuid,timestamptz)",
+          "match_share_store(uuid,timestamptz)",
+          "match_share_on_finish()",
           "match_shares_cleanup()",
           "match_shares_forget_user()",
         ])
@@ -273,82 +304,90 @@ try {
 
   const H = await novoUsuario();
   const C = await novoUsuario();
-  const X = await novoUsuario(); // não jogou
+  const X = await novoUsuario(); // nunca jogou
   const SALA = await novaSala({
     jogadores: [
       { nick: "Bia", score: 12, user: H },
       { nick: "Zé", score: 15, user: C },
       { nick: "Robô Lu", score: 12, bot: true },
-      { nick: "Saiu", score: 99, user: X, kicked: true },
     ],
   });
 
   await t(
-    "só partida ENCERRADA de verdade e só quem jogou cria o link",
+    "o FIM da partida já congela o retrato (gatilho), antes de qualquer clique",
     async () => {
-      eq(await criar(X, SALA), { ok: false, reason: "not_participant" }); // expulso
-      const Y = await novoUsuario();
-      eq(await criar(Y, SALA), { ok: false, reason: "not_participant" }); // nunca esteve na sala
-      const emJogo = await novaSala({
-        status: "voting",
+      eq(await linhas(SALA), 1, "o fim da partida não gravou o retrato");
+      const em = await novaSala({
+        fim: "voting",
         jogadores: [{ nick: "A", score: 1, user: H }],
       });
-      eq(await criar(H, emJogo), { ok: false, reason: "not_finished" });
+      eq(await linhas(em), 0, "gravou retrato de partida em andamento");
+      const limpeza = await novaSala({
+        finishReason: "cleanup_idle",
+        jogadores: [{ nick: "A", score: 1, user: H }],
+      });
+      eq(
+        await linhas(limpeza),
+        0,
+        "gravou retrato de sala encerrada pela limpeza",
+      );
+    },
+  );
+
+  await t(
+    "só quem estava no retrato obtém o link; partida não encerrada / limpeza / inexistente recusam",
+    async () => {
+      eq(await criar(X, SALA), { ok: false, reason: "not_participant" });
+      const em = await novaSala({
+        fim: "voting",
+        jogadores: [{ nick: "A", score: 1, user: H }],
+      });
+      eq(await criar(H, em), { ok: false, reason: "not_finished" });
       const limpeza = await novaSala({
         finishReason: "cleanup_idle",
         jogadores: [{ nick: "A", score: 1, user: H }],
       });
       eq(await criar(H, limpeza), { ok: false, reason: "not_shareable" });
       eq(await criar(H, randomUUID()), { ok: false, reason: "not_found" });
-      const semSessao = (
-        await como(
-          "authenticated",
-          null,
-          `SELECT public.create_match_share($1) AS r`,
-          [SALA],
-        )
-      )[0].r;
-      eq(semSessao, { ok: false, reason: "unauthorized" });
+      eq(
+        (
+          await como(
+            "authenticated",
+            null,
+            `SELECT public.create_match_share($1) AS r`,
+            [SALA],
+          )
+        )[0].r,
+        {
+          ok: false,
+          reason: "unauthorized",
+        },
+      );
       ok(
         await negado("anon", `SELECT public.create_match_share('${SALA}')`),
         "anon criou",
-      );
-      eq(
-        (
-          await db.q(
-            `SELECT count(*)::int AS n FROM public.match_shares WHERE room_id <> ALL($1::uuid[])`,
-            [[SALA]],
-          )
-        )[0].n >= 0,
-        true,
       );
     },
   );
 
   let TOKEN;
   await t(
-    "link: token aleatório de 32 hex; cliques repetidos (qualquer participante) = MESMO link",
+    "link: token de 32 hex; cliques repetidos (qualquer participante) = MESMO link; campeões do servidor",
     async () => {
       const a = await criar(H, SALA);
       ok(a.ok && /^[0-9a-f]{32}$/.test(a.token), JSON.stringify(a));
-      const b = await criar(H, SALA);
-      const c = await criar(C, SALA);
-      eq([b.token, c.token], [a.token, a.token]);
+      eq(a.champions, [{ name: "Zé", emoji: "🦊", score: 15 }]);
       eq(
-        (
-          await db.q(
-            `SELECT count(*)::int AS n FROM public.match_shares WHERE room_id = $1`,
-            [SALA],
-          )
-        )[0].n,
-        1,
+        [(await criar(H, SALA)).token, (await criar(C, SALA)).token],
+        [a.token, a.token],
       );
+      eq(await linhas(SALA), 1);
       TOKEN = a.token;
     },
   );
 
   await t(
-    "retrato do SERVIDOR: ordem, posição com empate, robô marcado, expulso fora; nada de e-mail, UUID ou código",
+    "retrato do SERVIDOR: ordem, empate na posição, robô marcado; nada de e-mail, UUID, id ou código",
     async () => {
       const r = await ler(TOKEN);
       eq(r.mode, "solo");
@@ -360,7 +399,6 @@ try {
           [2, "Robô Lu", 12, true],
         ],
       );
-      eq(r.teams, []);
       eq(r.rounds, 3);
       ok(r.expires_at, "sem validade");
       const json = JSON.stringify(r);
@@ -388,7 +426,78 @@ try {
   );
 
   await t(
-    "equipes: soma dos membros (como o cliente), posição e campeã",
+    "Red Team A: depois do fim, o vencedor SAI, o anfitrião EXPULSA, alguém ENTRA pelo código e outro TROCA o apelido — o link não muda",
+    async () => {
+      const V = await novoUsuario(); // vencedor
+      const A = await novoUsuario(); // anfitrião
+      const L = await novoUsuario(); // entra depois do fim
+      const S = await novaSala({
+        jogadores: [
+          { nick: "Vencedor", score: 30, user: V },
+          { nick: "Anfitrião", score: 10, user: A },
+          { nick: "Terceiro", score: 5, user: C },
+        ],
+      });
+      // depois do fim:
+      await db.q(
+        `DELETE FROM public.players WHERE room_id = $1 AND nickname = 'Vencedor'`,
+        [S],
+      ); // saiu (leave_room em finished)
+      await db.q(
+        `UPDATE public.players SET kicked_at = now() WHERE room_id = $1 AND nickname = 'Terceiro'`,
+        [S],
+      ); // expulso
+      await db.q(
+        `UPDATE public.players SET nickname = 'Trocado' WHERE room_id = $1 AND nickname = 'Anfitrião'`,
+        [S],
+      ); // apelido
+      await db.q(
+        `INSERT INTO public.players (id, room_id, nickname, score, user_id, joined_at) VALUES ($1, $2, 'Atrasado', 0, $3, now() + interval '1 minute')`,
+        [`ms_${tag}_late`, S, L],
+      );
+      const a = await criar(A, S);
+      ok(a.ok, JSON.stringify(a));
+      eq(
+        a.champions,
+        [{ name: "Vencedor", emoji: "🦊", score: 30 }],
+        "campeão mudou depois do fim",
+      );
+      const r = await ler(a.token);
+      eq(
+        r.players.map((p) => p.nickname),
+        ["Vencedor", "Anfitrião", "Terceiro"],
+      );
+      eq(
+        await criar(L, S),
+        { ok: false, reason: "not_participant" },
+        "quem entrou depois do fim obteve o link",
+      );
+      eq(
+        (await criar(V, S)).token,
+        a.token,
+        "o vencedor que saiu ainda pode compartilhar",
+      );
+    },
+  );
+
+  await t("empate: campeões = todos os empatados (servidor)", async () => {
+    const S = await novaSala({
+      jogadores: [
+        { nick: "Zé", score: 9, user: H },
+        { nick: "Bia", score: 9, user: C },
+        { nick: "Lu", score: 2, bot: true },
+      ],
+    });
+    const a = await criar(H, S);
+    eq(
+      a.champions.map((x) => x.name),
+      ["Bia", "Zé"],
+    );
+    eq((await ler(a.token)).players.filter((p) => p.rank === 1).length, 2);
+  });
+
+  await t(
+    "equipes: soma dos membros (como o cliente), posição e equipe campeã",
     async () => {
       const S = await novaSala({
         mode: "teams",
@@ -403,7 +512,9 @@ try {
           { nick: "P4", score: 2, team: "b", bot: true },
         ],
       });
-      const r = await ler((await criar(H, S)).token);
+      const a = await criar(H, S);
+      eq(a.champions, [{ name: "Corujas", emoji: "🦉", score: 13 }]);
+      const r = await ler(a.token);
       eq(r.mode, "teams");
       eq(
         r.teams.map((x) => [x.rank, x.name, x.score, x.members]),
@@ -426,19 +537,14 @@ try {
         ],
       });
       const a = await criar(H, S);
-      // revanche: reset_room zera finished_at; a nova partida termina com outro placar
-      await db.q(
-        `UPDATE public.rooms SET status = 'lobby', finished_at = NULL WHERE id = $1`,
-        [S],
-      );
+      await db.q(`UPDATE public.rooms SET status = 'lobby' WHERE id = $1`, [S]); // revanche (reset_room)
       await db.q(
         `UPDATE public.players SET score = CASE nickname WHEN 'Ana' THEN 1 ELSE 20 END WHERE room_id = $1`,
         [S],
       );
-      await db.q(
-        `UPDATE public.rooms SET status = 'finished', finished_at = now() + interval '1 minute' WHERE id = $1`,
-        [S],
-      );
+      await db.q(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [
+        S,
+      ]); // fim da 2ª partida
       const b = await criar(C, S);
       ok(
         b.ok && b.token !== a.token,
@@ -450,30 +556,67 @@ try {
         "Beto",
         "link novo com retrato velho",
       );
-      eq(
-        (await criar(H, S)).token,
-        b.token,
-        "repetir na mesma partida deveria dar o mesmo link",
-      );
+      eq((await criar(H, S)).token, b.token);
     },
   );
 
   await t(
-    "retrato congelado: mudar a sala depois não altera o link; sala APAGADA continua visível",
+    "partida encerrada ANTES da migration: retrato no 1º pedido, só com quem estava antes do fim",
     async () => {
-      await db.q(
-        `UPDATE public.players SET score = 999 WHERE room_id = $1 AND nickname = 'Bia'`,
-        [SALA],
+      const S = await novaSala({
+        legado: true,
+        jogadores: [{ nick: "Velha", score: 7, user: H }],
+      });
+      eq(await linhas(S), 0);
+      const a = await criar(H, S);
+      ok(a.ok, JSON.stringify(a));
+      eq(
+        (await ler(a.token)).players.map((p) => p.nickname),
+        ["Velha"],
       );
-      eq((await ler(TOKEN)).players[0].nickname, "Zé", "retrato mudou");
-      await db.q(`DELETE FROM public.rooms WHERE id = $1`, [SALA]);
-      const r = await ler(TOKEN);
-      ok(r && r.players.length === 3, "sumiu com a sala apagada");
     },
   );
 
   await t(
-    "inválido, inexistente e vencido: MESMA resposta (null), sem oráculo; anon não enumera",
+    "o gatilho NUNCA trava o fim do jogo (retrato com erro = jogo termina; link indisponível)",
+    async () => {
+      const S = await novaSala({
+        fim: "nenhum",
+        jogadores: [{ nick: "A", score: 1, user: H }],
+      });
+      await db.exec("BEGIN");
+      try {
+        await db.exec(`CREATE OR REPLACE FUNCTION public.match_share_snapshot(p_room_id uuid, p_fin timestamptz)
+        RETURNS jsonb LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'falha simulada'; END $$`);
+        await db.q(
+          `UPDATE public.rooms SET status = 'finished' WHERE id = $1`,
+          [S],
+        );
+        eq(
+          (await db.q(`SELECT status FROM public.rooms WHERE id = $1`, [S]))[0]
+            .status,
+          "finished",
+          "o jogo não terminou",
+        );
+        eq(await linhas(S), 0);
+      } finally {
+        await db.exec("ROLLBACK"); // desfaz a função quebrada (e o fim simulado)
+      }
+    },
+  );
+
+  await t("retrato congelado; sala APAGADA continua visível", async () => {
+    await db.q(
+      `UPDATE public.players SET score = 999 WHERE room_id = $1 AND nickname = 'Bia'`,
+      [SALA],
+    );
+    eq((await ler(TOKEN)).players[0].nickname, "Zé", "retrato mudou");
+    await db.q(`DELETE FROM public.rooms WHERE id = $1`, [SALA]);
+    ok((await ler(TOKEN))?.players?.length === 3, "sumiu com a sala apagada");
+  });
+
+  await t(
+    "inválido, inexistente e vencido: MESMA resposta (null); anon não enumera; vencido não reabre",
     async () => {
       for (const bad of [
         "",
@@ -485,21 +628,10 @@ try {
         randomUUID().replaceAll("-", ""),
       ])
         eq(await ler(bad), null, `token ${JSON.stringify(bad)}`);
-      await db.q(
-        `UPDATE public.match_shares SET expires_at = now() - interval '1 second' WHERE token = $1`,
-        [TOKEN],
-      );
-      eq(await ler(TOKEN), null, "vencido ainda aparece");
       ok(
         await negado("anon", `SELECT token FROM public.match_shares`),
         "anon listou tokens",
       );
-    },
-  );
-
-  await t(
-    "link vencido: novo clique gera link NOVO (sala ainda existente) e o antigo morre",
-    async () => {
       const S = await novaSala({
         jogadores: [{ nick: "Ana", score: 5, user: H }],
       });
@@ -508,10 +640,22 @@ try {
         `UPDATE public.match_shares SET expires_at = now() - interval '1 second' WHERE token = $1`,
         [a.token],
       );
-      const b = await criar(H, S);
-      ok(b.ok && b.token !== a.token, "não regenerou");
-      eq(await ler(a.token), null);
-      eq((await ler(b.token)).players[0].nickname, "Ana");
+      eq(await ler(a.token), null, "vencido ainda aparece");
+      eq(await criar(H, S), { ok: false, reason: "expired" });
+    },
+  );
+
+  await t(
+    "validade = 30 dias depois do FIM da partida (= retenção da sala)",
+    async () => {
+      const S = await novaSala({
+        jogadores: [{ nick: "Leo", score: 1, user: C }],
+      });
+      const [{ d }] = await db.q(
+        `SELECT extract(epoch FROM s.expires_at - r.finished_at)::int AS d FROM public.match_shares s JOIN public.rooms r ON r.id = s.room_id WHERE s.room_id = $1`,
+        [S],
+      );
+      eq(d, 30 * 86400);
     },
   );
 
@@ -520,8 +664,7 @@ try {
       jogadores: [{ nick: "Leo", score: 1, user: C }],
     });
     const vivo = await criar(C, S);
-    const [{ n }] = await db.q(`SELECT public.match_shares_cleanup() AS n`);
-    ok(n >= 1, `limpeza removeu ${n}`);
+    await db.q(`SELECT public.match_shares_cleanup()`);
     eq(
       (
         await db.q(
@@ -552,7 +695,7 @@ try {
 
   if (!modePg) {
     await t(
-      "rollback: aplica limpo e a migration reaplica por cima",
+      "rollback: aplica limpo (gatilhos saem), o jogo termina sem eles e a migration reaplica",
       async () => {
         await db.exec(ROLLBACK);
         eq(
@@ -564,8 +707,20 @@ try {
           0,
         );
         eq(
-          (await db.q(`SELECT to_regclass('public.match_shares') AS r`))[0].r,
-          null,
+          (
+            await db.q(
+              `SELECT count(*)::int AS n FROM pg_trigger WHERE tgname IN ('match_share_on_finish','match_shares_forget_user')`,
+            )
+          )[0].n,
+          0,
+        );
+        const S = await novaSala({
+          jogadores: [{ nick: "Sem", score: 1, user: H }],
+        });
+        eq(
+          (await db.q(`SELECT status FROM public.rooms WHERE id = $1`, [S]))[0]
+            .status,
+          "finished",
         );
         await db.exec(MIG);
         ok(

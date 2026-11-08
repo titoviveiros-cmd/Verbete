@@ -87,7 +87,12 @@ async function finishedRoom(page: Page, share: "ok" | "erro" = "ok") {
   const b = roomBackend("finished", { loggedIn: true });
   b.rpc.create_match_share =
     share === "ok"
-      ? { ok: true, token: TOKEN, expires_at: "2026-12-08T19:00:00Z" }
+      ? {
+          ok: true,
+          token: TOKEN,
+          expires_at: "2026-12-08T19:00:00Z",
+          champions: [{ name: "Bia", emoji: "🦊", score: 13 }],
+        }
       : { ok: false, reason: "not_participant" };
   b.rpc.claim_player_identity = null;
   b.rpc.record_match_result = { ok: true, deduped: true, xp_gained: 0 };
@@ -156,13 +161,23 @@ test("fim de partida: compartilha o LINK DO RESULTADO (não a Home) e confirma",
   expect(shared).toHaveLength(1);
   expect(shared[0]!.url).toBe(LINK);
   expect(shared[0]!.url).not.toBe("https://jogo.verbete.workers.dev/");
-  expect(shared[0]!.text).toMatch(/venceu no Verbete com \d+ pts/);
-  // 2º clique: mesmo link, sem pedir outro ao servidor
+  // texto com o campeão DECIDIDO PELO SERVIDOR (resposta do create_match_share)
+  expect(shared[0]!.text).toBe(
+    "🏆 Bia venceu no Verbete com 13 pts! Veja o resultado da partida:",
+  );
+  // 2º clique: mesmo link, SEM nova consulta (o link foi preparado ao abrir a
+  // tela; em desenvolvimento o modo estrito do React monta o efeito 2×)
+  const consultas = () =>
+    log.calls.filter((c) => c.endsWith("/rpc/create_match_share")).length;
+  const antes = consultas();
+  expect(antes).toBeGreaterThanOrEqual(1);
   await shareButton(page).click();
   await expect(page.getByText("Resultado compartilhado! ✅")).toBeVisible();
-  expect(
-    log.calls.filter((c) => c.endsWith("/rpc/create_match_share")),
-  ).toHaveLength(1);
+  expect(consultas()).toBe(antes);
+  const shared2 = await page.evaluate(
+    () => (window as unknown as { __shared: Array<{ url: string }> }).__shared,
+  );
+  expect(shared2.map((x) => x.url)).toEqual([LINK, LINK]);
   await page.screenshot({
     path: "test-results/compartilhar-resultado-fim.png",
   });
@@ -210,8 +225,11 @@ test("fim de partida: servidor recusa o link → aviso, sem compartilhar a Home"
   await stubShare(page, "shared");
   await page.goto(`/room/${ROOM_CODE}`);
   await shareButton(page).click({ timeout: 30_000 });
+  // motivo específico (Red Team E), nunca o link da Home
   await expect(
-    page.getByText(/Não foi possível gerar o link do resultado/),
+    page.getByText(
+      "Só quem jogou esta partida até o fim pode compartilhar o resultado.",
+    ),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -293,4 +311,29 @@ test("Home /?r=<token> leva ao resultado (o link compartilhado)", async ({
   await page.goto(`/?r=${TOKEN}`);
   await expect(page).toHaveURL(new RegExp(`/r/${TOKEN}$`), { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: /Zé venceu!/ })).toBeVisible();
+});
+
+test("/r/<token>: empate mostra 'Empate!' com todos os campeões do servidor", async ({
+  page,
+}) => {
+  const b = homeBackend(false);
+  b.rpc.get_match_share = {
+    ...SNAP_SOLO,
+    players: [
+      { ...SNAP_SOLO.players[0]!, rank: 1, score: 12 },
+      ...SNAP_SOLO.players.slice(1),
+    ],
+    champions: [
+      { name: "Bia", emoji: "🦊", score: 12 },
+      { name: "Lu", emoji: "🦉", score: 12 },
+      { name: "Zé", emoji: "🐸", score: 12 },
+    ],
+  };
+  b.user = null;
+  await installSupabaseMock(page, b);
+  await page.goto(`/r/${TOKEN}`);
+  await expect(
+    page.getByRole("heading", { name: /Empate! Bia, Lu e Zé/ }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("12 pts cada")).toBeVisible();
 });
