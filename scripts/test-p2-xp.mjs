@@ -480,7 +480,9 @@ try {
     const OPERATIONAL = ["cleanup_zombie_rooms"];
     // Retenção (Rodada 2B): só LEEM status = 'finished' (filtro/trigger do
     // finished_at) — nunca encerram sala; conferido logo abaixo.
-    const READS_ONLY = ["retention_purge_rooms", "rooms_track_finished_at"];
+    // Resultado compartilhado (09/11/2026): o gatilho só LÊ NEW.status = 'finished'
+    // para congelar o retrato da partida — nunca encerra nem muda a sala.
+    const READS_ONLY = ["match_share_on_finish", "retention_purge_rooms", "rooms_track_finished_at"];
     const names = fns.map((f) => f.fn);
     check(
       "todo caminho para 'finished' está classificado (natural: finish_reveal, advance_scoreboard…; limpeza: cleanup_zombie_rooms; só leitura: retenção)",
