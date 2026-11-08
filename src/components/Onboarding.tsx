@@ -53,7 +53,7 @@ const STEPS: Step[] = [
     kind: "static",
     emoji: "🏆",
     title: "Como ganhar pontos",
-    body: "+3 pontos por votar na definição verdadeira.\n+3 pontos se sua definição ficar muito próxima da correta, com nota de 80 ou mais.\n+2 pontos para o coordenador se ninguém acertar.\n+1 ponto por voto recebido no seu blefe.",
+    body: "+3 pontos por votar na definição verdadeira.\n+3 pontos (bônus 🧠) se sua definição ficar muito próxima da correta, quando a avaliação automática de proximidade estiver ativa.\n+2 pontos para o coordenador se ninguém acertar.\n+1 ponto por voto recebido no seu blefe.",
     mood: "excited",
   },
 ];
