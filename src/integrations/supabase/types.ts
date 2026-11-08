@@ -432,6 +432,37 @@ export type Database = {
         };
         Relationships: [];
       };
+      match_shares: {
+        Row: {
+          created_at: string;
+          expires_at: string;
+          participant_user_ids: string[];
+          room_finished_at: string;
+          room_id: string;
+          snapshot: NonNullable<Json>;
+          token: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          expires_at: string;
+          participant_user_ids?: string[];
+          room_finished_at: string;
+          room_id: string;
+          snapshot: NonNullable<Json>;
+          token: string;
+        };
+        Update: {
+          created_at?: string;
+          expires_at?: string;
+          participant_user_ids?: string[];
+          room_finished_at?: string;
+          room_id?: string;
+          snapshot?: NonNullable<Json>;
+          token?: string;
+        };
+        Relationships: [];
+      };
       ops_alerts: {
         Row: {
           at: string;
@@ -1290,6 +1321,7 @@ export type Database = {
       };
       claim_player_identity: { Args: { p_player_id: string }; Returns: Json };
       cleanup_zombie_rooms: { Args: Record<PropertyKey, never>; Returns: Json };
+      create_match_share: { Args: { p_room_id: string }; Returns: Json };
       create_room_with_host: {
         Args: {
           p_avatar: string;
@@ -1327,7 +1359,6 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      create_match_share: { Args: { p_room_id: string }; Returns: Json };
       daily_choice_admin_add_drafts: {
         Args: { p_rows: Json };
         Returns: number;
@@ -1596,6 +1627,36 @@ export type Database = {
           p_session_key?: string;
         };
         Returns: undefined;
+      };
+      match_share_participants: {
+        Args: { p_fin: string; p_room_id: string };
+        Returns: string[];
+      };
+      match_share_snapshot: {
+        Args: { p_fin: string; p_room_id: string };
+        Returns: Json;
+      };
+      match_share_store: {
+        Args: { p_fin: string; p_room_id: string };
+        Returns: {
+          created_at: string;
+          expires_at: string;
+          participant_user_ids: string[];
+          room_finished_at: string;
+          room_id: string;
+          snapshot: NonNullable<Json>;
+          token: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "match_shares";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      match_shares_cleanup: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
       };
       migrate_host: { Args: { p_room_id: string }; Returns: Json };
       ops_health_check: { Args: Record<PropertyKey, never>; Returns: Json };
