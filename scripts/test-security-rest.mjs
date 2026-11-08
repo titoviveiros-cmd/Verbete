@@ -467,6 +467,7 @@ console.log("\n— Privilégios efetivos no banco");
 const GAME_TABLES = [
   "players", "definitions", "votes", "rounds", "round_extensions",
   "rooms", "room_words", "reactions", "room_messages", "words",
+  "daily_choice_sets", "daily_choice_sessions", // Diário D1 (08/11/2026)
 ];
 const writable = await rows(
   `SELECT r.role, t.tbl, p.priv
@@ -504,6 +505,10 @@ const DENY = [
   "cast_votes_bulk",
   // 2.1.4: regra anti-cola do servidor e gravação do "Quase lá" (só a edge)
   "definition_reveal_tokens", "definition_reveals_word", "apply_similarity_near_miss",
+  // Diário D1 (modo escolha, 08/11/2026): só o Worker (service_role) — a correta nunca sai antes da resposta
+  "daily_mode", "daily_choice_start", "daily_choice_finish", "daily_record_participation", "daily_choice_new_perm", "daily_choice_fmt",
+  "daily_choice_admin_list", "daily_choice_admin_get", "daily_choice_admin_pool", "daily_choice_admin_add_drafts",
+  "daily_choice_admin_edit", "daily_choice_admin_review", "daily_choice_cleanup",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
