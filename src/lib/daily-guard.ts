@@ -121,16 +121,20 @@ export async function runGuardedDailyAttempt<T>(deps: {
   aiMode?: () => Promise<AiMode>;
   /** Evento 'ai_suspended' com throttle (melhor esforço). */
   logSuspended?: () => Promise<unknown>;
-  /** D1: app_config.daily_mode. Omitido ou erro = 'juiz' (fluxo atual). */
+  /** D1: app_config.daily_mode. Omitido = 'juiz' (fluxo atual); erro = recusa sem gastar. */
   dailyMode?: () => Promise<DailyMode>;
 }): Promise<T | unknown> {
   // D1 (08/11/2026): Diário em múltipla escolha ou em pausa → o envio do modo
   // juiz (site aberto antes da troca, APK 2.1.4) não reserva, não lê palavra,
   // não chama IA e NÃO gasta a tentativa. daily_mode é FIXO (D-a): não depende
   // de ai_mode.
-  const dmode = await (deps.dailyMode?.() ?? Promise.resolve("juiz")).catch(
-    () => "juiz",
-  );
+  let dmode: DailyMode;
+  try {
+    dmode = await (deps.dailyMode?.() ?? Promise.resolve("juiz" as const));
+  } catch {
+    // Red Team A5: sem saber o modo, nada de reserva nem IA (fail-closed)
+    throw new Error(DAILY_EVAL_UNAVAILABLE);
+  }
   if (dmode === "escolha") throw new Error(DAILY_NOW_CHOICE);
   if (dmode === "pausa") throw new Error(DAILY_AI_PAUSED);
 

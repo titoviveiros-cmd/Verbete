@@ -182,13 +182,20 @@ BEGIN
 
   IF v_challenge.id IS NULL THEN
     IF public.daily_mode() = 'escolha' THEN
-      SELECT w.* INTO v_word
-        FROM public.daily_choice_sets s
-        JOIN public.words w ON w.id = s.word_id
-       WHERE s.status = 'aprovado' AND w.status = 'published' AND w.meaning = s.truth_snapshot
-       ORDER BY (SELECT max(c.challenge_hour) FROM public.daily_challenges c WHERE c.word_id = w.id) ASC NULLS FIRST,
-                random()
-       LIMIT 1;
+      -- Red Team H1 (08/11): sorteio ALEATÓRIO entre os 24 aprovados menos usados — a palavra
+      -- da próxima hora não é previsível (com o "menos usado" puro, depois de um ciclo ela
+      -- seria). Com N aprovados, uma palavra não repete antes de N − 24 horas (168 → 6 dias).
+      SELECT w.* INTO v_word FROM public.words w
+       WHERE w.id = (
+         SELECT q.id FROM (
+           SELECT w2.id
+             FROM public.daily_choice_sets s
+             JOIN public.words w2 ON w2.id = s.word_id
+            WHERE s.status = 'aprovado' AND w2.status = 'published' AND w2.meaning = s.truth_snapshot
+            ORDER BY (SELECT max(c.challenge_hour) FROM public.daily_challenges c WHERE c.word_id = w2.id) ASC NULLS FIRST,
+                     random()
+            LIMIT 24) q
+          ORDER BY random() LIMIT 1);
     END IF;
 
     IF v_word.id IS NULL THEN
@@ -215,6 +222,20 @@ BEGIN
 
   SELECT * INTO v_word FROM public.words WHERE id = v_challenge.word_id;
 
+  -- Red Team A1 (08/11): no modo escolha a palavra só sai JUNTO com as alternativas
+  -- (daily_choice_start, quando o relógio do servidor começa). Aqui volta "?" — o APK
+  -- 2.1.4 mostra "?" e, ao enviar, recebe "agora é de múltipla escolha" (nada gasto).
+  IF public.daily_mode() = 'escolha' THEN
+    RETURN jsonb_build_object(
+      'challenge', jsonb_build_object(
+        'id', v_challenge.id,
+        'challenge_date', v_challenge.challenge_date,
+        'challenge_hour', v_challenge.challenge_hour
+      ),
+      'word', jsonb_build_object('id', NULL, 'word', '?', 'category', NULL)
+    );
+  END IF;
+
   RETURN jsonb_build_object(
     'challenge', jsonb_build_object(
       'id', v_challenge.id,
@@ -226,11 +247,84 @@ BEGIN
 END;
 $function$;
 
+-- 7b) Red Team A1/H1 (08/11): a palavra da hora CORRENTE não sai por leitura direta nem pelo
+--     multiplayer. (i) daily_challenges legível só para horas já encerradas (nenhum cliente lê a
+--     tabela: o app usa a RPC; o servidor usa service_role). (ii) choose_word recusa a palavra da
+--     hora do Diário (escolher qualquer word_id numa sala e ver a revelação entregava a definição
+--     exata) e ela sai das opções sorteadas para o coordenador. Corpo de choose_word = o de
+--     20261025140000 + a guarda.
+CREATE OR REPLACE FUNCTION public.daily_current_word_id()
+RETURNS uuid
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+  SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())
+$$;
+
+DROP POLICY IF EXISTS "daily_challenges past read" ON public.daily_challenges;
+CREATE POLICY "daily_challenges past read" ON public.daily_challenges
+  FOR SELECT TO anon, authenticated USING (challenge_hour < date_trunc('hour', now()));
+
+CREATE OR REPLACE FUNCTION public.choose_word(p_room_id uuid, p_word_id uuid, p_duration_sec integer DEFAULT 60)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_room public.rooms;
+BEGIN
+  SELECT * INTO v_room FROM public.rooms WHERE id = p_room_id FOR UPDATE;
+  IF v_room IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'room_not_found'); END IF;
+  IF v_room.status <> 'choosing' THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid_state'); END IF;
+  IF v_room.current_word_id IS NOT NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'already_chosen'); END IF;
+  -- Diário D1: a palavra da hora do Desafio Diário não pode ser escolhida numa sala
+  IF p_word_id IS NOT DISTINCT FROM public.daily_current_word_id() THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'word_unavailable');
+  END IF;
+
+  UPDATE public.rooms
+  SET status = 'writing',
+      current_word_id = p_word_id,
+      used_word_ids = CASE
+        WHEN p_word_id = ANY(used_word_ids) THEN used_word_ids
+        ELSE array_append(used_word_ids, p_word_id)
+      END,
+      -- escrita: base + 10 s, sem escalar com a sala (2026-10-25)
+      round_phase_ends_at = now() + make_interval(secs => public.writing_phase_secs(p_duration_sec)),
+      phase_started_at = now()
+  WHERE id = p_room_id;
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_random_word_prompts(
+  exclude_ids uuid[] DEFAULT ARRAY[]::uuid[],
+  min_rarity integer DEFAULT 2,
+  lim integer DEFAULT 3,
+  p_categories text[] DEFAULT ARRAY[]::text[],
+  p_nivel text DEFAULT NULL
+)
+RETURNS TABLE(id uuid, word text, category text, rarity int, nivel text, classe text, pronuncia text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+  SELECT w.id, w.word, w.category, w.rarity, w.nivel, w.classe, w.pronuncia
+  FROM public.get_random_words(
+    -- sem NULL no array: "id = ANY({…,NULL})" excluiria TUDO
+    CASE WHEN public.daily_current_word_id() IS NULL THEN exclude_ids
+         ELSE array_append(coalesce(exclude_ids, ARRAY[]::uuid[]), public.daily_current_word_id()) END,
+    min_rarity, lim, p_categories, p_nivel) AS w;
+$function$;
+
 -- 8) Início do modo escolha ------------------------------------------------------------
 -- {status:'mode', mode}         modo vigente não é 'escolha' (o cliente usa o fluxo do modo)
 -- {status:'already_played'}     já jogou nesta hora (em QUALQUER modo)
 -- {status:'sem_estoque'}        palavra da hora sem conjunto aprovado: pausa, nada gasto
--- {status:'ok', word, category, options:[{pos,text}×4], elapsed_s}
+-- {status:'ok', word, category, options:[{pos,text}×4], elapsed_s, hour}
 --    Idempotente: reabrir na mesma hora devolve a MESMA ordem e o MESMO relógio.
 --    Nunca devolve a posição da correta, ids ou hash.
 CREATE OR REPLACE FUNCTION public.daily_choice_start(p_user_id uuid)
@@ -292,7 +386,9 @@ BEGIN
     'category', v_word.category,
     'options', (SELECT jsonb_agg(jsonb_build_object('pos', k.n - 1, 'text', v_sess.options[k.n]) ORDER BY k.n)
                   FROM generate_series(1, 4) AS k(n)),
-    'elapsed_s', LEAST(600, GREATEST(0, floor(extract(epoch FROM now() - v_sess.issued_at))))::int
+    'elapsed_s', LEAST(600, GREATEST(0, floor(extract(epoch FROM now() - v_sess.issued_at))))::int,
+    -- a hora das alternativas mostradas: volta no envio (Red Team A4)
+    'hour', v_sess.challenge_hour
   );
 END $$;
 
@@ -302,7 +398,7 @@ END $$;
 -- {status:'already_played'} · {status:'mode_changed'} · {status:'no_session'} · {status:'hour_changed'}
 -- Nada é gravado (tentativa NÃO gasta) fora de 'recorded'.
 -- D-c: acerto = max(round(max(100 − t, 20) × 0,5), 10); erro = 0; t = agora − issued_at (servidor, ≤ 600).
-CREATE OR REPLACE FUNCTION public.daily_choice_finish(p_user_id uuid, p_pos integer)
+CREATE OR REPLACE FUNCTION public.daily_choice_finish(p_user_id uuid, p_pos integer, p_hour timestamptz DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'public', 'pg_temp'
@@ -324,6 +420,11 @@ BEGIN
 
   IF public.daily_mode() <> 'escolha' THEN
     RETURN jsonb_build_object('status', 'mode_changed');
+  END IF;
+  -- Red Team A4: a resposta vale só para as alternativas da hora que o jogador VIU
+  -- (aba antiga aberta na hora anterior não responde pela sessão da hora nova)
+  IF p_hour IS NOT NULL AND p_hour <> v_hour THEN
+    RETURN jsonb_build_object('status', 'hour_changed');
   END IF;
   IF EXISTS (SELECT 1 FROM public.daily_attempts WHERE user_id = p_user_id AND challenge_hour = v_hour) THEN
     RETURN jsonb_build_object('status', 'already_played');
@@ -583,11 +684,12 @@ $$;
 
 -- 14) Permissões ------------------------------------------------------------------------
 REVOKE ALL ON FUNCTION public.daily_mode() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.daily_current_word_id() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_new_perm() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_fmt(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_record_participation(uuid, timestamptz, integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_start(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.daily_choice_finish(uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.daily_choice_finish(uuid, integer, timestamptz) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_admin_list(text, integer, integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_admin_get(uuid[]) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_admin_pool(integer) FROM PUBLIC, anon, authenticated;
@@ -596,7 +698,7 @@ REVOKE ALL ON FUNCTION public.daily_choice_admin_edit(uuid, text[], jsonb) FROM 
 REVOKE ALL ON FUNCTION public.daily_choice_admin_review(uuid[], text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.daily_choice_cleanup() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.daily_choice_start(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.daily_choice_finish(uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.daily_choice_finish(uuid, integer, timestamptz) TO service_role;
 GRANT EXECUTE ON FUNCTION public.daily_mode() TO service_role;
 GRANT EXECUTE ON FUNCTION public.daily_choice_admin_list(text, integer, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.daily_choice_admin_get(uuid[]) TO service_role;

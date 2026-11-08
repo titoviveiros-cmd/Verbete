@@ -105,6 +105,8 @@ if (!modePg) {
     "CREATE OR REPLACE FUNCTION public.get_or_create_daily_challenge", "$function$;");
   const REVIEW = fnBlock(rd("supabase/migrations/20260520093449_2ae8b890-935f-4b0c-9f1d-6bc2b62f8f1b.sql"),
     "CREATE OR REPLACE FUNCTION public.get_my_daily_review", "$function$;");
+  const RANDOM_WORDS = fnBlock(rd("supabase/migrations/20260723100000_fase9_words_editorial.sql"),
+    "CREATE OR REPLACE FUNCTION public.get_random_words", "$function$;");
   const BOARD = fnBlock(rd("supabase/migrations/20260519024511_5e20e2b8-e00c-4c23-8e4a-d186aa14433d.sql"),
     "CREATE OR REPLACE FUNCTION public.get_daily_leaderboard", "$$;");
   await db.exec(`
@@ -121,9 +123,16 @@ if (!modePg) {
     CREATE TABLE public.ops_events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, at timestamptz NOT NULL DEFAULT now(),
       kind text NOT NULL, build text, session_key text, room_hash text, payload jsonb NOT NULL DEFAULT '{}'::jsonb);
     CREATE TABLE public.words (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), word text NOT NULL UNIQUE, meaning text NOT NULL,
-      category text, rarity int NOT NULL DEFAULT 2, classe text, status text NOT NULL DEFAULT 'published');
+      category text, rarity int NOT NULL DEFAULT 2, classe text, status text NOT NULL DEFAULT 'published', nivel text, pronuncia text);
+    CREATE TABLE public.rooms (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text, host_id text, status text NOT NULL DEFAULT 'lobby',
+      current_word_id uuid, used_word_ids uuid[] NOT NULL DEFAULT ARRAY[]::uuid[], round_phase_ends_at timestamptz, phase_started_at timestamptz);
+    CREATE FUNCTION public.writing_phase_secs(p integer) RETURNS integer LANGUAGE sql IMMUTABLE AS $$ SELECT p + 10 $$;
     CREATE TABLE public.daily_challenges (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), challenge_date date,
       challenge_hour timestamptz NOT NULL UNIQUE, word_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+    -- como em produção (20260519024409 + baseline de grants): leitura até a hora corrente
+    ALTER TABLE public.daily_challenges ENABLE ROW LEVEL SECURITY;
+    GRANT SELECT ON public.daily_challenges TO anon, authenticated;
+    CREATE POLICY "daily_challenges past read" ON public.daily_challenges FOR SELECT TO anon, authenticated USING (challenge_hour <= now());
     CREATE TABLE public.daily_attempts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL,
       challenge_date date, challenge_hour timestamptz NOT NULL, guess text NOT NULL, is_correct boolean NOT NULL DEFAULT false,
       score integer NOT NULL DEFAULT 0, time_seconds integer NOT NULL DEFAULT 0, similarity integer NOT NULL DEFAULT 0,
@@ -136,6 +145,7 @@ if (!modePg) {
     CREATE TABLE public.user_achievements (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL,
       achievement_code text NOT NULL, unlocked_at timestamptz NOT NULL DEFAULT now(), UNIQUE (user_id, achievement_code));
     ${SCORING}
+    ${RANDOM_WORDS}
     ${CHALLENGE}
     ${REVIEW}
     ${BOARD}
@@ -284,13 +294,13 @@ try {
         ok(await negado(r, `UPDATE public.${tab} SET ${upd}`), `${r} conseguiu UPDATE em ${tab}`);
       }
     ok(await negado("authenticated", `INSERT INTO public.daily_choice_sets (word_id, distractors, truth_snapshot) VALUES ('${W1.id}', ARRAY['a','b','c'], 'x')`), "INSERT em sets");
-    const fns = ["daily_mode()", "daily_choice_start(uuid)", "daily_choice_finish(uuid,integer)", "daily_record_participation(uuid,timestamptz,integer)",
+    const fns = ["daily_mode()", "daily_choice_start(uuid)", "daily_choice_finish(uuid,integer,timestamptz)", "daily_current_word_id()", "daily_record_participation(uuid,timestamptz,integer)",
       "daily_choice_new_perm()", "daily_choice_fmt(text)", "daily_choice_admin_list(text,integer,integer)", "daily_choice_admin_get(uuid[])", "daily_choice_admin_pool(integer)",
       "daily_choice_admin_add_drafts(jsonb)", "daily_choice_admin_edit(uuid,text[],jsonb)", "daily_choice_admin_review(uuid[],text,uuid)", "daily_choice_cleanup()"];
     for (const f of fns)
       for (const r of ["anon", "authenticated"])
         eq((await db.q(`SELECT has_function_privilege($1, $2, 'EXECUTE') AS p`, [r, `public.${f}`]))[0].p, false, `${r} executa ${f}`);
-    for (const f of ["daily_choice_start(uuid)", "daily_choice_finish(uuid,integer)", "daily_choice_admin_review(uuid[],text,uuid)"])
+    for (const f of ["daily_choice_start(uuid)", "daily_choice_finish(uuid,integer,timestamptz)", "daily_choice_admin_review(uuid[],text,uuid)"])
       eq((await db.q(`SELECT has_function_privilege('service_role', $1, 'EXECUTE') AS p`, [`public.${f}`]))[0].p, true, `service_role ${f}`);
     // o placar recriado mantém as permissões de antes: authenticated sim, anon não
     eq((await db.q(`SELECT has_function_privilege('authenticated', 'public.get_daily_leaderboard(integer,text)', 'EXECUTE') AS p`))[0].p, true);
@@ -331,17 +341,6 @@ try {
     if (!modePg) eq(vistos.size, 3, "não variou entre os aprovados");
   });
 
-  await t("18. sem repetir: o menos usado (ou nunca usado) vem primeiro", async () => {
-    if (modePg && (await db.q(`SELECT count(*)::int AS n FROM public.daily_choice_sets WHERE status = 'aprovado' AND NOT (word_id = ANY($1::uuid[]))`, [palavras]))[0].n > 0)
-      return console.log("      (pulado no CI: há outros aprovados no banco)");
-    await db.q(`INSERT INTO public.daily_challenges (challenge_date, challenge_hour, word_id) VALUES
-      (($1::timestamptz - interval '3000 hours')::date, $1::timestamptz - interval '3000 hours', $2),
-      (($1::timestamptz - interval '2999 hours')::date, $1::timestamptz - interval '2999 hours', $3)`, [HORA, W1.id, W2.id]);
-    await forcarDesafio(null);
-    await db.q(`SELECT public.get_or_create_daily_challenge()`);
-    eq((await db.q(`SELECT word_id FROM public.daily_challenges WHERE challenge_hour = $1`, [HORA]))[0].word_id, W3.id);
-  });
-
   await t("18. palavra da hora sem conjunto aprovado (criada no modo juiz) = pausa, NADA gasto", async () => {
     for (const w of [SEM_CONJUNTO, RASCUNHO, NAO_PUBLICADA, MUDOU]) {
       await forcarDesafio(w.id);
@@ -359,7 +358,7 @@ try {
     const u = await novoUsuario();
     const a = await start(u);
     eq(a.status, "ok");
-    eq(Object.keys(a).sort(), ["category", "elapsed_s", "options", "status", "word"]);
+    eq(Object.keys(a).sort(), ["category", "elapsed_s", "hour", "options", "status", "word"]);
     eq(a.options.map((o) => Object.keys(o).sort().join()), ["pos,text", "pos,text", "pos,text", "pos,text"]);
     eq(a.options.map((o) => o.pos), [0, 1, 2, 3]);
     ok(a.options.some((o) => o.text === W1.meaning), "a verdadeira não está entre as alternativas");
@@ -400,8 +399,8 @@ try {
   });
 
   await t("8/17. tempo do SERVIDOR (± 1 s) e fórmula D-c; finish nem recebe tempo do cliente", async () => {
-    const [{ args: a }] = await db.q(`SELECT pg_get_function_identity_arguments('public.daily_choice_finish(uuid,integer)'::regprocedure) AS args`);
-    eq(a, "p_user_id uuid, p_pos integer");
+    const [{ args: a }] = await db.q(`SELECT pg_get_function_identity_arguments('public.daily_choice_finish(uuid,integer,timestamptz)'::regprocedure) AS args`);
+    eq(a, "p_user_id uuid, p_pos integer, p_hour timestamp with time zone");
     for (const segs of [0, 30, 79, 80, 200, 900]) {
       const u = await novoUsuario();
       await start(u);
@@ -509,6 +508,76 @@ try {
     eq(await tentativas(u), 0);
     await setModo("escolha");
     eq((await finish(u, 0)).status, "recorded", "a sessão aberta antes da troca segue válida ao voltar");
+  });
+
+  await t("Red Team A4: resposta presa à hora das alternativas vistas (p_hour diferente = hour_changed, nada gasto)", async () => {
+    const u = await novoUsuario();
+    const a = await start(u);
+    const s = await sessao(u);
+    const r1 = (await db.q(`SELECT public.daily_choice_finish($1, $2, $3::timestamptz - interval '1 hour') AS r`, [u, s.correct_pos, HORA]))[0].r;
+    eq(r1, { status: "hour_changed" });
+    eq(await tentativas(u), 0);
+    const r2 = (await db.q(`SELECT public.daily_choice_finish($1, $2, $3::timestamptz) AS r`, [u, s.correct_pos, a.hour]))[0].r;
+    eq([r2.status, r2.result.is_correct], ["recorded", true]);
+  });
+
+  await t("Red Team A1: no modo escolha a palavra da hora NÃO sai antes das alternativas (RPC e leitura direta)", async () => {
+    await forcarDesafio(W2.id);
+    const ch = (await db.q(`SELECT public.get_or_create_daily_challenge() AS r`))[0].r;
+    eq([ch.word.id, ch.word.word, ch.word.category], [null, "?", null]);
+    const lido = await comoUsuario(randomUUID(), `SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())`);
+    eq(lido, [], "authenticated leu a palavra da hora corrente em daily_challenges");
+    await db.q(`INSERT INTO public.daily_challenges (challenge_date, challenge_hour, word_id) VALUES (($1::timestamptz - interval '5000 hours')::date, $1::timestamptz - interval '5000 hours', $2)`, [HORA, W3.id]);
+    const passado = await comoUsuario(randomUUID(), `SELECT count(*)::int AS n FROM public.daily_challenges WHERE challenge_hour < date_trunc('hour', now())`);
+    ok(passado[0].n >= 1, "horas encerradas deixaram de ser legíveis");
+    await setModo("juiz");
+    eq((await db.q(`SELECT public.get_or_create_daily_challenge() AS r`))[0].r.word.id, W2.id, "modo juiz precisa da palavra");
+    await setModo("escolha");
+    await forcarDesafio(W1.id);
+  });
+
+  await t("Red Team H1: multiplayer não escolhe nem oferece a palavra da hora do Diário", async () => {
+    await forcarDesafio(W1.id);
+    const sala = async () =>
+      (await db.q(`INSERT INTO public.rooms (code, host_id, status) VALUES ($1, $2, 'choosing') RETURNING id`, [`D1${tag}${Math.random().toString(36).slice(2, 6)}`, `d1h_${tag}`]))[0].id;
+    const r1 = await sala();
+    eq((await db.q(`SELECT public.choose_word($1, $2, 60) AS r`, [r1, W1.id]))[0].r, { ok: false, reason: "word_unavailable" });
+    eq((await db.q(`SELECT status, current_word_id FROM public.rooms WHERE id = $1`, [r1]))[0], { status: "choosing", current_word_id: null });
+    eq((await db.q(`SELECT public.choose_word($1, $2, 60) AS r`, [r1, W2.id]))[0].r, { ok: true }, "outra palavra continua valendo");
+    for (let i = 0; i < 100; i++) {
+      const ids = (await db.q(`SELECT id FROM public.get_random_word_prompts(ARRAY[]::uuid[], 1, 50)`)).map((x) => x.id);
+      ok(ids.length > 0, "sorteio vazio");
+      ok(!ids.includes(W1.id), "ofereceu a palavra do Diário");
+    }
+    await forcarDesafio(null);
+    ok((await db.q(`SELECT id FROM public.get_random_word_prompts(NULL, 1, 3)`)).length > 0, "NULL excluiu tudo");
+    ok((await db.q(`SELECT id FROM public.get_random_word_prompts(ARRAY[]::uuid[], 1, 3)`)).length > 0, "sem desafio excluiu tudo");
+    await db.q(`DELETE FROM public.rooms WHERE host_id = $1`, [`d1h_${tag}`]);
+    await forcarDesafio(W1.id);
+  });
+
+  await t("Red Team H1: próxima palavra imprevisível — sorteio entre os 24 menos usados, nunca os mais recentes", async () => {
+    if (modePg && (await db.q(`SELECT count(*)::int AS n FROM public.daily_choice_sets WHERE status = 'aprovado' AND NOT (word_id = ANY($1::uuid[]))`, [palavras]))[0].n > 0)
+      return console.log("      (pulado no CI: há outros aprovados no banco)");
+    const extra = [];
+    for (let k = 0; k < 25; k++) extra.push((await novaPalavra(100 + k)).id);
+    const todas = [W1.id, W2.id, W3.id, ...extra];
+    await db.q(`DELETE FROM public.daily_challenges WHERE word_id = ANY($1::uuid[]) AND challenge_hour <> $2`, [todas, HORA]);
+    for (let i = 0; i < todas.length; i++)
+      await db.q(`INSERT INTO public.daily_challenges (challenge_date, challenge_hour, word_id) VALUES (($1::timestamptz - make_interval(hours => $2))::date, $1::timestamptz - make_interval(hours => $2), $3)`, [HORA, 6000 - i, todas[i]]);
+    const recentes = new Set(todas.slice(-4));
+    const vistos = new Set();
+    for (let n = 0; n < 60; n++) {
+      await forcarDesafio(null);
+      await db.q(`SELECT public.get_or_create_daily_challenge()`);
+      const [{ word_id }] = await db.q(`SELECT word_id FROM public.daily_challenges WHERE challenge_hour = $1`, [HORA]);
+      ok(!recentes.has(word_id), "sorteou uma das 4 usadas mais recentemente");
+      vistos.add(word_id);
+    }
+    ok(vistos.size >= 8, `pouca variação (${vistos.size}): sorteio previsível`);
+    console.log(`      ${vistos.size} palavras distintas em 60 sorteios; nenhuma das 4 mais recentes`);
+    await db.q(`UPDATE public.daily_choice_sets SET status = 'reprovado' WHERE word_id = ANY($1::uuid[])`, [extra]);
+    await forcarDesafio(W1.id);
   });
 
   await t("hora virou entre o início e o fim: 'hour_changed', nada gasto", async () => {

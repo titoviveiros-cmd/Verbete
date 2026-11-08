@@ -15,6 +15,7 @@ import {
   DailyPausePanel,
 } from "@/components/daily/DailyChoice";
 import {
+  CHOICE_HOUR_CHANGED,
   CHOICE_PAUSED,
   type ChoiceResultView,
   type ChoiceStartView,
@@ -51,6 +52,7 @@ function setup(over: Partial<Parameters<typeof DailyChoiceFlow>[0]> = {}) {
     category: null,
     options: OPTIONS,
     elapsedS: 0,
+    hour: "2026-11-08T16:00:00.000Z",
   }));
   const submit = vi.fn(async (): Promise<ChoiceResultView> => ({
     already_played: false,
@@ -101,7 +103,7 @@ describe("tela do modo escolha", () => {
       screen.getByRole("radio", { name: /Peixe de água doce/ }),
     ).toHaveAttribute("aria-checked", "true");
     await act(async () => fireEvent.click(confirmar));
-    expect(submit).toHaveBeenCalledWith(1);
+    expect(submit).toHaveBeenCalledWith(1, "2026-11-08T16:00:00.000Z");
     expect(onFinished).toHaveBeenCalledWith(
       expect.objectContaining({ is_correct: true, score: 48 }),
     );
@@ -166,6 +168,7 @@ describe("tela do modo escolha", () => {
       category: null,
       options: OPTIONS,
       elapsedS: 45,
+      hour: "2026-11-08T16:00:00.000Z",
     }));
     const { container } = setup({ start, now: () => 1_000_000 });
     await act(async () =>
@@ -209,5 +212,40 @@ describe("critério 3 — resultado: só certo/errado e a definição correta", 
     const { container } = render(<DailyPausePanel message={CHOICE_PAUSED} />);
     expect(container.textContent).toMatch(/tentativa NÃO foi gasta/);
     expect(container.textContent).not.toMatch(PROIBIDO);
+  });
+});
+
+describe("Red Team A2 — a tela nunca mistura palavra e alternativas de horas diferentes", () => {
+  it("a palavra exibida vem do servidor JUNTO com as alternativas (onStarted)", async () => {
+    const onStarted = vi.fn();
+    setup({ onStarted });
+    expect(onStarted).not.toHaveBeenCalled(); // antes de abrir, a tela não tem a palavra
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: /Ver alternativas/ })),
+    );
+    expect(onStarted).toHaveBeenCalledWith({ word: "acará", category: null });
+  });
+
+  it("hora virou (ou sessão perdida): volta ao início com o aviso; reabrir traz as da hora nova", async () => {
+    const submit = vi.fn(async (): Promise<ChoiceResultView> => {
+      throw new Error(CHOICE_HOUR_CHANGED);
+    });
+    const { start } = setup({ submit });
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: /Ver alternativas/ })),
+    );
+    fireEvent.click(screen.getAllByRole("radio")[0]!);
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole("button", { name: /Confirmar resposta/ }),
+      ),
+    );
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(/virou de hora/);
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: /Ver alternativas/ })),
+    );
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
   });
 });

@@ -32,7 +32,7 @@ DROP FUNCTION IF EXISTS public.daily_choice_admin_add_drafts(jsonb);
 DROP FUNCTION IF EXISTS public.daily_choice_admin_pool(integer);
 DROP FUNCTION IF EXISTS public.daily_choice_admin_get(uuid[]);
 DROP FUNCTION IF EXISTS public.daily_choice_admin_list(text, integer, integer);
-DROP FUNCTION IF EXISTS public.daily_choice_finish(uuid, integer);
+DROP FUNCTION IF EXISTS public.daily_choice_finish(uuid, integer, timestamptz);
 DROP FUNCTION IF EXISTS public.daily_choice_start(uuid);
 DROP FUNCTION IF EXISTS public.daily_record_participation(uuid, timestamptz, integer);
 DROP FUNCTION IF EXISTS public.daily_choice_new_perm();
@@ -147,6 +147,60 @@ BEGIN
   );
 END;
 $function$;
+
+-- multiplayer: choose_word e get_random_word_prompts voltam às definições anteriores
+-- (20261025140000 e 20260720110000) e a leitura de daily_challenges volta a incluir a hora corrente
+CREATE OR REPLACE FUNCTION public.choose_word(p_room_id uuid, p_word_id uuid, p_duration_sec integer DEFAULT 60)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_room public.rooms;
+BEGIN
+  SELECT * INTO v_room FROM public.rooms WHERE id = p_room_id FOR UPDATE;
+  IF v_room IS NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'room_not_found'); END IF;
+  IF v_room.status <> 'choosing' THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid_state'); END IF;
+  IF v_room.current_word_id IS NOT NULL THEN RETURN jsonb_build_object('ok', false, 'reason', 'already_chosen'); END IF;
+
+  UPDATE public.rooms
+  SET status = 'writing',
+      current_word_id = p_word_id,
+      used_word_ids = CASE
+        WHEN p_word_id = ANY(used_word_ids) THEN used_word_ids
+        ELSE array_append(used_word_ids, p_word_id)
+      END,
+      -- escrita: base + 10 s, sem escalar com a sala (2026-10-25)
+      round_phase_ends_at = now() + make_interval(secs => public.writing_phase_secs(p_duration_sec)),
+      phase_started_at = now()
+  WHERE id = p_room_id;
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_random_word_prompts(
+  exclude_ids uuid[] DEFAULT ARRAY[]::uuid[],
+  min_rarity integer DEFAULT 2,
+  lim integer DEFAULT 3,
+  p_categories text[] DEFAULT ARRAY[]::text[],
+  p_nivel text DEFAULT NULL
+)
+RETURNS TABLE(id uuid, word text, category text, rarity int, nivel text, classe text, pronuncia text)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+  SELECT w.id, w.word, w.category, w.rarity, w.nivel, w.classe, w.pronuncia
+  FROM public.get_random_words(exclude_ids, min_rarity, lim, p_categories, p_nivel) AS w;
+$function$;
+
+DROP POLICY IF EXISTS "daily_challenges past read" ON public.daily_challenges;
+CREATE POLICY "daily_challenges past read" ON public.daily_challenges
+  FOR SELECT TO anon, authenticated USING (challenge_hour <= now());
+DROP FUNCTION IF EXISTS public.daily_current_word_id();
 
 DROP FUNCTION IF EXISTS public.daily_mode();
 ALTER TABLE public.daily_attempts DROP CONSTRAINT IF EXISTS daily_attempts_mode_check;

@@ -57,6 +57,8 @@ export type ChoiceStartView =
       options: ChoiceOption[];
       /** segundos já corridos desde o início (reabrir a página não zera o relógio) */
       elapsedS: number;
+      /** hora (ISO) das alternativas mostradas: volta no envio (Red Team A4) */
+      hour: string;
     }
   | { status: "already_played" }
   | { status: "mode"; mode: "juiz" | "pausa" };
@@ -86,12 +88,18 @@ export function sanitizeChoiceStart(raw: unknown): ChoiceStartView {
   const word = String(r.word ?? "");
   if (!posOk || !word) throw new Error(CHOICE_UNAVAILABLE);
   const elapsed = Number(r.elapsed_s);
+  const hour =
+    typeof r.hour === "string" && !Number.isNaN(Date.parse(r.hour))
+      ? new Date(r.hour).toISOString()
+      : "";
+  if (!hour) throw new Error(CHOICE_UNAVAILABLE);
   return {
     status: "ok",
     word,
     category: typeof r.category === "string" ? r.category : null,
     options,
     elapsedS: Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed)) : 0,
+    hour,
   };
 }
 

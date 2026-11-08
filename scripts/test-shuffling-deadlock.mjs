@@ -38,7 +38,7 @@ const H = `shf_h_${tag}`;
 const P2 = `shf_2_${tag}`;
 const P3 = `shf_3_${tag}`;
 const BOT4 = `shf_b4_${tag}`;
-const { id: wordId } = await row(`SELECT id FROM public.words WHERE meaning IS NOT NULL LIMIT 1`);
+const { id: wordId } = await row(`SELECT id FROM public.words WHERE meaning IS NOT NULL AND id IS DISTINCT FROM (SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())) LIMIT 1`);
 // Os cenários reaproveitam os mesmos ids (e sessões): limpa sala E jogadores.
 const dropRoom = async (rid) => {
   await db.query(`DELETE FROM public.rooms WHERE id = $1`, [rid]);

@@ -78,7 +78,7 @@ try {
   check("start_game", sg?.ok === true, JSON.stringify(sg));
 
   const { rows: words } = await db.query(
-    `SELECT id FROM public.words WHERE meaning IS NOT NULL ORDER BY id LIMIT 2`,
+    `SELECT id FROM public.words WHERE meaning IS NOT NULL AND id IS DISTINCT FROM (SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())) ORDER BY id LIMIT 2`,
   );
   check("2 palavras com significado no acervo do teste", words.length === 2, `n=${words.length}`);
 

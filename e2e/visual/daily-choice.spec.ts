@@ -47,6 +47,7 @@ async function mockChoice(page: Page, opts: { correct: boolean }) {
             category: "comportamento",
             options: OPTIONS,
             elapsedS: 0,
+            hour: "2026-11-08T16:00:00.000Z",
           };
       return route.fulfill({
         status: 200,
@@ -81,7 +82,14 @@ test("modo escolha: abrir, escolher, confirmar e ver o acerto — sem IA na tela
     page.getByRole("button", { name: /Ver alternativas/ }),
   ).toBeVisible();
   await expect(page.locator("#daily-guess")).toHaveCount(0); // nada de caixa de texto do modo juiz
+  // Red Team A1: a palavra NÃO aparece antes de abrir as alternativas (o relógio começa no abrir)
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("?");
+  await expect(page.getByText("alvíssaras", { exact: false })).toHaveCount(0);
   await page.getByRole("button", { name: /Ver alternativas/ }).click();
+  // A2: a palavra exibida é a que veio do servidor junto com as alternativas
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    /alvíssaras/i,
+  );
   await expect(page.getByRole("radio")).toHaveCount(4);
   expect(await page.locator("main, body").first().innerText()).not.toMatch(
     PROIBIDO,

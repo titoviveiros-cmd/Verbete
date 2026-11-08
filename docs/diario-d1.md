@@ -19,7 +19,10 @@
 - **Abrir** (`startDailyChoice` → `daily_choice_start`): cria a sessão da hora (ordem embaralhada pelo servidor, início do relógio). Reabrir na mesma hora devolve a **mesma ordem e o mesmo relógio**. A resposta leva só `word`, `category`, `options[{pos,text}]` e `elapsed_s`: nunca a posição da correta, ids ou hash.
 - **Responder** (`submitDailyChoice({pos})` → `daily_choice_finish`): o cliente manda só a posição (o schema rejeita `timeSeconds`). O servidor calcula o tempo, o acerto e os pontos, grava `daily_attempts(mode='escolha', similarity=0)` e atualiza sequência/total/conquistas por `daily_record_participation` — **cópia fiel** do bloco de `submit_daily_attempt_scored` (que fica intocada; md5 `e41b8c87…`), com teste de paridade em 36 estados.
 - **Uma tentativa por hora nos dois modos:** a mesma trava consultiva da V2 (`pg_advisory_xact_lock(usuário|hora)`) + `UNIQUE(user_id, challenge_hour)`.
-- **Sorteio:** no modo escolha, só palavras com conjunto **aprovado**, palavra **publicada** e definição igual à revisada; a menos usada primeiro (sem repetir em 7 dias com ≥ 168 aprovados). Nos dois modos o sorteio passou a exigir `status = 'published'`.
+- **Sorteio:** no modo escolha, só palavras com conjunto **aprovado**, palavra **publicada** e definição igual à revisada; **aleatório entre as 24 menos usadas** (a próxima palavra não é previsível; com N aprovados não repete antes de N − 24 horas: 168 → 6 dias). Nos dois modos o sorteio passou a exigir `status = 'published'`.
+- **Palavra só junto com as alternativas (Red Team 08/11):** no modo escolha `get_or_create_daily_challenge` devolve `"?"`; a palavra chega em `daily_choice_start`, quando o relógio começa. `daily_challenges` só é legível para horas encerradas. No multiplayer, `choose_word` recusa a palavra da hora do Diário (`word_unavailable`) e ela sai das opções do coordenador — escolher qualquer palavra numa sala e ver a revelação entregava a definição exata.
+- **Resposta presa à hora vista:** o envio leva a hora das alternativas; outra hora = `hour_changed` (nada gasto) e a tela volta ao início.
+- **Modo ilegível = recusa:** se a leitura de `daily_mode` falhar (fora "função ausente"), o envio do juiz é recusado sem gastar a tentativa.
 - **Forma uniforme:** as 4 alternativas aparecem com maiúscula inicial e sem pontuação final (a correta não se denuncia pela forma).
 - **Telemetria:** `ops_events` `daily_choice_start` / `daily_choice_finish` com `{mode, result, latency_ms}`. Nunca palavra, alternativas, escolha ou jogador.
 - **Segurança:** tabelas `daily_choice_sets` e `daily_choice_sessions` com RLS e sem acesso para `anon`/`authenticated`; todas as funções novas só para `service_role` (o Worker); a revisão confere o papel admin no servidor.
@@ -71,7 +74,7 @@ SELECT count(*) AS duplicadas FROM (SELECT user_id, challenge_hour FROM public.d
 | `src/lib/__tests__/daily-choice-admin.test.ts` | unitário | D-e (rascunho, aprovação só humana) |
 | `src/components/__tests__/daily-choice-view.test.tsx` | componente | 1, 2, 3 |
 | `e2e/visual/daily-choice.spec.ts` | navegador (Supabase simulado) | 1, 2, 3, pausa, juiz intacto |
-| `scripts/test-daily-choice.mjs` | Postgres real (CI) e PGlite (offline) | 5, 6, 7, 8, 9, 10–16, 18, 21, rollback |
+| `scripts/test-daily-choice.mjs` | Postgres real (CI) e PGlite (offline) | 5, 6, 7, 8, 9, 10–16, 18, 21, rollback, Red Team (palavra antes da hora, multiplayer, sorteio imprevisível, hora da resposta) |
 | `scripts/test-security-rest.mjs` | Postgres real (CI) | 5 (allowlist) |
 
 Manual na ativação: critério 16 (md5 em produção), 20 (APK 2.1.4 instalado recebe a mensagem segura) e o smoke do passo 6.

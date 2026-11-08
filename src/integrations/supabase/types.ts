@@ -1266,7 +1266,7 @@ export type Database = {
         Returns: Json;
       };
       daily_choice_finish: {
-        Args: { p_pos: number; p_user_id: string };
+        Args: { p_hour?: string; p_pos: number; p_user_id: string };
         Returns: Json;
       };
       daily_choice_start: { Args: { p_user_id: string }; Returns: Json };

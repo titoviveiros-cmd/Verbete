@@ -78,7 +78,7 @@ await db.query(`UPDATE public.rooms SET current_coordinator = 'e2e_host' WHERE i
 
 // 4) escolhe palavra
 const { rows: [word] } = await db.query(
-  `SELECT id, word FROM public.words WHERE meaning IS NOT NULL LIMIT 1`,
+  `SELECT id, word FROM public.words WHERE meaning IS NOT NULL AND id IS DISTINCT FROM (SELECT word_id FROM public.daily_challenges WHERE challenge_hour = date_trunc('hour', now())) LIMIT 1`,
 );
 const cw = await rpc("choose_word", { p_room_id: rid, p_word_id: word.id, p_duration_sec: 60 });
 check("choose_word", cw?.ok === true || cw === "" || cw == null, JSON.stringify(cw).slice(0, 80));

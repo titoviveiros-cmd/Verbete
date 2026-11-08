@@ -16,5 +16,9 @@ export const submitInput = z.object({
  * servidor (início → fim), nunca informado pelo cliente.
  */
 export const choiceInput = z
-  .object({ pos: z.number().int().min(0).max(3) })
+  .object({
+    pos: z.number().int().min(0).max(3),
+    /** hora das alternativas que o jogador viu (ISO); o servidor confere */
+    hour: z.string().datetime(),
+  })
   .strict();

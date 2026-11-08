@@ -6,6 +6,9 @@ import { motion } from "framer-motion";
 import { Mascot } from "@/components/Mascot";
 import { TimerBar } from "@/components/room/shared";
 import {
+  CHOICE_HOUR_CHANGED,
+  CHOICE_MODE_CHANGED,
+  CHOICE_NO_SESSION,
   CHOICE_TIME_LIMIT_S,
   type ChoiceOption,
   type ChoiceResultView,
@@ -18,7 +21,9 @@ export type ChoiceFlowProps = {
   /** abre (ou reabre) as alternativas no servidor */
   start: () => Promise<ChoiceStartView>;
   /** envia a posição escolhida; o servidor mede o tempo e decide o acerto */
-  submit: (pos: number) => Promise<ChoiceResultView>;
+  submit: (pos: number, hour: string) => Promise<ChoiceResultView>;
+  /** a palavra chega JUNTO com as alternativas (o relógio começa aqui): a tela mostra esta */
+  onStarted?: (v: { word: string; category: string | null }) => void;
   /** aceite dos Termos antes de abrir (o resultado entra no ranking) */
   confirmTerms: () => boolean;
   assertTerms?: () => Promise<void>;
@@ -33,6 +38,7 @@ export type ChoiceFlowProps = {
 export function DailyChoiceFlow(props: ChoiceFlowProps) {
   const now = props.now ?? Date.now;
   const [options, setOptions] = useState<ChoiceOption[] | null>(null);
+  const [hour, setHour] = useState<string>("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,6 +70,9 @@ export function DailyChoiceFlow(props: ChoiceFlowProps) {
       const r = await props.start();
       if (r.status === "ok") {
         setOptions(r.options);
+        setHour(r.hour);
+        setPicked(null);
+        props.onStarted?.({ word: r.word, category: r.category });
         setStartedAt(now() - r.elapsedS * 1000);
         setTick(now());
       } else props.onReload();
@@ -84,11 +93,25 @@ export function DailyChoiceFlow(props: ChoiceFlowProps) {
     setBusy(true);
     setError(null);
     try {
-      const r = await props.submit(picked);
+      const r = await props.submit(picked, hour);
       if (r.already_played) props.onReload();
       else props.onFinished(r);
     } catch (e) {
       sent.current = false;
+      const msg = e instanceof Error ? e.message : "";
+      // Red Team A2: hora virou / sessão perdida / modo mudou → as alternativas na tela
+      // não valem mais. Volta ao início (nada foi gasto) para reabrir as da hora atual.
+      if (
+        msg === CHOICE_HOUR_CHANGED ||
+        msg === CHOICE_NO_SESSION ||
+        msg === CHOICE_MODE_CHANGED
+      ) {
+        setOptions(null);
+        setPicked(null);
+        setStartedAt(null);
+        setHour("");
+        if (msg === CHOICE_MODE_CHANGED) props.onReload();
+      }
       setError(
         e instanceof Error && e.message
           ? e.message

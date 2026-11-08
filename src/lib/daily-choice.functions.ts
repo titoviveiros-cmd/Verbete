@@ -65,6 +65,7 @@ export const submitDailyChoice = createServerFn({ method: "POST" })
         rpcOrThrow("daily_choice_finish", {
           p_user_id: context.userId,
           p_pos: data.pos,
+          p_hour: data.hour,
         }),
       logEvent,
       build: build(),

@@ -102,6 +102,12 @@ function DailyPage() {
   const [choiceResult, setChoiceResult] = useState<ChoiceResultView | null>(
     null,
   );
+  // D1: no modo escolha a palavra só aparece junto com as alternativas
+  // (Red Team A1/A2): vem do servidor no início, nunca do carregamento da página
+  const [choiceWord, setChoiceWord] = useState<{
+    word: string;
+    category: string | null;
+  } | null>(null);
   const [nowMs, setNowMs] = useState(() => msUntilNextChallenge());
   const [startedAt] = useState(() => Date.now());
 
@@ -285,6 +291,20 @@ function DailyPage() {
 
   const sim = Math.max(0, Math.min(100, displayResult?.similarity ?? 0));
   const myId = user?.id;
+  // Palavra do topo. Modo escolha: só depois de abrir as alternativas (a do
+  // servidor, da mesma sessão); antes, "?". Já jogou: a da revisão.
+  const heroWord = playedAttempt
+    ? (review?.word ?? data.word.word)
+    : choiceResult || dailyMode === "escolha"
+      ? (choiceWord?.word ?? "?")
+      : data.word.word;
+  const heroCategory = playedAttempt
+    ? playedAttempt.mode === "escolha"
+      ? null
+      : data.word.category
+    : choiceResult || dailyMode === "escolha"
+      ? (choiceWord?.category ?? null)
+      : data.word.category;
 
   return (
     <div className="mobile-shell stage-wide pt-4 gap-4 overflow-y-auto pb-8">
@@ -325,11 +345,11 @@ function DailyPage() {
                 className="font-display font-black mt-1 leading-[1.1] capitalize"
                 style={verbeteWordmarkStyle("clamp(40px, 12vw, 64px)")}
               >
-                {data.word.word}
+                {heroWord}
               </h1>
-              {data.word.category && (
+              {heroCategory && (
                 <span className="chip mt-2 !bg-white/15 !border-white/30 text-white/90 uppercase tracking-wider !text-[10px]">
-                  {data.word.category}
+                  {heroCategory}
                 </span>
               )}
             </motion.div>
@@ -367,7 +387,8 @@ function DailyPage() {
               >
                 <DailyChoiceFlow
                   start={() => startChoice()}
-                  submit={(pos) => submitChoice({ data: { pos } })}
+                  submit={(pos, hour) => submitChoice({ data: { pos, hour } })}
+                  onStarted={setChoiceWord}
                   confirmTerms={() => terms.confirm()}
                   assertTerms={assertTermsAccepted}
                   consent={<TermsConsent gate={terms} />}
