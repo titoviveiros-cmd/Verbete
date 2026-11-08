@@ -468,6 +468,7 @@ const GAME_TABLES = [
   "players", "definitions", "votes", "rounds", "round_extensions",
   "rooms", "room_words", "reactions", "room_messages", "words",
   "daily_choice_sets", "daily_choice_sessions", // Diário D1 (08/11/2026)
+  "match_shares", // resultado compartilhado (09/11/2026)
 ];
 const writable = await rows(
   `SELECT r.role, t.tbl, p.priv
@@ -509,6 +510,8 @@ const DENY = [
   "daily_mode", "daily_current_word_id", "daily_choice_start", "daily_choice_finish", "daily_record_participation", "daily_choice_new_perm", "daily_choice_fmt",
   "daily_choice_admin_list", "daily_choice_admin_get", "daily_choice_admin_pool", "daily_choice_admin_add_drafts",
   "daily_choice_admin_edit", "daily_choice_admin_review", "daily_choice_cleanup",
+  // resultado compartilhado (09/11/2026): retrato e limpeza são internos
+  "match_share_snapshot", "match_shares_forget_user", "match_shares_cleanup",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
@@ -527,6 +530,8 @@ const ALLOW_ANON = [
   "cast_bot_votes",
   // 2.1.4: "Quase lá" — só a marca do próprio autor, identidade checada
   "get_my_near_miss",
+  // resultado compartilhado (09/11/2026): leitura pública só com o token aleatório
+  "get_match_share",
 ];
 const execRows = await rows(
   `SELECT DISTINCT p.proname, has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_x,
