@@ -25,6 +25,8 @@ import {
   suspendedEventIO,
 } from "../../supabase/functions/_shared/ai-mode.ts";
 import { resolveAiProvider } from "../../supabase/functions/_shared/ai-provider.ts";
+import { DAILY_NOW_CHOICE } from "./daily-choice";
+import { loadDailyMode } from "./daily-mode.server";
 
 export { DAILY_EVAL_UNAVAILABLE } from "./daily-evaluation";
 
@@ -82,6 +84,9 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
     // 20261105150000_daily_guard_v2.sql). Banco fora = sem IA. Falha da IA
     // nunca gasta a tentativa. Modo 'desligado' = fluxo antigo, idêntico.
     const attempt = runGuardedDailyAttempt({
+      // D1: lido SEM cache a cada envio (troca de modo vale na hora). Função
+      // ausente (migration D1 ainda não aplicada) ou erro = 'juiz' (fluxo atual).
+      dailyMode: () => loadDailyMode(supabaseAdmin),
       aiMode: () => readAiMode(() => loadAiModeValue(supabaseAdmin)),
       logSuspended: () =>
         logSuspended("daily", suspendedEventIO(supabaseAdmin)),
@@ -177,7 +182,10 @@ export const submitDailyAttempt = createServerFn({ method: "POST" })
       // Pausa da IA é estado previsto, não falha do servidor: HTTP 200 com o
       // erro serializado — o cliente (site e APK instalado) lança e mostra a
       // mensagem, como nos outros avisos do Diário, sem contar como 5xx.
-      if (e instanceof Error && e.message === DAILY_AI_PAUSED)
+      if (
+        e instanceof Error &&
+        (e.message === DAILY_AI_PAUSED || e.message === DAILY_NOW_CHOICE)
+      )
         setResponseStatus(200);
       throw e;
     }

@@ -147,6 +147,7 @@ export type Database = {
           guess: string;
           id: string;
           is_correct: boolean;
+          mode: string;
           score: number;
           similarity: number;
           time_seconds: number;
@@ -160,6 +161,7 @@ export type Database = {
           guess: string;
           id?: string;
           is_correct?: boolean;
+          mode?: string;
           score?: number;
           similarity?: number;
           time_seconds?: number;
@@ -1245,10 +1247,34 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      daily_choice_admin_add_drafts: {
+        Args: { p_rows: Json };
+        Returns: number;
+      };
+      daily_choice_admin_edit: {
+        Args: { p_distractors: string[]; p_validacao: Json; p_word_id: string };
+        Returns: Json;
+      };
+      daily_choice_admin_get: { Args: { p_word_ids: string[] }; Returns: Json };
+      daily_choice_admin_list: {
+        Args: { p_limit?: number; p_offset?: number; p_status?: string };
+        Returns: Json;
+      };
+      daily_choice_admin_pool: { Args: { p_limit?: number }; Returns: Json };
+      daily_choice_admin_review: {
+        Args: { p_reviewer: string; p_status: string; p_word_ids: string[] };
+        Returns: Json;
+      };
+      daily_choice_finish: {
+        Args: { p_pos: number; p_user_id: string };
+        Returns: Json;
+      };
+      daily_choice_start: { Args: { p_user_id: string }; Returns: Json };
       daily_claim: {
         Args: { p_hour?: string; p_origin?: string; p_user_id: string };
         Returns: Json;
       };
+      daily_mode: { Args: Record<PropertyKey, never>; Returns: string };
       daily_finish_fail: {
         Args: {
           p_claim_id: string;
@@ -1295,9 +1321,10 @@ export type Database = {
       get_ballot: { Args: { p_room_id: string }; Returns: Json };
       get_client_config: { Args: Record<PropertyKey, never>; Returns: Json };
       get_daily_leaderboard: {
-        Args: { p_limit?: number };
+        Args: { p_limit?: number; p_mode?: string };
         Returns: {
           is_correct: boolean;
+          mode: string;
           score: number;
           time_seconds: number;
           user_id: string;

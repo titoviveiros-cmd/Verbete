@@ -19,6 +19,7 @@ import {
   type DailyFailureEvent,
 } from "./daily-evaluation";
 import type { AiMode } from "../../supabase/functions/_shared/ai-mode.ts";
+import { DAILY_NOW_CHOICE, type DailyMode } from "./daily-choice";
 
 export const DAILY_IN_PROGRESS =
   "Sua resposta já está sendo avaliada — aguarde um instante e confira o resultado.";
@@ -120,7 +121,19 @@ export async function runGuardedDailyAttempt<T>(deps: {
   aiMode?: () => Promise<AiMode>;
   /** Evento 'ai_suspended' com throttle (melhor esforço). */
   logSuspended?: () => Promise<unknown>;
+  /** D1: app_config.daily_mode. Omitido ou erro = 'juiz' (fluxo atual). */
+  dailyMode?: () => Promise<DailyMode>;
 }): Promise<T | unknown> {
+  // D1 (08/11/2026): Diário em múltipla escolha ou em pausa → o envio do modo
+  // juiz (site aberto antes da troca, APK 2.1.4) não reserva, não lê palavra,
+  // não chama IA e NÃO gasta a tentativa. daily_mode é FIXO (D-a): não depende
+  // de ai_mode.
+  const dmode = await (deps.dailyMode?.() ?? Promise.resolve("juiz")).catch(
+    () => "juiz",
+  );
+  if (dmode === "escolha") throw new Error(DAILY_NOW_CHOICE);
+  if (dmode === "pausa") throw new Error(DAILY_AI_PAUSED);
+
   // 0) IA suspensa: pausa ANTES da reserva — nada reservado, nada gasto,
   //    nenhuma leitura de palavra/definição e nenhuma chamada ao provedor.
   const mode = await (deps.aiMode?.() ?? Promise.resolve("ligado")).catch(

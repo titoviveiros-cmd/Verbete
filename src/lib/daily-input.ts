@@ -9,3 +9,12 @@ export const submitInput = z.object({
   guess: z.string().min(1).max(200),
   timeSeconds: z.number().int().min(0).max(600),
 });
+
+/**
+ * D1 (modo escolha): só a posição escolhida (0–3). `.strict()` REJEITA campos
+ * extras — em especial `timeSeconds`: o tempo do modo escolha é medido no
+ * servidor (início → fim), nunca informado pelo cliente.
+ */
+export const choiceInput = z
+  .object({ pos: z.number().int().min(0).max(3) })
+  .strict();
