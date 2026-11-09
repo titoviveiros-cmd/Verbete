@@ -2,8 +2,15 @@
 // O admin cola o manifesto (não é salvo nem enviado a outro lugar); o painel
 // mostra só aquelas palavras e o estado de cada uma. Importar e aprovar passam
 // pelo servidor, que recalcula o hash e recusa o que divergir do revisado.
+//
+// Estado: o resultado da conferência (`checked`) guarda JUNTOS o manifesto e as
+// linhas que vieram dele. Botões e listas saem só desse par. Qualquer edição do
+// texto ou nova conferência incrementa `gen` e apaga o resultado. Respostas
+// assíncronas de uma geração antiga são descartadas, mesmo que cheguem fora de
+// ordem.
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ADMIN_PASTE_MARK } from "@/lib/paste-guard";
 import {
   addDailyChoiceDrafts,
   editDailyChoice,
@@ -42,31 +49,93 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
   const review = useServerFn(reviewDailyChoices);
   const edit = useServerFn(editDailyChoice);
   const [text, setText] = useState("");
-  const [manifest, setManifest] = useState<Manifest | null>(null);
-  const [rows, setRows] = useState<ManifestRow[] | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState<{
+    manifest: Manifest;
+    rows: ManifestRow[];
+  } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // geração atual: tudo que voltar de uma geração anterior é jogado fora
+  const gen = useRef(0);
+  const invalidate = () => {
+    gen.current += 1;
+    setChecked(null);
+    setMsg(null);
+    setChecking(false);
+    return gen.current;
+  };
 
-  const conferir = async (m: Manifest | null = manifest) => {
-    if (!m) return;
+  /** Busca o estado do banco para `m` e grava o par (m, linhas) só se `g` ainda for a geração atual. */
+  const conferir = async (m: Manifest, g: number): Promise<boolean> => {
     const items = (await getByIds({
       data: { wordIds: m.itens.map((x) => x.word_id) },
     })) as AdminItem[];
-    setRows(await compareManifest(m, items));
+    const rows = await compareManifest(m, items);
+    if (g !== gen.current) return false;
+    setChecked({ manifest: m, rows });
+    return true;
   };
-  const run = async (fn: () => Promise<string>) => {
-    setBusy(true);
-    setMsg(null);
+
+  const onConferir = async () => {
+    const g = invalidate();
+    const p = parseManifest(text);
+    if (!p.ok) {
+      setMsg(p.error);
+      return;
+    }
+    setChecking(true);
     try {
-      setMsg(await fn());
-      await conferir();
-      onChanged();
+      if (await conferir(p.manifest, g))
+        setMsg(
+          `Manifesto do lote ${p.manifest.lote ?? "?"}: ${p.manifest.itens.length} conjunto(s) conferido(s).`,
+        );
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "erro");
+      if (g === gen.current) setMsg(e instanceof Error ? e.message : "erro");
     } finally {
-      setBusy(false);
+      if (g === gen.current) setChecking(false);
     }
   };
+
+  /** Ação que grava, sempre sobre o manifesto que está NA TELA (o texto fica travado durante a gravação). */
+  const write = async (m: Manifest, fn: (m: Manifest) => Promise<string>) => {
+    const g = gen.current;
+    setWriting(true);
+    setMsg(null);
+    let out: string;
+    try {
+      out = await fn(m);
+    } catch (e) {
+      // a gravação pode ter sido parcial (ex.: Substituir em laço): o resultado antigo não vale mais
+      if (g === gen.current) {
+        setChecked(null);
+        setMsg(
+          `${e instanceof Error ? e.message : "erro"}\nToque em Conferir de novo para ver o estado atual.`,
+        );
+      }
+      setWriting(false);
+      onChanged();
+      return;
+    }
+    if (g === gen.current) setMsg(out);
+    // reconfere o MESMO manifesto que foi gravado, nunca um capturado antes
+    try {
+      if (g === gen.current) await conferir(m, g);
+    } catch (e) {
+      // sem estado novo do banco, o resultado antigo não vale mais: some com ele e com os botões
+      if (g === gen.current) {
+        setChecked(null);
+        setMsg(
+          `${out}\nNão foi possível reconferir (${e instanceof Error ? e.message : "erro"}): toque em Conferir de novo.`,
+        );
+      }
+    } finally {
+      setWriting(false);
+      onChanged();
+    }
+  };
+
+  const rows = checked?.rows ?? null;
   const ids = (st: ManifestStatus, exceptApproved = false) =>
     new Set(
       (rows ?? [])
@@ -76,8 +145,9 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
         )
         .map((r) => r.word_id),
     );
-  const itensCom = (s: Set<string>) =>
-    (manifest?.itens ?? []).filter((x) => s.has(x.word_id));
+  const itensCom = (m: Manifest, s: Set<string>) =>
+    m.itens.filter((x) => s.has(x.word_id));
+  const busy = checking || writing;
 
   const paraImportar = ids("importar");
   const divergentes = ids("divergente");
@@ -100,7 +170,13 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
       <textarea
         aria-label="manifesto do lote"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          // texto mudou: o resultado anterior deixa de valer (e respostas em voo são descartadas)
+          invalidate();
+          setText(e.target.value);
+        }}
+        readOnly={writing}
+        data-allow-paste={ADMIN_PASTE_MARK}
         rows={4}
         spellCheck={false}
         placeholder='{"versao_hash":"verbete-d1-v1","lote":1,"itens":[…]}'
@@ -108,32 +184,20 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
       />
       <div className="flex gap-2 flex-wrap mt-2">
         <button
-          disabled={busy || !text.trim()}
-          onClick={() =>
-            run(async () => {
-              const p = parseManifest(text);
-              if (!p.ok) {
-                setManifest(null);
-                setRows(null);
-                return p.error;
-              }
-              setManifest(p.manifest);
-              await conferir(p.manifest);
-              return `Manifesto do lote ${p.manifest.lote ?? "?"}: ${p.manifest.itens.length} conjunto(s) conferido(s).`;
-            })
-          }
+          disabled={writing || !text.trim()}
+          onClick={() => void onConferir()}
           className="btn-pop btn-plain text-xs !py-1.5 !px-3"
         >
-          🔎 Conferir
+          {checking ? "⏳ Conferindo…" : "🔎 Conferir"}
         </button>
-        {paraImportar.size > 0 && (
+        {checked && paraImportar.size > 0 && (
           <button
             disabled={busy}
             onClick={() =>
-              run(async () => {
+              void write(checked.manifest, async (m) => {
                 const r = await addDrafts({
                   data: {
-                    rows: itensCom(paraImportar).map((x) => ({
+                    rows: itensCom(m, paraImportar).map((x) => ({
                       wordId: x.word_id,
                       distractors: x.distractors,
                       hash: x.hash,
@@ -148,13 +212,13 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
             📥 Importar {paraImportar.size} como rascunho
           </button>
         )}
-        {divergentes.size > 0 && (
+        {checked && divergentes.size > 0 && (
           <button
             disabled={busy}
             onClick={() =>
-              run(async () => {
+              void write(checked.manifest, async (m) => {
                 let n = 0;
-                for (const x of itensCom(divergentes)) {
+                for (const x of itensCom(m, divergentes)) {
                   const r = await edit({
                     data: { wordId: x.word_id, distractors: x.distractors },
                   });
@@ -168,12 +232,12 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
             ✏️ Substituir {divergentes.size} divergente(s) pelo revisado
           </button>
         )}
-        {paraAprovar.size > 0 && (
+        {checked && paraAprovar.size > 0 && (
           <button
             disabled={busy}
             onClick={() =>
-              run(async () => {
-                const sel = itensCom(paraAprovar);
+              void write(checked.manifest, async (m) => {
+                const sel = itensCom(m, paraAprovar);
                 const r = await review({
                   data: {
                     wordIds: sel.map((x) => x.word_id),
