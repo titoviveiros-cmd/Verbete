@@ -178,7 +178,7 @@ describe("edição", () => {
       { get: async () => [item(1)], edit },
       { wordId: ID(1), distractors: [" Ave pequena ", BONS[1]!, BONS[2]!] },
     );
-    expect(r.validacao.ok).toBe(false);
+    expect(r.validacao?.ok).toBe(false);
     expect(edit).toHaveBeenCalledWith(
       ID(1),
       ["Ave pequena", BONS[1]!, BONS[2]!],

@@ -335,22 +335,33 @@ function AdminDailyChoicesPage() {
                       disabled={busy}
                       onClick={() =>
                         run(async () => {
+                          // editar um APROVADO aqui é de propósito: ele volta a rascunho (R3)
                           const r = await edit({
-                            data: { wordId: it.word_id, distractors: ed },
+                            data: {
+                              wordId: it.word_id,
+                              distractors: ed,
+                              ...(it.status === "aprovado"
+                                ? { allowApproved: true as const }
+                                : {}),
+                            },
                           });
+                          if (r.blocked)
+                            return "Já está APROVADO: não foi alterado.";
                           setEditing((m) => {
                             const n = { ...m };
                             delete n[it.word_id];
                             return n;
                           });
-                          return r.validacao.ok
+                          return r.validacao?.ok
                             ? "Salvo como rascunho (validador OK)."
                             : "Salvo como rascunho, mas o validador apontou problemas.";
                         })
                       }
                       className="flex-1 btn-pop btn-gold text-sm !py-2"
                     >
-                      💾 Salvar
+                      {it.status === "aprovado"
+                        ? "💾 Salvar (volta a rascunho)"
+                        : "💾 Salvar"}
                     </button>
                     <button
                       onClick={() =>
