@@ -4,6 +4,12 @@
 // "pronto para importar" com o botão Importar. Cobre a sequência
 // válido → adulterado → inválido, edição que invalida o resultado e respostas
 // assíncronas fora de ordem.
+//
+// Espera determinística: cada comparação (SHA-256, assíncrono de verdade) é
+// registrada e `settle()` só volta quando TODAS terminaram, sem timeout nem
+// nova tentativa. A suíte roda duas vezes: com o hash normal e com o hash
+// artificialmente lento (como numa máquina de CI ocupada), que foi o cenário
+// que derrubou a 1ª versão destes testes.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -25,6 +31,18 @@ vi.mock("@tanstack/react-start", () => ({
   useServerFn: (fn: unknown) => fn,
 }));
 vi.mock("@/lib/daily-choice.functions", () => fns);
+const pend = vi.hoisted(() => ({ list: [] as Promise<unknown>[] }));
+vi.mock("@/lib/daily-choice-manifest", async (orig) => {
+  const actual = await orig<typeof import("@/lib/daily-choice-manifest")>();
+  return {
+    ...actual,
+    compareManifest: (...args: Parameters<typeof actual.compareManifest>) => {
+      const p = actual.compareManifest(...args);
+      pend.list.push(p);
+      return p;
+    },
+  };
+});
 
 import { DailyChoiceManifest } from "@/components/DailyChoiceManifest";
 
@@ -76,7 +94,6 @@ beforeEach(async () => {
   for (const f of Object.values(fns)) f.mockReset();
   fns.getDailyChoicesByIds.mockResolvedValue([ITEM]);
 });
-afterEach(cleanup);
 
 const onChanged = vi.fn();
 function setup() {
@@ -90,9 +107,19 @@ const conferir = async () => {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: /Conferir/ }));
   });
+  await settle();
 };
 const importar = () => screen.queryByRole("button", { name: /Importar/ });
-const flush = () => act(async () => {});
+const tick = () => new Promise((r) => setTimeout(r, 0));
+/** Volta só quando não há mais comparação em andamento (sem polling por tempo). */
+const settle = () =>
+  act(async () => {
+    await tick();
+    while (pend.list.length > 0) {
+      await Promise.allSettled(pend.list.splice(0));
+      await tick();
+    }
+  });
 
 /** Promessa controlada pelo teste, para inverter a ordem das respostas. */
 function deferred<T>() {
@@ -101,13 +128,39 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-describe("painel do manifesto D1 — estado do resultado", () => {
+describe.each([
+  ["hash normal", 0],
+  ["hash lento, como na CI", 25],
+])("painel do manifesto D1 — estado do resultado (%s)", (_nome, atraso) => {
+  let digestSpy: { mockRestore: () => void } | null = null;
+  beforeEach(() => {
+    pend.list.length = 0;
+    if (atraso > 0) {
+      const subtle = globalThis.crypto.subtle;
+      const real = subtle.digest.bind(subtle);
+      digestSpy = vi
+        .spyOn(subtle, "digest")
+        .mockImplementation(async (alg, data) => {
+          await new Promise((r) => setTimeout(r, atraso));
+          return real(alg, data);
+        });
+    }
+  });
+  afterEach(async () => {
+    // nada do teste pode continuar rodando e vazar para o próximo
+    await settle();
+    expect(pend.list.length).toBe(0);
+    cleanup();
+    digestSpy?.mockRestore();
+    digestSpy = null;
+  });
+
   it("válido → adulterado → inválido: cada resultado é só do manifesto atual", async () => {
     const ta = setup();
 
     colar(ta, VALIDO);
     await conferir();
-    expect(await screen.findByText(/lote TESTE: 1 conjunto/)).toBeTruthy();
+    expect(screen.getByText(/lote TESTE: 1 conjunto/)).toBeTruthy();
     expect(screen.getAllByText("pronto para importar").length).toBeGreaterThan(
       0,
     );
@@ -119,9 +172,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     expect(importar()).toBeNull();
 
     await conferir();
-    expect(
-      await screen.findByText(/lote TESTE-ADULTERADO: 1 conjunto/),
-    ).toBeTruthy();
+    expect(screen.getByText(/lote TESTE-ADULTERADO: 1 conjunto/)).toBeTruthy();
     expect(
       screen.getAllByText("definição mudou — revisar de novo").length,
     ).toBeGreaterThan(0);
@@ -133,9 +184,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
 
     colar(ta, INVALIDO);
     await conferir();
-    expect(
-      await screen.findByText(/Manifesto inválido: itens\.0\.hash/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Manifesto inválido: itens\.0\.hash/)).toBeTruthy();
     expect(screen.queryByText(/definição mudou/)).toBeNull();
     expect(screen.queryByText("pronto para importar")).toBeNull();
     expect(importar()).toBeNull();
@@ -145,7 +194,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     // texto que nem é JSON
     colar(ta, "abc");
     await conferir();
-    expect(await screen.findByText("Não é um JSON válido.")).toBeTruthy();
+    expect(screen.getByText("Não é um JSON válido.")).toBeTruthy();
     expect(onChanged).not.toHaveBeenCalled(); // conferir não dispara gravação nem recarga
     expect(fns.addDailyChoiceDrafts).not.toHaveBeenCalled();
     expect(fns.reviewDailyChoices).not.toHaveBeenCalled();
@@ -165,11 +214,10 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     colar(ta, ADULTERADO);
     await conferir(); // B em voo
     await act(async () => b.resolve([ITEM]));
-    expect(
-      await screen.findByText(/lote TESTE-ADULTERADO: 1 conjunto/),
-    ).toBeTruthy();
+    await settle();
+    expect(screen.getByText(/lote TESTE-ADULTERADO: 1 conjunto/)).toBeTruthy();
     await act(async () => a.resolve([ITEM])); // chega por último, fora de ordem
-    await flush();
+    await settle();
 
     expect(screen.getByText(/lote TESTE-ADULTERADO/)).toBeTruthy();
     expect(screen.queryByText(/lote TESTE:/)).toBeNull();
@@ -189,9 +237,9 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     await conferir(); // A em voo
     colar(ta, INVALIDO);
     await conferir();
-    expect(await screen.findByText(/Manifesto inválido/)).toBeTruthy();
+    expect(screen.getByText(/Manifesto inválido/)).toBeTruthy();
     await act(async () => a.resolve([ITEM]));
-    await flush();
+    await settle();
 
     expect(screen.getByText(/Manifesto inválido/)).toBeTruthy();
     expect(screen.queryByText(/conferido/)).toBeNull();
@@ -209,7 +257,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     expect(screen.getByRole("button", { name: /Conferindo/ })).toBeTruthy();
     colar(ta, VALIDO + " ");
     await act(async () => a.resolve([ITEM]));
-    await flush();
+    await settle();
 
     expect(screen.queryByText(/conferido/)).toBeNull();
     expect(importar()).toBeNull();
@@ -221,7 +269,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     const ta = setup();
     colar(ta, VALIDO);
     await conferir();
-    expect(await screen.findByText(/lote TESTE: 1 conjunto/)).toBeTruthy();
+    expect(screen.getByText(/lote TESTE: 1 conjunto/)).toBeTruthy();
 
     const w = deferred<{
       inserted: number;
@@ -237,8 +285,9 @@ describe("painel do manifesto D1 — estado do resultado", () => {
       (screen.getByRole("button", { name: /Conferir/ }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    expect(onChanged).not.toHaveBeenCalled(); // ainda gravando
     await act(async () => w.resolve({ inserted: 1, divergent: 0, invalid: 0 }));
-    await flush();
+    await settle();
 
     const sent = fns.addDailyChoiceDrafts.mock.calls[0]![0].data.rows;
     expect(sent).toEqual([
@@ -250,6 +299,10 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     });
     expect(fns.getDailyChoicesByIds).toHaveBeenCalledTimes(2);
     expect(onChanged).toHaveBeenCalledTimes(1);
+    // a lista do painel só recarrega DEPOIS da reconferência
+    expect(onChanged.mock.invocationCallOrder[0]).toBeGreaterThan(
+      fns.getDailyChoicesByIds.mock.invocationCallOrder[1]!,
+    );
     expect(screen.getByText(/Importados como RASCUNHO: 1/)).toBeTruthy();
     expect(ta.readOnly).toBe(false);
   });
@@ -258,7 +311,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     const ta = setup();
     colar(ta, VALIDO);
     await conferir();
-    expect(await screen.findByText(/lote TESTE: 1 conjunto/)).toBeTruthy();
+    expect(screen.getByText(/lote TESTE: 1 conjunto/)).toBeTruthy();
 
     fns.addDailyChoiceDrafts.mockResolvedValueOnce({
       inserted: 1,
@@ -269,7 +322,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     await act(async () => {
       fireEvent.click(importar()!);
     });
-    await flush();
+    await settle();
 
     expect(screen.getByText(/Importados como RASCUNHO: 1/)).toBeTruthy();
     expect(screen.getByText(/Não foi possível reconferir/)).toBeTruthy();
@@ -289,13 +342,13 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     fns.getDailyChoicesByIds.mockResolvedValue([gravado]);
     colar(ta, VALIDO);
     await conferir();
-    const sub = await screen.findByRole("button", { name: /Substituir 1/ });
+    const sub = screen.getByRole("button", { name: /Substituir 1/ });
 
     fns.editDailyChoice.mockRejectedValueOnce(new Error("falhou no meio"));
     await act(async () => {
       fireEvent.click(sub);
     });
-    await flush();
+    await settle();
 
     expect(screen.getByText(/falhou no meio/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Substituir/ })).toBeNull();
@@ -314,7 +367,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     ]);
     colar(ta, VALIDO);
     await conferir();
-    const ok = await screen.findByRole("button", { name: /Aprovar 1/ });
+    const ok = screen.getByRole("button", { name: /Aprovar 1/ });
     fns.reviewDailyChoices.mockResolvedValueOnce({
       updated: 1,
       skipped: 0,
@@ -323,7 +376,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
     await act(async () => {
       fireEvent.click(ok);
     });
-    await flush();
+    await settle();
 
     expect(fns.reviewDailyChoices).toHaveBeenCalledWith({
       data: {
@@ -333,6 +386,7 @@ describe("painel do manifesto D1 — estado do resultado", () => {
       },
     });
     expect(screen.getByText(/1 aprovado\(s\)/)).toBeTruthy();
+    expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
   it("o campo do manifesto é o único marcado para aceitar colar", () => {
