@@ -192,13 +192,21 @@ export async function saveDrafts(
   };
 }
 
-/** Aprovar/reprovar/voltar a rascunho SÓ os ids escolhidos pelo revisor. */
+/**
+ * Aprovar/reprovar/voltar a rascunho SÓ os ids escolhidos pelo revisor.
+ * R1: com manifesto, a aprovação vai para `reviewHashed`, que confere o hash DE
+ * NOVO dentro do banco, na mesma transação do UPDATE. Nunca cai na aprovação
+ * sem hash: sem `reviewHashed`, falha.
+ */
 export async function reviewSets(
   deps: {
     get: (ids: string[]) => Promise<AdminItem[]>;
     review: (
       ids: string[],
       status: string,
+    ) => Promise<{ updated: number; skipped: number }>;
+    reviewHashed?: (
+      expected: Record<string, string>,
     ) => Promise<{ updated: number; skipped: number }>;
   },
   input: z.infer<typeof reviewInput>,
@@ -258,9 +266,17 @@ export async function reviewSets(
     else ok.push(it.word_id);
   }
   const missing = ids.length - items.length;
-  const r = ok.length
-    ? await deps.review(ok, "aprovado")
-    : { updated: 0, skipped: 0 };
+  const expected = input.expected;
+  let r = { updated: 0, skipped: 0 };
+  if (ok.length && expected) {
+    if (!deps.reviewHashed)
+      throw new Error(
+        "Aprovação por manifesto indisponível (sem hash no banco).",
+      );
+    r = await deps.reviewHashed(
+      Object.fromEntries(ok.map((id) => [id, expected[id]!])),
+    );
+  } else if (ok.length) r = await deps.review(ok, "aprovado");
   return {
     updated: r.updated,
     skipped: ids.length - r.updated,
@@ -283,6 +299,8 @@ export async function reviewSets(
  * R3: um conjunto APROVADO só é editado com allowApproved; sem ele, nada muda.
  * R4: um REPROVADO só com allowRejected (editar o devolveria a rascunho e o
  * deixaria pronto para o "Aprovar idênticos" do manifesto).
+ * As duas recusas são decididas de novo no banco, com a linha travada (alguém
+ * pode ter aprovado ou reprovado entre a leitura daqui e a gravação).
  */
 export async function editSet(
   deps: {
@@ -291,7 +309,8 @@ export async function editSet(
       wordId: string,
       distractors: string[],
       validacao: Validation,
-    ) => Promise<number>;
+      allow: { approved: boolean; rejected: boolean },
+    ) => Promise<{ updated: number; blocked?: "aprovado" | "reprovado" }>;
   },
   input: z.infer<typeof editInput>,
 ): Promise<{
@@ -311,6 +330,11 @@ export async function editSet(
     truth: it.truth,
     distractors,
   });
-  const updated = await deps.edit(input.wordId, distractors, validacao);
-  return { updated, validacao };
+  const r = await deps.edit(input.wordId, distractors, validacao, {
+    approved: input.allowApproved === true,
+    rejected: input.allowRejected === true,
+  });
+  return r.blocked
+    ? { updated: 0, validacao: null, blocked: r.blocked }
+    : { updated: r.updated, validacao };
 }

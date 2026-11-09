@@ -170,6 +170,12 @@ export const reviewDailyChoices = createServerFn({ method: "POST" })
             p_status: status,
             p_reviewer: context.userId,
           })) as { updated: number; skipped: number },
+        // R1: manifesto → o banco recalcula o hash na mesma transação do UPDATE
+        reviewHashed: async (expected) =>
+          (await rpcOrThrow("daily_choice_admin_review_hashed", {
+            p_expected: expected,
+            p_reviewer: context.userId,
+          })) as { updated: number; skipped: number },
       },
       data,
     );
@@ -183,16 +189,19 @@ export const editDailyChoice = createServerFn({ method: "POST" })
     return editSet(
       {
         get: getItems,
-        edit: async (wordId, distractors, validacao) =>
-          Number(
-            (
-              (await rpcOrThrow("daily_choice_admin_edit", {
-                p_word_id: wordId,
-                p_distractors: distractors,
-                p_validacao: validacao,
-              })) as { updated?: number }
-            )?.updated ?? 0,
-          ),
+        // R3/R4: a trava de APROVADO/REPROVADO é decidida no banco, com a linha travada
+        edit: async (wordId, distractors, validacao, allow) => {
+          const r = (await rpcOrThrow("daily_choice_admin_edit_guarded", {
+            p_word_id: wordId,
+            p_distractors: distractors,
+            p_validacao: validacao,
+            p_allow_approved: allow.approved,
+            p_allow_rejected: allow.rejected,
+          })) as { updated?: number; blocked?: string } | null;
+          return r?.blocked === "aprovado" || r?.blocked === "reprovado"
+            ? { updated: 0, blocked: r.blocked }
+            : { updated: Number(r?.updated ?? 0) };
+        },
       },
       data,
     );

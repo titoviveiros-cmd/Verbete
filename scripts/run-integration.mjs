@@ -16,6 +16,7 @@ const SUITES = [
   "test-daily-guard.mjs", // V2 Diário: reserva atômica antes da IA, com conexões REAIS independentes
   "test-match-share.mjs", // resultado compartilhado: retrato do servidor, token aleatório, validade (09/11/2026)
   "test-daily-choice.mjs", // Diário D1 (modo escolha, sem IA): uma tentativa por hora nos 2 modos, relógio do servidor, sequência, placar (08/11/2026)
+  "test-daily-choice-hash.mjs", // D1 R1/R2/R3 no banco: hash conferido no UPDATE, trava de aprovado, corridas reais (10/11/2026)
   "test-v3-quota-sql.mjs", // V3 edges: cota dos bots no banco (depois da V2, que recria as funções dela)
   "test-edges-e2e.mjs",
   "test-phase-secs.mjs",
