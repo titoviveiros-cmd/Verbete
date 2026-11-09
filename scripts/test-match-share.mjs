@@ -150,11 +150,17 @@ const novaSala = async ({
   jogadores = [],
   legado = false,
 } = {}) => {
+  // código de 4 dígitos sorteado entre os LIVRES (como no app): um sorteio cego colidia
+  // com salas de suítes anteriores (rooms_code_key). Sem código livre: a linha não sai e o
+  // destructuring abaixo falha alto, em vez de passar calado.
   const [{ id }] = await db.q(
     `INSERT INTO public.rooms (code, host_id, status, mode, teams, current_round)
-     VALUES ($1, $2, $3, $4, $5::jsonb, 3) RETURNING id`,
+     SELECT c.code, $1, $2, $3, $4::jsonb, 3
+       FROM (SELECT g::text AS code FROM generate_series(1000, 9999) AS g) c
+      WHERE NOT EXISTS (SELECT 1 FROM public.rooms r WHERE r.code = c.code)
+      ORDER BY random() LIMIT 1
+     RETURNING id`,
     [
-      String(1000 + Math.floor(Math.random() * 8999)),
       `ms_${tag}_h`,
       legado ? "finished" : "scoreboard",
       mode,
