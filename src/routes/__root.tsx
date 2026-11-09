@@ -30,6 +30,7 @@ import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { RemoteGate } from "@/components/RemoteGate";
 import { Toaster } from "@/components/ui/sonner";
+import { shouldBlockEditEvent } from "@/lib/paste-guard";
 // Aplica o tema salvo antes do 1º paint em TODA página (o módulo age ao ser
 // importado); antes só as telas com o ThemeToggle o carregavam.
 import "@/hooks/use-theme";
@@ -320,16 +321,12 @@ function RootComponent() {
     return () => window.removeEventListener("click", onClick, true);
   }, []);
 
-  // Anti-trapaça: bloquear colar/arrastar em campos de texto do jogo
+  // Anti-trapaça: bloquear colar/arrastar em campos de texto do jogo. Única
+  // exceção: colar no campo do manifesto D1 do painel admin (ver paste-guard).
   useEffect(() => {
     const block = (e: Event) => {
-      const t = e.target as HTMLElement | null;
-      if (!t) return;
-      const tag = t.tagName;
-      const editable = (t as HTMLElement).isContentEditable;
-      if (tag === "INPUT" || tag === "TEXTAREA" || editable) {
+      if (shouldBlockEditEvent(e.type, e.target, window.location.pathname))
         e.preventDefault();
-      }
     };
     document.addEventListener("paste", block, true);
     document.addEventListener("drop", block, true);
