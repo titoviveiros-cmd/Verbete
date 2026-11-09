@@ -3,7 +3,9 @@
 //  * o gerador só grava RASCUNHOS; aprovação é sempre um ato do revisor sobre
 //    ids que ele escolheu (individual ou lote selecionado), nunca automática;
 //  * aprovar re-valida o conteúdo ATUAL (validador + definição igual à revisada);
-//    o banco confere de novo (daily_choice_admin_review).
+//    o banco confere de novo (daily_choice_admin_review);
+//  * manifesto (lote revisado fora do painel): importação e aprovação conferem o
+//    HASH de cada conjunto no servidor — nada diferente do revisado entra.
 import { z } from "zod";
 import {
   draftDistractors,
@@ -12,6 +14,7 @@ import {
   type AcervoWord,
   type Validation,
 } from "./daily-choice-content";
+import { HASH_RE, setHash } from "./daily-choice-manifest";
 
 export const ADMIN_ONLY = "Acesso restrito a administradores.";
 export const MAX_BATCH = 200;
@@ -33,6 +36,8 @@ export const draftsInput = z
           .object({
             wordId: z.string().uuid(),
             distractors: z.array(z.string().trim().min(1).max(200)).length(3),
+            // hash do conjunto REVISADO (manifesto): o servidor recalcula e recusa se divergir
+            hash: z.string().regex(HASH_RE).optional(),
           })
           .strict(),
       )
@@ -44,7 +49,15 @@ export const reviewInput = z
   .object({
     wordIds: z.array(z.string().uuid()).min(1).max(MAX_BATCH),
     status: z.enum(["aprovado", "reprovado", "rascunho"]),
+    // aprovação por manifesto: id → hash revisado; quem divergir (ou faltar) não é aprovado
+    expected: z
+      .record(z.string().uuid(), z.string().regex(HASH_RE))
+      .refine((r) => Object.keys(r).length <= MAX_BATCH)
+      .optional(),
   })
+  .strict();
+export const idsInput = z
+  .object({ wordIds: z.array(z.string().uuid()).min(1).max(MAX_BATCH) })
   .strict();
 export const editInput = z
   .object({
@@ -120,6 +133,7 @@ export async function saveDrafts(
   inserted: number;
   invalid: number;
   skipped: number;
+  divergent: number;
 }> {
   const byId = new Map(
     (await deps.get(input.rows.map((x) => x.wordId))).map((it) => [
@@ -133,9 +147,18 @@ export async function saveDrafts(
     validacao: Validation;
   }> = [];
   let invalid = 0;
+  let divergent = 0;
   for (const x of input.rows) {
     const it = byId.get(x.wordId);
     if (!it || !it.published || it.status) continue; // inexistente, não publicada ou já tem conjunto
+    // manifesto: só grava se for EXATAMENTE o revisado (definição atual + estas 3 alternativas)
+    if (
+      x.hash &&
+      (await setHash(x.wordId, it.truth, x.distractors)) !== x.hash
+    ) {
+      divergent++;
+      continue;
+    }
     const validacao = validateChoiceSet({
       word: it.word,
       truth: it.truth,
@@ -150,6 +173,7 @@ export async function saveDrafts(
     inserted,
     invalid,
     skipped: input.rows.length - inserted,
+    divergent,
   };
 }
 
@@ -185,6 +209,15 @@ export async function reviewSets(
       reasons.push(
         "a definição mudou depois do rascunho: edite e salve de novo",
       );
+    if (input.expected) {
+      const exp = input.expected[it.word_id];
+      if (!exp) reasons.push("fora do manifesto");
+      else if (
+        !it.distractors ||
+        (await setHash(it.word_id, it.truth, it.distractors)) !== exp
+      )
+        reasons.push("conteúdo diferente do revisado (hash)");
+    }
     if (it.distractors) {
       const v = validateChoiceSet({
         word: it.word,

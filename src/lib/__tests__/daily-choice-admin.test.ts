@@ -101,6 +101,7 @@ describe("gerador (no navegador do revisor) → servidor re-valida → só RASCU
       inserted: 2,
       invalid: expect.any(Number),
       skipped: 3,
+      divergent: 0,
     });
   });
   it("entrada: 1 a 200 linhas, 3 textos cada, sem campos extras", () => {

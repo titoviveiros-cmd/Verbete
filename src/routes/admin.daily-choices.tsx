@@ -13,6 +13,7 @@ import {
   reviewDailyChoices,
 } from "@/lib/daily-choice.functions";
 import { buildDrafts } from "@/lib/daily-choice-admin";
+import { DailyChoiceManifest } from "@/components/DailyChoiceManifest";
 
 // Diário D1 — revisão dos conjuntos do modo escolha (papel admin).
 // Rascunhos vêm do acervo (definições de outras palavras publicadas, sem IA).
@@ -164,6 +165,7 @@ function AdminDailyChoicesPage() {
         <span>reprovados: {counts.reprovado ?? 0}</span>
         <span>elegíveis sem conjunto: {counts.sem_conjunto ?? 0}</span>
       </div>
+      <DailyChoiceManifest onChanged={() => void refresh()} />
       <button
         disabled={busy}
         onClick={() =>

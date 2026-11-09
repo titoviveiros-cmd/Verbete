@@ -15,6 +15,7 @@ import {
   editInput,
   editSet,
   draftsInput,
+  idsInput,
   poolInput,
   saveDrafts,
   listInput,
@@ -115,6 +116,15 @@ export const listDailyChoices = createServerFn({ method: "POST" })
         }
       >;
     };
+  });
+
+/** Conjuntos de uma lista de palavras (manifesto de um lote revisado). Só leitura. */
+export const getDailyChoicesByIds = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input) => idsInput.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context as never);
+    return getItems(Array.from(new Set(data.wordIds)));
   });
 
 /** Acervo para o navegador do revisor gerar os rascunhos (sem CPU no Worker). */
