@@ -11,6 +11,24 @@ export const SET_HASH_VERSION = "verbete-d1-v1";
 export const HASH_RE = /^[0-9a-f]{64}$/;
 export const MAX_MANIFEST = 200;
 
+/**
+ * R2: o hash junta os campos com "\n". Com a definição livre e exatamente 3
+ * alternativas SEM quebra de linha, a junção é inequívoca (as 3 últimas linhas
+ * são as alternativas). Por isso nenhuma alternativa pode ter quebra de linha
+ * nem caractere de controle. O formato do hash NÃO muda (os hashes já revisados
+ * continuam valendo; nenhum dos 192 tem esses caracteres).
+ */
+// eslint-disable-next-line no-control-regex -- de propósito: são justamente os caracteres proibidos
+export const ALT_PROIBIDO = /[\u0000-\u001f\u007f\u2028\u2029]/;
+export const altText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .refine((s) => !ALT_PROIBIDO.test(s), {
+    message: "alternativa com quebra de linha ou caractere de controle",
+  });
+
 /** Hash de um conjunto (definição exata + 3 alternativas na ordem gravada). */
 export async function setHash(
   wordId: string,
@@ -40,7 +58,7 @@ export const manifestSchema = z.object({
       z.object({
         word_id: z.string().uuid(),
         palavra: z.string().max(80).optional(),
-        distractors: z.array(z.string().trim().min(1).max(200)).length(3),
+        distractors: z.array(altText).length(3),
         hash: z.string().regex(HASH_RE),
       }),
     )
@@ -80,7 +98,10 @@ export type ManifestStatus =
   | "importar" // sem conjunto no banco e o hash bate com a definição atual
   | "identico" // conjunto gravado = exatamente o revisado
   | "divergente" // conjunto gravado difere do revisado
-  | "definicao_mudou" // a definição da palavra mudou desde a revisão
+  // R5: o hash do manifesto não bate com (definição ATUAL + alternativas do
+  // manifesto). Ou o manifesto foi alterado, ou a definição mudou desde a
+  // revisão: daqui não dá para saber qual (o manifesto não traz a definição).
+  | "nao_confere"
   | "nao_publicada"
   | "inexistente";
 
@@ -120,13 +141,13 @@ export async function compareManifest(
       });
       continue;
     }
-    // o revisado foi calculado sobre a definição de então: se a de hoje não reproduz o hash, mudou
+    // o hash revisado tem de se reproduzir com a definição de hoje + as alternativas do manifesto
     const revisadoHoje = await setHash(it.word_id, it.truth, m.distractors);
     if (revisadoHoje !== m.hash) {
       out.push({
         word_id: m.word_id,
         palavra,
-        status: "definicao_mudou",
+        status: "nao_confere",
         estado,
       });
       continue;

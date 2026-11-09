@@ -122,7 +122,7 @@ describe("conferência manifesto × banco", () => {
       "importar",
       "identico",
       "divergente",
-      "definicao_mudou",
+      "nao_confere",
       "nao_publicada",
       "inexistente",
     ]);

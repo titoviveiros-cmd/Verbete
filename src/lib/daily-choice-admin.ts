@@ -5,7 +5,13 @@
 //  * aprovar re-valida o conteúdo ATUAL (validador + definição igual à revisada);
 //    o banco confere de novo (daily_choice_admin_review);
 //  * manifesto (lote revisado fora do painel): importação e aprovação conferem o
-//    HASH de cada conjunto no servidor — nada diferente do revisado entra.
+//    HASH de cada conjunto no servidor — nada diferente do revisado entra;
+//  * alternativas nunca têm quebra de linha nem caractere de controle (R2);
+//  * editar um conjunto APROVADO só com pedido explícito (allowApproved): sem
+//    ele, o servidor recusa em vez de rebaixar a rascunho em silêncio (R3);
+//  * aprovar por manifesto não reaprova o que foi REPROVADO antes (R4), nem
+//    por tabela: editar um REPROVADO (que o devolveria a rascunho e o deixaria
+//    aprovável) também exige pedido explícito (allowRejected).
 import { z } from "zod";
 import {
   draftDistractors,
@@ -14,7 +20,12 @@ import {
   type AcervoWord,
   type Validation,
 } from "./daily-choice-content";
-import { HASH_RE, setHash } from "./daily-choice-manifest";
+import {
+  ALT_PROIBIDO,
+  HASH_RE,
+  altText,
+  setHash,
+} from "./daily-choice-manifest";
 
 export const ADMIN_ONLY = "Acesso restrito a administradores.";
 export const MAX_BATCH = 200;
@@ -35,7 +46,7 @@ export const draftsInput = z
         z
           .object({
             wordId: z.string().uuid(),
-            distractors: z.array(z.string().trim().min(1).max(200)).length(3),
+            distractors: z.array(altText).length(3),
             // hash do conjunto REVISADO (manifesto): o servidor recalcula e recusa se divergir
             hash: z.string().regex(HASH_RE).optional(),
           })
@@ -62,7 +73,11 @@ export const idsInput = z
 export const editInput = z
   .object({
     wordId: z.string().uuid(),
-    distractors: z.array(z.string().trim().min(1).max(200)).length(3),
+    distractors: z.array(altText).length(3),
+    // R3: só o editor do painel principal, de propósito, edita um APROVADO (volta a rascunho)
+    allowApproved: z.literal(true).optional(),
+    // R4: idem para um REPROVADO (editar o devolve a rascunho, e daí ao lote de aprovação)
+    allowRejected: z.literal(true).optional(),
   })
   .strict();
 
@@ -210,6 +225,15 @@ export async function reviewSets(
         "a definição mudou depois do rascunho: edite e salve de novo",
       );
     if (input.expected) {
+      // R4: o lote em massa não desfaz uma reprovação; reavaliar é no painel principal
+      if (it.status === "reprovado")
+        reasons.push("reprovado antes: reavalie no painel principal");
+      // R2: conjunto antigo com quebra de linha não entra por hash (a junção seria ambígua)
+      if (it.distractors?.some((d) => ALT_PROIBIDO.test(d)))
+        reasons.push("alternativa gravada com quebra de linha: edite antes");
+      // o banco confere o hash SEM aparar: alternativa antiga com espaço nas pontas não entra
+      if (it.distractors?.some((d) => d !== d.trim()))
+        reasons.push("alternativa gravada com espaço nas pontas: edite antes");
       const exp = input.expected[it.word_id];
       if (!exp) reasons.push("fora do manifesto");
       else if (
@@ -254,7 +278,12 @@ export async function reviewSets(
   };
 }
 
-/** Edita os 3 distratores (volta a rascunho); grava o resultado do validador. */
+/**
+ * Edita os 3 distratores (volta a rascunho); grava o resultado do validador.
+ * R3: um conjunto APROVADO só é editado com allowApproved; sem ele, nada muda.
+ * R4: um REPROVADO só com allowRejected (editar o devolveria a rascunho e o
+ * deixaria pronto para o "Aprovar idênticos" do manifesto).
+ */
 export async function editSet(
   deps: {
     get: (ids: string[]) => Promise<AdminItem[]>;
@@ -265,9 +294,17 @@ export async function editSet(
     ) => Promise<number>;
   },
   input: z.infer<typeof editInput>,
-): Promise<{ updated: number; validacao: Validation }> {
+): Promise<{
+  updated: number;
+  validacao: Validation | null;
+  blocked?: "aprovado" | "reprovado";
+}> {
   const [it] = await deps.get([input.wordId]);
   if (!it || !it.status) throw new Error("Conjunto não encontrado.");
+  if (it.status === "aprovado" && !input.allowApproved)
+    return { updated: 0, validacao: null, blocked: "aprovado" };
+  if (it.status === "reprovado" && !input.allowRejected)
+    return { updated: 0, validacao: null, blocked: "reprovado" };
   const distractors = input.distractors.map((d) => d.trim());
   const validacao = validateChoiceSet({
     word: it.word,

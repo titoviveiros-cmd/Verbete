@@ -174,7 +174,7 @@ describe.each([
     await conferir();
     expect(screen.getByText(/lote TESTE-ADULTERADO: 1 conjunto/)).toBeTruthy();
     expect(
-      screen.getAllByText("definição mudou — revisar de novo").length,
+      screen.getAllByText(/não confere com o revisado/).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("pronto para importar")).toBeNull();
     expect(importar()).toBeNull();
@@ -185,7 +185,7 @@ describe.each([
     colar(ta, INVALIDO);
     await conferir();
     expect(screen.getByText(/Manifesto inválido: itens\.0\.hash/)).toBeTruthy();
-    expect(screen.queryByText(/definição mudou/)).toBeNull();
+    expect(screen.queryByText(/não confere com o revisado/)).toBeNull();
     expect(screen.queryByText("pronto para importar")).toBeNull();
     expect(importar()).toBeNull();
     // inválido não chama o servidor
@@ -222,7 +222,7 @@ describe.each([
     expect(screen.getByText(/lote TESTE-ADULTERADO/)).toBeTruthy();
     expect(screen.queryByText(/lote TESTE:/)).toBeNull();
     expect(
-      screen.getAllByText("definição mudou — revisar de novo").length,
+      screen.getAllByText(/não confere com o revisado/).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("pronto para importar")).toBeNull();
     expect(importar()).toBeNull();
@@ -387,6 +387,81 @@ describe.each([
     });
     expect(screen.getByText(/1 aprovado\(s\)/)).toBeTruthy();
     expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("R3: divergente já APROVADO não entra no Substituir e o painel avisa", async () => {
+    const ta = setup();
+    fns.getDailyChoicesByIds.mockResolvedValue([
+      { ...ITEM, distractors: ["a", "b", "c"], status: "aprovado" },
+    ]);
+    colar(ta, VALIDO);
+    await conferir();
+    expect(screen.getAllByText(/DIVERGENTE/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Substituir/ })).toBeNull();
+    expect(
+      screen.getByText(
+        /1 divergente\(s\) já APROVADO\(s\): não são substituídos/,
+      ),
+    ).toBeTruthy();
+    expect(fns.editDailyChoice).not.toHaveBeenCalled();
+  });
+
+  it("R3: se o servidor recusar por já estar APROVADO, a mensagem conta o recusado", async () => {
+    const ta = setup();
+    fns.getDailyChoicesByIds.mockResolvedValue([
+      { ...ITEM, distractors: ["a", "b", "c"], status: "rascunho" },
+    ]);
+    colar(ta, VALIDO);
+    await conferir();
+    fns.editDailyChoice.mockResolvedValueOnce({
+      updated: 0,
+      validacao: null,
+      blocked: "aprovado",
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Substituir 1/ }));
+    });
+    await settle();
+    expect(screen.getByText(/0 conjunto\(s\) substituído\(s\)/)).toBeTruthy();
+    expect(
+      screen.getByText(/1 recusado\(s\): já estava\(m\) APROVADO/),
+    ).toBeTruthy();
+    // o painel nunca pede para editar aprovado
+    expect(fns.editDailyChoice).toHaveBeenCalledWith({
+      data: { wordId: ID, distractors: ALTS },
+    });
+  });
+
+  it("R4: divergente REPROVADO não entra no Substituir (voltaria a rascunho e ao lote)", async () => {
+    const ta = setup();
+    fns.getDailyChoicesByIds.mockResolvedValue([
+      { ...ITEM, distractors: ["a", "b", "c"], status: "reprovado" },
+    ]);
+    colar(ta, VALIDO);
+    await conferir();
+    expect(screen.queryByRole("button", { name: /Substituir/ })).toBeNull();
+    expect(
+      screen.getByText(
+        /1 divergente\(s\) REPROVADO\(s\) antes: não são substituídos/,
+      ),
+    ).toBeTruthy();
+    expect(fns.editDailyChoice).not.toHaveBeenCalled();
+  });
+
+  it("R4: idêntico REPROVADO antes não entra no Aprovar em lote e o painel avisa", async () => {
+    const ta = setup();
+    fns.getDailyChoicesByIds.mockResolvedValue([
+      { ...ITEM, distractors: ALTS, status: "reprovado" },
+    ]);
+    colar(ta, VALIDO);
+    await conferir();
+    expect(screen.getAllByText(/idêntico ao revisado/).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByRole("button", { name: /Aprovar/ })).toBeNull();
+    expect(
+      screen.getByText(/1 idêntico\(s\) REPROVADO\(s\) antes: não entram/),
+    ).toBeTruthy();
   });
 
   it("o campo do manifesto é o único marcado para aceitar colar", () => {

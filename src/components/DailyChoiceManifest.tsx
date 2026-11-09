@@ -30,7 +30,8 @@ const LABEL: Record<ManifestStatus, string> = {
   importar: "pronto para importar",
   identico: "idêntico ao revisado",
   divergente: "DIVERGENTE do revisado",
-  definicao_mudou: "definição mudou — revisar de novo",
+  nao_confere:
+    "não confere com o revisado (manifesto alterado ou definição mudou)",
   nao_publicada: "palavra não publicada",
   inexistente: "palavra inexistente",
 };
@@ -38,7 +39,7 @@ const TONE: Record<ManifestStatus, string> = {
   importar: "text-sun",
   identico: "text-mint",
   divergente: "text-destructive",
-  definicao_mudou: "text-destructive",
+  nao_confere: "text-destructive",
   nao_publicada: "text-destructive",
   inexistente: "text-destructive",
 };
@@ -136,13 +137,11 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
   };
 
   const rows = checked?.rows ?? null;
-  const ids = (st: ManifestStatus, exceptApproved = false) =>
+  /** ids com o status `st`, deixando de fora os estados em `exceto`. */
+  const ids = (st: ManifestStatus, exceto: string[] = []) =>
     new Set(
       (rows ?? [])
-        .filter(
-          (r) =>
-            r.status === st && !(exceptApproved && r.estado === "aprovado"),
-        )
+        .filter((r) => r.status === st && !exceto.includes(r.estado ?? ""))
         .map((r) => r.word_id),
     );
   const itensCom = (m: Manifest, s: Set<string>) =>
@@ -150,8 +149,17 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
   const busy = checking || writing;
 
   const paraImportar = ids("importar");
-  const divergentes = ids("divergente");
-  const paraAprovar = ids("identico", true);
+  // R3: um APROVADO divergente nunca é substituído daqui (voltaria a rascunho em silêncio).
+  // R4: nem um REPROVADO (voltaria a rascunho e entraria no "Aprovar idênticos").
+  const divergentes = ids("divergente", ["aprovado", "reprovado"]);
+  const divergentesAprovados =
+    ids("divergente").size - ids("divergente", ["aprovado"]).size;
+  const divergentesReprovados =
+    ids("divergente").size - ids("divergente", ["reprovado"]).size;
+  // R4: o lote não reaprova o que foi REPROVADO antes
+  const paraAprovar = ids("identico", ["aprovado", "reprovado"]);
+  const identicosReprovados =
+    ids("identico").size - ids("identico", ["reprovado"]).size;
   const contagem = (rows ?? []).reduce<Record<string, number>>(
     (o, r) => ((o[r.status] = (o[r.status] ?? 0) + 1), o),
     {},
@@ -218,13 +226,16 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
             onClick={() =>
               void write(checked.manifest, async (m) => {
                 let n = 0;
+                let recusados = 0;
                 for (const x of itensCom(m, divergentes)) {
+                  // sem allowApproved/allowRejected: se alguém aprovou ou reprovou no meio-tempo, o servidor recusa
                   const r = await edit({
                     data: { wordId: x.word_id, distractors: x.distractors },
                   });
                   n += r.updated;
+                  if (r.blocked) recusados++;
                 }
-                return `${n} conjunto(s) substituído(s) pelo revisado (voltam a rascunho).`;
+                return `${n} conjunto(s) substituído(s) pelo revisado (voltam a rascunho).${recusados ? ` ${recusados} recusado(s): já estava(m) APROVADO(s) ou REPROVADO(s).` : ""}`;
               })
             }
             className="btn-pop btn-plain text-xs !py-1.5 !px-3"
@@ -259,6 +270,33 @@ export function DailyChoiceManifest({ onChanged }: { onChanged: () => void }) {
           </button>
         )}
       </div>
+      {checked &&
+        (divergentesAprovados > 0 ||
+          divergentesReprovados > 0 ||
+          identicosReprovados > 0) && (
+          <ul className="mt-2 text-sun space-y-0.5">
+            {divergentesAprovados > 0 && (
+              <li>
+                ⚠ {divergentesAprovados} divergente(s) já APROVADO(s): não são
+                substituídos daqui (voltariam a rascunho). Revise no painel
+                principal.
+              </li>
+            )}
+            {divergentesReprovados > 0 && (
+              <li>
+                ⚠ {divergentesReprovados} divergente(s) REPROVADO(s) antes: não
+                são substituídos daqui (voltariam a rascunho e ao lote de
+                aprovação). Reavalie no painel principal.
+              </li>
+            )}
+            {identicosReprovados > 0 && (
+              <li>
+                ⚠ {identicosReprovados} idêntico(s) REPROVADO(s) antes: não
+                entram no Aprovar em lote. Reavalie no painel principal.
+              </li>
+            )}
+          </ul>
+        )}
       {msg && (
         <p
           role="status"
