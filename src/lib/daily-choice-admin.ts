@@ -9,7 +9,9 @@
 //  * alternativas nunca têm quebra de linha nem caractere de controle (R2);
 //  * editar um conjunto APROVADO só com pedido explícito (allowApproved): sem
 //    ele, o servidor recusa em vez de rebaixar a rascunho em silêncio (R3);
-//  * aprovar por manifesto não reaprova o que foi REPROVADO antes (R4).
+//  * aprovar por manifesto não reaprova o que foi REPROVADO antes (R4), nem
+//    por tabela: editar um REPROVADO (que o devolveria a rascunho e o deixaria
+//    aprovável) também exige pedido explícito (allowRejected).
 import { z } from "zod";
 import {
   draftDistractors,
@@ -74,6 +76,8 @@ export const editInput = z
     distractors: z.array(altText).length(3),
     // R3: só o editor do painel principal, de propósito, edita um APROVADO (volta a rascunho)
     allowApproved: z.literal(true).optional(),
+    // R4: idem para um REPROVADO (editar o devolve a rascunho, e daí ao lote de aprovação)
+    allowRejected: z.literal(true).optional(),
   })
   .strict();
 
@@ -227,6 +231,9 @@ export async function reviewSets(
       // R2: conjunto antigo com quebra de linha não entra por hash (a junção seria ambígua)
       if (it.distractors?.some((d) => ALT_PROIBIDO.test(d)))
         reasons.push("alternativa gravada com quebra de linha: edite antes");
+      // o banco confere o hash SEM aparar: alternativa antiga com espaço nas pontas não entra
+      if (it.distractors?.some((d) => d !== d.trim()))
+        reasons.push("alternativa gravada com espaço nas pontas: edite antes");
       const exp = input.expected[it.word_id];
       if (!exp) reasons.push("fora do manifesto");
       else if (
@@ -274,6 +281,8 @@ export async function reviewSets(
 /**
  * Edita os 3 distratores (volta a rascunho); grava o resultado do validador.
  * R3: um conjunto APROVADO só é editado com allowApproved; sem ele, nada muda.
+ * R4: um REPROVADO só com allowRejected (editar o devolveria a rascunho e o
+ * deixaria pronto para o "Aprovar idênticos" do manifesto).
  */
 export async function editSet(
   deps: {
@@ -288,12 +297,14 @@ export async function editSet(
 ): Promise<{
   updated: number;
   validacao: Validation | null;
-  blocked?: "aprovado";
+  blocked?: "aprovado" | "reprovado";
 }> {
   const [it] = await deps.get([input.wordId]);
   if (!it || !it.status) throw new Error("Conjunto não encontrado.");
   if (it.status === "aprovado" && !input.allowApproved)
     return { updated: 0, validacao: null, blocked: "aprovado" };
+  if (it.status === "reprovado" && !input.allowRejected)
+    return { updated: 0, validacao: null, blocked: "reprovado" };
   const distractors = input.distractors.map((d) => d.trim());
   const validacao = validateChoiceSet({
     word: it.word,

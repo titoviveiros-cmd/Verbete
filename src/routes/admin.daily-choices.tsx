@@ -335,7 +335,7 @@ function AdminDailyChoicesPage() {
                       disabled={busy}
                       onClick={() =>
                         run(async () => {
-                          // editar um APROVADO aqui é de propósito: ele volta a rascunho (R3)
+                          // editar um APROVADO ou REPROVADO aqui é de propósito: volta a rascunho (R3/R4)
                           const r = await edit({
                             data: {
                               wordId: it.word_id,
@@ -343,10 +343,13 @@ function AdminDailyChoicesPage() {
                               ...(it.status === "aprovado"
                                 ? { allowApproved: true as const }
                                 : {}),
+                              ...(it.status === "reprovado"
+                                ? { allowRejected: true as const }
+                                : {}),
                             },
                           });
                           if (r.blocked)
-                            return "Já está APROVADO: não foi alterado.";
+                            return `Mudou de estado (agora ${r.blocked.toUpperCase()}): não foi alterado. Recarregue a lista.`;
                           setEditing((m) => {
                             const n = { ...m };
                             delete n[it.word_id];
@@ -359,7 +362,7 @@ function AdminDailyChoicesPage() {
                       }
                       className="flex-1 btn-pop btn-gold text-sm !py-2"
                     >
-                      {it.status === "aprovado"
+                      {it.status === "aprovado" || it.status === "reprovado"
                         ? "💾 Salvar (volta a rascunho)"
                         : "💾 Salvar"}
                     </button>

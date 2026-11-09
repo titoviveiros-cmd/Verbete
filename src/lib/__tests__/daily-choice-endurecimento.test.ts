@@ -111,6 +111,25 @@ describe("R2: alternativa com quebra de linha ou caractere de controle é recusa
   });
 });
 
+describe("aprovação por manifesto: conjunto antigo com espaço nas pontas", () => {
+  it("é recusado aqui com o motivo (o banco confere sem aparar e recusaria calado)", async () => {
+    const ruins = [` ${BONS[0]}`, BONS[1]!, BONS[2]!];
+    const review = vi.fn();
+    const r = await reviewSets(
+      { get: async () => [item(1, { distractors: ruins })], review },
+      {
+        wordIds: [ID(1)],
+        status: "aprovado",
+        expected: { [ID(1)]: await setHash(ID(1), TRUTH, ruins) },
+      },
+    );
+    expect(review).not.toHaveBeenCalled();
+    expect(r.problems[0]!.reasons).toContain(
+      "alternativa gravada com espaço nas pontas: edite antes",
+    );
+  });
+});
+
 describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem ele)", () => {
   it("sem allowApproved: nada é gravado e a resposta diz o motivo", async () => {
     const edit = vi.fn(async () => 1);
@@ -131,17 +150,28 @@ describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem 
     expect(r.blocked).toBeUndefined();
     expect(edit).toHaveBeenCalledTimes(1);
   });
-  it.each(["rascunho", "reprovado"])(
-    "%s continua editável sem pedido extra",
-    async (st) => {
-      const edit = vi.fn(async () => 1);
-      const r = await editSet(
-        { get: async () => [item(1, { status: st })], edit },
-        { wordId: ID(1), distractors: [...BONS] },
-      );
-      expect(r.updated).toBe(1);
-    },
-  );
+  it("rascunho continua editável sem pedido extra", async () => {
+    const edit = vi.fn(async () => 1);
+    const r = await editSet(
+      { get: async () => [item(1)], edit },
+      { wordId: ID(1), distractors: [...BONS] },
+    );
+    expect(r.updated).toBe(1);
+  });
+  it("R4 por tabela: REPROVADO só é editado com allowRejected (senão voltaria ao lote de aprovação)", async () => {
+    const edit = vi.fn(async () => 1);
+    const sem = await editSet(
+      { get: async () => [item(1, { status: "reprovado" })], edit },
+      { wordId: ID(1), distractors: [...BONS] },
+    );
+    expect(sem).toEqual({ updated: 0, validacao: null, blocked: "reprovado" });
+    expect(edit).not.toHaveBeenCalled();
+    const com = await editSet(
+      { get: async () => [item(1, { status: "reprovado" })], edit },
+      { wordId: ID(1), distractors: [...BONS], allowRejected: true },
+    );
+    expect(com.updated).toBe(1);
+  });
   it("entrada: allowApproved só aceita true (false não é um jeito de pedir)", () => {
     expect(() =>
       editInput.parse({

@@ -432,6 +432,22 @@ describe.each([
     });
   });
 
+  it("R4: divergente REPROVADO não entra no Substituir (voltaria a rascunho e ao lote)", async () => {
+    const ta = setup();
+    fns.getDailyChoicesByIds.mockResolvedValue([
+      { ...ITEM, distractors: ["a", "b", "c"], status: "reprovado" },
+    ]);
+    colar(ta, VALIDO);
+    await conferir();
+    expect(screen.queryByRole("button", { name: /Substituir/ })).toBeNull();
+    expect(
+      screen.getByText(
+        /1 divergente\(s\) REPROVADO\(s\) antes: não são substituídos/,
+      ),
+    ).toBeTruthy();
+    expect(fns.editDailyChoice).not.toHaveBeenCalled();
+  });
+
   it("R4: idêntico REPROVADO antes não entra no Aprovar em lote e o painel avisa", async () => {
     const ta = setup();
     fns.getDailyChoicesByIds.mockResolvedValue([
