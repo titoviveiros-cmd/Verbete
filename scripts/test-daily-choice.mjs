@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const rd = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -719,7 +719,27 @@ try {
     const X = await novaPalavra(8, { conjunto: "rascunho" });
     const Y = await novaPalavra(9, { conjunto: "rascunho" });
     await db.q(`UPDATE public.daily_choice_sets SET validacao = '{"ok":false}' WHERE word_id = $1`, [Y.id]);
-    const r = (await db.q(`SELECT public.daily_choice_admin_review($1::uuid[], 'aprovado', $2) AS r`, [[X.id, Y.id, MUDOU.id], reviewer]))[0].r;
+    // (MUDOU já está aprovado e com definição mudada: aqui só confere que não é reaprovado;
+    //  "definição igual" isolada está em test-daily-choice-hash.mjs.)
+    // pg = banco com TODAS as migrations: desde a R6b (20261110180000) a função antiga NÃO
+    // aprova (42501) e aprovar é só por hash (R1). PGlite = só o D1: a função antiga aprova.
+    let r;
+    if (modePg) {
+      let code = null;
+      try {
+        await db.q(`SELECT public.daily_choice_admin_review($1::uuid[], 'aprovado', $2)`, [[X.id], reviewer]);
+      } catch (e) {
+        code = e?.code;
+      }
+      eq(code, "42501", "R6b: a função antiga aprovou sem hash");
+      const NL = String.fromCharCode(10);
+      const hash = (id, n, m) => createHash("sha256")
+        .update(["verbete-d1-v1", id, m, ...["A", "B", "C"].map((l) => `Distrator ${l} ${n} ${tag}`)].join(NL), "utf8").digest("hex");
+      const expected = { [X.id]: hash(X.id, 8, X.meaning), [Y.id]: hash(Y.id, 9, Y.meaning), [MUDOU.id]: hash(MUDOU.id, 7, MUDOU.meaning) };
+      r = (await db.q(`SELECT public.daily_choice_admin_review_hashed($1::jsonb, $2) AS r`, [JSON.stringify(expected), reviewer]))[0].r;
+    } else {
+      r = (await db.q(`SELECT public.daily_choice_admin_review($1::uuid[], 'aprovado', $2) AS r`, [[X.id, Y.id, MUDOU.id], reviewer]))[0].r;
+    }
     eq(r, { updated: 1, skipped: 2 });
     eq((await db.q(`SELECT status FROM public.daily_choice_sets WHERE word_id = $1`, [X.id]))[0].status, "aprovado");
     // edição volta a rascunho e atualiza a verdade revisada
