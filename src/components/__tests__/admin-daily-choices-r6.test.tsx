@@ -2,10 +2,10 @@
 // Antes, "✅ Aprovar" mandava só os ids e o servidor aprovava sem hash
 // (inclusive um REPROVADO, de uma vez). Agora:
 //  * aprovar envia { expected: id → hash(definição exibida + alternativas exibidas), source: "painel" };
-//  * uma edição aberta e não salva é "o que está na tela": o hash dela não bate com
-//    o gravado, e o banco não aprova (ver daily-choice-r6.test.ts);
+//  * com uma edição aberta o painel não aprova (salvar ou cancelar antes);
 //  * na aba de reprovados não há "Aprovar": primeiro "↩ Voltar a rascunho" (sem hash,
-//    não é aprovação); reprovar continua sem hash.
+//    não é aprovação, com confirmação); reprovar continua sem hash;
+//  * trocar de aba limpa a lista e a seleção (nada de botão novo sobre item velho).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -93,6 +93,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("R6 — painel principal aprova só pelo hash do que está na tela", () => {
@@ -129,26 +130,24 @@ describe("R6 — painel principal aprova só pelo hash do que está na tela", ()
     });
   });
 
-  it("edição aberta e não salva: o hash é do que está na tela (não do gravado)", async () => {
+  it("edição aberta e não salva: não aprova; pede salvar ou cancelar", async () => {
     render(<Page />);
     const lapis = await screen.findAllByRole("button", { name: "✏️" });
     fireEvent.click(lapis[0]!);
-    const campo = screen.getAllByLabelText("distrator 1")[0]!;
-    fireEvent.change(campo, { target: { value: "Ave pequena dos rios" } });
+    fireEvent.change(screen.getAllByLabelText("distrator 1")[0]!, {
+      target: { value: "Ave pequena dos rios" },
+    });
     fireEvent.click(screen.getByLabelText("selecionar acinesia"));
+    fireEvent.click(screen.getByLabelText("selecionar abulia"));
     fireEvent.click(
-      screen.getByRole("button", { name: "✅ Aprovar selecionados (1)" }),
+      screen.getByRole("button", { name: "✅ Aprovar selecionados (2)" }),
     );
-    await waitFor(() => expect(fns.reviewDailyChoices).toHaveBeenCalled());
-    const { data } = fns.reviewDailyChoices.mock.calls[0]![0];
-    const naTela = await setHash(ID1, TRUTH, [
-      "Ave pequena dos rios",
-      ALTS[1]!,
-      ALTS[2]!,
-    ]);
-    expect(data.expected).toEqual({ [ID1]: naTela });
-    // o gravado tem outro hash: o banco recalcula e não aprova o que não foi visto
-    expect(naTela).not.toBe(await setHash(ID1, TRUTH, ALTS));
+    expect(
+      await screen.findByText(
+        /Salve ou cancele a edição antes de aprovar: acinesia./,
+      ),
+    ).toBeTruthy();
+    expect(fns.reviewDailyChoices).not.toHaveBeenCalled();
   });
 
   it("reprovar continua sem hash (não é aprovação)", async () => {
@@ -163,7 +162,8 @@ describe("R6 — painel principal aprova só pelo hash do que está na tela", ()
     });
   });
 
-  it("aba reprovados: sem 'Aprovar'; só '↩ Voltar a rascunho' (sem hash)", async () => {
+  it("aba reprovados: sem 'Aprovar'; só '↩ Voltar a rascunho' (sem hash, com confirmação)", async () => {
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<Page />);
     fireEvent.click(
       await screen.findByRole("button", { name: "🗑 reprovados" }),
@@ -177,9 +177,49 @@ describe("R6 — painel principal aprova só pelo hash do que está na tela", ()
     ).toBeNull();
     fireEvent.click(voltar[0]!);
     await waitFor(() => expect(fns.reviewDailyChoices).toHaveBeenCalled());
+    expect(confirmar.mock.calls[0]![0]).toMatch(/inclusive por um manifesto/);
     expect(fns.reviewDailyChoices).toHaveBeenCalledWith({
       data: { wordIds: [ID1], status: "rascunho" },
     });
+  });
+
+  it("voltar a rascunho cancelado na confirmação: nada muda", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<Page />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "🗑 reprovados" }),
+    );
+    const voltar = await screen.findAllByRole("button", {
+      name: "↩ Voltar a rascunho",
+    });
+    fireEvent.click(voltar[0]!);
+    expect(await screen.findByText("Nada mudou.")).toBeTruthy();
+    expect(fns.reviewDailyChoices).not.toHaveBeenCalled();
+  });
+
+  it("trocar de aba limpa lista e seleção antes da resposta (sem botão novo sobre item velho)", async () => {
+    render(<Page />);
+    fireEvent.click(await screen.findByLabelText("selecionar acinesia"));
+    let soltar: (v: unknown) => void = () => {};
+    fns.listDailyChoices.mockImplementationOnce(
+      () => new Promise((r) => (soltar = r)),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "🗑 reprovados" }));
+    // enquanto a lista nova não chega: nenhum item antigo e nenhum botão de ação
+    expect(screen.queryByLabelText("selecionar acinesia")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "↩ Voltar a rascunho" }),
+    ).toBeNull();
+    // o botão de lote existe, mas com 0 selecionados e desabilitado
+    const lote = screen.getByRole("button", {
+      name: "↩ Voltar a rascunho (0)",
+    }) as HTMLButtonElement;
+    expect(lote.disabled).toBe(true);
+    soltar(lista("reprovado"));
+    expect(
+      (await screen.findAllByRole("button", { name: "↩ Voltar a rascunho" }))
+        .length,
+    ).toBe(2);
   });
 
   it("aba aprovados: nenhum botão de aprovar", async () => {

@@ -73,6 +73,16 @@ export const reviewInput = z
   })
   .strict();
 
+/**
+ * R6: a função antiga (daily_choice_admin_review) só reprova ou volta a rascunho.
+ * O banco ainda aceitaria "aprovado" sem hash: a trava é esta, no Worker.
+ */
+export function oldReviewStatus(status: string): "reprovado" | "rascunho" {
+  if (status !== "reprovado" && status !== "rascunho")
+    throw new Error("daily_choice_admin_review: só reprovar ou rascunho");
+  return status;
+}
+
 /** R6: aprovação sem hash do conteúdo visto é recusada inteira. */
 export const SEM_HASH =
   "Aprovar exige o hash do conteúdo exibido. Recarregue o painel e tente de novo.";

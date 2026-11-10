@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   SEM_HASH,
+  oldReviewStatus,
   reviewInput,
   reviewSets,
   type AdminItem,
@@ -242,5 +243,14 @@ describe("R6 — servidor: aprovar exige o hash do que foi exibido", () => {
     ).not.toThrow();
     expect(() => reviewInput.parse({ ...base, source: "outro" })).toThrow();
     expect(() => reviewInput.parse({ ...base, semHash: true })).toThrow();
+  });
+});
+
+describe("R6 — trava do Worker sobre a função antiga (o banco ainda aceitaria)", () => {
+  it("oldReviewStatus: só reprovado ou rascunho; 'aprovado' e outros são recusados", () => {
+    expect(oldReviewStatus("reprovado")).toBe("reprovado");
+    expect(oldReviewStatus("rascunho")).toBe("rascunho");
+    for (const x of ["aprovado", "APROVADO", "", "qualquer"])
+      expect(() => oldReviewStatus(x)).toThrow(/só reprovar ou rascunho/);
   });
 });
