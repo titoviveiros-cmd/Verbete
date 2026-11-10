@@ -12,7 +12,11 @@
 --      • payload acima de 2 kB vira {"truncated": true, "bytes": n} (o client
 --        manda mensagem ≤300 + stack ≤900 + rota — cabe com folga);
 --      • sem session_key: 60 eventos/min no total desse balde;
---      • teto GLOBAL: 300 eventos/min e 5.000 eventos/hora (qualquer chave).
+--      • teto GLOBAL: 300 eventos/min, 1.000/hora e 2.000/dia (qualquer chave;
+--        produção 10/11 ≈ 60 eventos/dia). Pior caso sob ataque: 2.000 × 2 kB
+--        × 30 dias de retenção ≈ 120 MB — o banco não enche.
+--      • os tetos contam só os 4 tipos do client: eventos que o servidor grava
+--        direto (data_retention, bot_ai_error…) não consomem a cota do client.
 --    Efeito colateral aceito: num ataque, a telemetria legítima também é
 --    descartada até a janela passar — o banco não enche.
 --
@@ -64,17 +68,21 @@ BEGIN
   ELSE
     SELECT count(*) INTO v_recent FROM public.ops_events
     WHERE session_key IS NULL
+      AND kind IN ('client_error', 'boundary_crash', 'rpc_failure', 'reconnect')
       AND at > now() - interval '1 minute';
     IF v_recent >= 60 THEN RETURN; END IF;
   END IF;
 
   -- Teto global: trocar a session_key a cada chamada não fura o limite.
   SELECT count(*) INTO v_recent FROM public.ops_events
-  WHERE at > now() - interval '1 minute';
+  WHERE kind IN ('client_error', 'boundary_crash', 'rpc_failure', 'reconnect') AND at > now() - interval '1 minute';
   IF v_recent >= 300 THEN RETURN; END IF;
   SELECT count(*) INTO v_recent FROM public.ops_events
-  WHERE at > now() - interval '1 hour';
-  IF v_recent >= 5000 THEN RETURN; END IF;
+  WHERE kind IN ('client_error', 'boundary_crash', 'rpc_failure', 'reconnect') AND at > now() - interval '1 hour';
+  IF v_recent >= 1000 THEN RETURN; END IF;
+  SELECT count(*) INTO v_recent FROM public.ops_events
+  WHERE kind IN ('client_error', 'boundary_crash', 'rpc_failure', 'reconnect') AND at > now() - interval '1 day';
+  IF v_recent >= 2000 THEN RETURN; END IF;
 
   INSERT INTO public.ops_events (kind, payload, session_key, room_hash, build)
   VALUES (

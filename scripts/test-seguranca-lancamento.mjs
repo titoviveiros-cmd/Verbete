@@ -317,10 +317,24 @@ if (!antes) {
   }
   await db.query("BEGIN");
   try {
-    await db.query(`INSERT INTO public.ops_events (kind, session_key, at) SELECT 'reconnect', 'ops_${tag}_h' || g, now() - interval '30 minutes' FROM generate_series(1, 5000) g`);
+    // eventos do SERVIDOR (gravados direto) não consomem a cota do client
+    await db.query(`INSERT INTO public.ops_events (kind, at) SELECT 'data_retention', now() - interval '30 minutes' FROM generate_series(1, 3000) g`);
+    await db.query(`SELECT public.log_ops_event('reconnect', '{}'::jsonb, $1, NULL, 'teste')`, [`ops_${tag}_srv`]);
+    const [{ n: srv }] = await q(`SELECT count(*)::int AS n FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_srv`]);
+    check("eventos do servidor não esgotam a cota do client", srv === 1, `n=${srv}`);
+    await db.query(`INSERT INTO public.ops_events (kind, session_key, at) SELECT 'reconnect', 'ops_${tag}_h' || g, now() - interval '30 minutes' FROM generate_series(1, 1000) g`);
     await db.query(`SELECT public.log_ops_event('reconnect', '{}'::jsonb, $1, NULL, 'teste')`, [`ops_${tag}_hora`]);
     const [{ n }] = await q(`SELECT count(*)::int AS n FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_hora`]);
-    check("teto global 5.000/hora", n === 0, `n=${n}`);
+    check("teto global 1.000/hora", n === 0, `n=${n}`);
+  } finally {
+    await db.query("ROLLBACK");
+  }
+  await db.query("BEGIN");
+  try {
+    await db.query(`INSERT INTO public.ops_events (kind, session_key, at) SELECT 'client_error', 'ops_${tag}_d' || g, now() - interval '12 hours' FROM generate_series(1, 2000) g`);
+    await db.query(`SELECT public.log_ops_event('reconnect', '{}'::jsonb, $1, NULL, 'teste')`, [`ops_${tag}_dia`]);
+    const [{ n }] = await q(`SELECT count(*)::int AS n FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_dia`]);
+    check("teto global 2.000/dia (pior caso ≈ 120 MB em 30 dias)", n === 0, `n=${n}`);
   } finally {
     await db.query("ROLLBACK");
   }
