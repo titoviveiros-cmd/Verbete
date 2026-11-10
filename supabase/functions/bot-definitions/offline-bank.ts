@@ -1,0 +1,1145 @@
+// =====================================================================
+// PENDENTE REVISÃO EDITORIAL — bancos do gerador de bots SEM IA externa
+// (frente "bots sem IA", 10/11/2026). Conteúdo NOVO, escrito à mão para o
+// jogo; ainda não revisado pelo dono. Só entra em uso com o interruptor
+// BOTS_OFFLINE_GENERATOR ligado (offline.ts). Enquanto este cabeçalho
+// existir, o teste bots-sem-ia.test.ts lembra que a revisão está pendente.
+//
+// Como ler:
+//   - {o} = concordância com o núcleo: "usad{o}" vira "usado"/"usada".
+//   - Tópicos são [artigo, resto]: o gerador faz "de"+"os" = "dos" etc.
+//   - Tudo em português comum; o jogo normaliza para minúsculas sem acento.
+//   - Nada de palavrão, tema sensível (violência, sexo, drogas, religião
+//     ofensiva, política, doença grave) ou pessoa/marca real.
+// Sem APIs do Deno: testável no Vitest.
+// =====================================================================
+
+export type Gender = "m" | "f";
+export type Head = readonly [text: string, gender: Gender];
+/** [artigo ("o" | "a" | "os" | "as" | ""), resto]. */
+export type Topic = readonly [art: string, rest: string];
+
+export interface NounKind {
+  heads: readonly Head[];
+  /** Complemento principal, logo depois do núcleo. */
+  quals: readonly string[];
+  /** 2º traço opcional, depois de vírgula. */
+  tails?: readonly string[];
+  /** Definição pronta e curta, no estilo "sinônimos" das definições reais. */
+  pairs?: readonly string[];
+  /** Adjetivos que podem vir ANTES do núcleo ("pequena vasilha…"); sem a
+   *  lista, o tipo não usa (evita "velha multa", "pequena mania"). */
+  pre?: readonly string[];
+}
+
+const OBJ_PRE = ["pequen{o}", "antig{o}", "rústic{o}"] as const;
+const LIVE_PRE = ["pequen{o}"] as const;
+
+export const NOUN_KINDS: Record<string, NounKind> = {
+  recipiente: {
+    pre: OBJ_PRE,
+    heads: [
+      ["vasilha", "f"],
+      ["pote", "m"],
+      ["jarro", "m"],
+      ["cuia", "f"],
+      ["tigela", "f"],
+      ["cabaça", "f"],
+      ["tacho", "m"],
+    ],
+    quals: [
+      "de barro usad{o} para guardar azeite",
+      "de boca larga para curtir azeitonas",
+      "em que se serve o café da roça",
+      "de cobre para ferver leite",
+      "de madeira para medir grãos",
+      "furad{o} no fundo para escorrer queijo",
+      "de louça para guardar sal grosso",
+      "de couro para levar água em viagem",
+      "em que se deixa o pão crescer",
+      "de vidro grosso para conservas",
+      "de lata para tirar água do poço",
+      "de pedra para pilar temperos",
+    ],
+    tails: [
+      "comum nas cozinhas de fazenda",
+      "típic{o} do sertão",
+      "ainda vendid{o} em feiras",
+      "quase sempre pintad{o} à mão",
+    ],
+    pairs: [
+      "pote de barro, moringa pequena",
+      "cuia rasa para servir farinha",
+      "tacho largo de cobre",
+      "jarro de boca estreita, botija",
+    ],
+  },
+  ferramenta: {
+    pre: OBJ_PRE,
+    heads: [
+      ["ferramenta", "f"],
+      ["instrumento", "m"],
+      ["utensílio", "m"],
+      ["peça", "f"],
+      ["gancho", "m"],
+      ["lâmina", "f"],
+    ],
+    quals: [
+      "de ferro usad{o} para marcar gado",
+      "curv{o} usad{o} na poda de videiras",
+      "de ponta fina para furar couro",
+      "de madeira para bater roupa no rio",
+      "com que o ferreiro dobra cravos",
+      "com que se raspa o casco do cavalo",
+      "de cabo longo para colher frutas altas",
+      "com que se alisa o reboco da parede",
+      "usad{o} para desembaraçar lã de ovelha",
+      "de dois dentes para revirar o feno",
+      "que prende a porteira por dentro",
+      "usad{o} pelos sapateiros para alargar botas",
+    ],
+    tails: [
+      "comum em oficinas antigas",
+      "hoje quase em desuso",
+      "herdad{o} dos colonos portugueses",
+    ],
+    pairs: [
+      "pedra lisa de amolar facas",
+      "torquês pequena de sapateiro",
+      "forquilha de pau, gancho de roça",
+      "martelo de madeira, malho leve",
+    ],
+  },
+  vestuario: {
+    pre: OBJ_PRE,
+    heads: [
+      ["enfeite", "m"],
+      ["adorno", "m"],
+      ["faixa", "f"],
+      ["manto", "m"],
+      ["xale", "m"],
+      ["fita", "f"],
+      ["touca", "f"],
+    ],
+    quals: [
+      "de lã usad{o} por pastores nas serras",
+      "de palha trançad{o} à mão",
+      "usad{o} pelas noivas no interior",
+      "bordad{o} com fios dourados",
+      "que se amarra na cintura em dias de festa",
+      "de couro cru usad{o} por vaqueiros",
+      "pendurad{o} no pescoço como amuleto",
+      "de pano grosso para proteger do sol",
+      "usad{o} pelos romeiros nas procissões",
+      "de contas coloridas usad{o} em danças",
+      "que se prende ao cabelo com grampos",
+    ],
+    tails: [
+      "comum no litoral nordestino",
+      "de origem moura",
+      "usad{o} só em dias santos",
+    ],
+    pairs: [
+      "chapéu de abas largas, sombreiro",
+      "colete de couro de vaqueiro",
+      "lenço de cabeça, turbante simples",
+      "saiote rodado de dança",
+    ],
+  },
+  casa: {
+    pre: OBJ_PRE,
+    heads: [
+      ["banco", "m"],
+      ["arca", "f"],
+      ["nicho", "m"],
+      ["viga", "f"],
+      ["tranca", "f"],
+      ["estrado", "m"],
+      ["degrau", "m"],
+      ["prateleira", "f"],
+    ],
+    quals: [
+      "de madeira rústica usad{o} em capelas",
+      "embutid{o} na parede para guardar santos",
+      "em que se guardava o enxoval",
+      "que sustenta o telhado das casas de taipa",
+      "colocad{o} atrás da porta da cozinha",
+      "onde se secavam queijos",
+      "de pedra na entrada das casas antigas",
+      "estreit{o} sobre o fogão a lenha",
+    ],
+    tails: [
+      "típic{o} das casas de fazenda",
+      "comum em mosteiros antigos",
+    ],
+    pairs: [
+      "tamborete baixo, banquinho de cozinha",
+      "baú de madeira, arca de enxoval",
+      "jirau de varas, estrado alto",
+    ],
+  },
+  comida: {
+    heads: [
+      ["doce", "m"],
+      ["bolo", "m"],
+      ["caldo", "m"],
+      ["quitute", "m"],
+      ["massa", "f"],
+      ["farofa", "f"],
+      ["mingau", "m"],
+      ["conserva", "f"],
+    ],
+    quals: [
+      "de mandioca assad{o} na folha de bananeira",
+      "feit{o} com rapadura e gengibre",
+      "servid{o} quente nas noites de inverno",
+      "de milho verde cozid{o} no leite",
+      "temperad{o} com cominho e pimenta",
+      "de banana verde frit{o} em banha",
+      "de arroz com canela e cravo",
+      "vendid{o} em tabuleiros na porta da igreja",
+      "de peixe seco desfiado",
+      "cozid{o} por horas em panela de barro",
+      "de abóbora com coco ralado",
+      "de feijão com torresmo",
+    ],
+    tails: [
+      "típic{o} do Recôncavo",
+      "servid{o} em festas juninas",
+      "de origem portuguesa",
+      "comum no interior de Minas",
+    ],
+    pairs: [
+      "bolo de fubá, broa caseira",
+      "caldo grosso de feijão",
+      "doce de leite talhado",
+      "pé de moleque mole",
+      "farofa de ovo com cebola",
+    ],
+  },
+  bebida: {
+    heads: [
+      ["bebida", "f"],
+      ["licor", "m"],
+      ["infusão", "f"],
+      ["refresco", "m"],
+      ["chá", "m"],
+    ],
+    quals: [
+      "de frutas silvestres fermentad{o}",
+      "de casca de árvore tomad{o} como remédio",
+      "servid{o} em festivais de inverno",
+      "de milho fermentad{o} em pote de barro",
+      "de folhas amargas para depois do almoço",
+      "de caju servid{o} bem gelad{o}",
+    ],
+    pairs: [
+      "refresco de rapadura com limão",
+      "chá de erva-cidreira adoçado",
+      "licor caseiro de jabuticaba",
+    ],
+  },
+  ave: {
+    pre: LIVE_PRE,
+    heads: [
+      ["ave", "f"],
+      ["pássaro", "m"],
+      ["passarinho", "m"],
+    ],
+    quals: [
+      "de penas escuras e canto agudo",
+      "que canta apenas ao amanhecer",
+      "que se alimenta de sementes caídas",
+      "que faz o ninho no chão das campinas",
+      "de bico curvo e rabo comprido",
+      "que acompanha os barcos de pesca",
+    ],
+    tails: ["comum no Pantanal", "hoje rar{o} no Sul", "caçad{o} por gaviões"],
+    pairs: ["pássaro pequeno de bico curvo", "ave de brejo, pernalta miúda"],
+  },
+  peixe: {
+    pre: LIVE_PRE,
+    heads: [
+      ["peixe", "m"],
+      ["camarão", "m"],
+      ["caranguejo", "m"],
+    ],
+    quals: [
+      "de água doce encontrad{o} em rios rasos",
+      "comum em mangues do litoral",
+      "que se esconde na lama em dias frios",
+      "de escamas prateadas e espinhos finos",
+      "pescad{o} só em noites de lua nova",
+    ],
+    pairs: ["peixe miúdo de lagoa", "piaba de rio raso"],
+  },
+  bicho: {
+    pre: LIVE_PRE,
+    heads: [
+      ["inseto", "m"],
+      ["roedor", "m"],
+      ["besouro", "m"],
+      ["lagarto", "m"],
+      ["bicho", "m"],
+    ],
+    quals: [
+      "que só aparece em noites quentes",
+      "que vive em tocas junto aos rios",
+      "de hábitos noturnos e solitários",
+      "que vive em celeiros e paióis",
+      "que muda de cor quando assustado",
+      "que se enterra na areia no calor",
+      "que rói a palha dos telhados",
+    ],
+    tails: ["comum no cerrado", "temido pelos lavradores"],
+    pairs: ["besouro verde de jardim", "lagartixa grande de muro"],
+  },
+  planta: {
+    pre: LIVE_PRE,
+    heads: [
+      ["erva", "f"],
+      ["arbusto", "m"],
+      ["planta", "f"],
+      ["cipó", "m"],
+      ["árvore", "f"],
+    ],
+    quals: [
+      "de folhas largas usad{o} em chás calmantes",
+      "espinhos{o} que cresce em terreno seco",
+      "de flores roxas que fecham ao anoitecer",
+      "cuja raiz serve de tintura",
+      "que só floresce depois das queimadas",
+      "de fibra resistente usad{o} para fazer cordas",
+      "venenos{o} para o gado",
+      "de seiva leitosa e amarga",
+      "que cresce nas frestas dos muros",
+      "de perfume forte ao entardecer",
+      "cujas sementes grudam na roupa",
+    ],
+    tails: [
+      "comum na beira das estradas",
+      "nativ{o} do cerrado",
+      "plantad{o} em quintais antigos",
+    ],
+    pairs: [
+      "erva rasteira de beira de rio",
+      "capim alto de brejo",
+      "cipó fino de mata fechada",
+      "fruto silvestre de casca espinhosa",
+    ],
+  },
+  fenomeno: {
+    heads: [
+      ["vento", "m"],
+      ["chuva", "f"],
+      ["neblina", "f"],
+      ["brisa", "f"],
+      ["clarão", "m"],
+      ["geada", "f"],
+      ["redemoinho", "m"],
+    ],
+    quals: [
+      "fri{o} que sopra antes da chuva",
+      "que desce das serras ao amanhecer",
+      "quente que vem do mar no fim da tarde",
+      "fin{o} que cai sem molhar",
+      "que aparece sobre os rios no inverno",
+      "que anuncia a chegada da seca",
+      "que levanta poeira nas estradas de terra",
+      "que surge no céu depois das trovoadas",
+    ],
+    tails: ["comum em agosto", "temid{o} pelos pescadores"],
+    pairs: [
+      "chuvisco fino, garoa de serra",
+      "vento encanado de vale",
+      "orvalho grosso da madrugada",
+    ],
+  },
+  terreno: {
+    heads: [
+      ["terreno", "m"],
+      ["vale", "m"],
+      ["trilha", "f"],
+      ["clareira", "f"],
+      ["várzea", "f"],
+      ["encosta", "f"],
+      ["atalho", "m"],
+      ["pátio", "m"],
+    ],
+    quals: [
+      "alagad{o} na época das chuvas",
+      "onde se secava o café ao sol",
+      "estreit{o} entre duas plantações",
+      "escondid{o} entre pedras na serra",
+      "onde o gado descansa ao meio-dia",
+      "usad{o} para feiras de animais",
+      "aberto no meio da mata para fazer carvão",
+      "de terra vermelha e solta",
+    ],
+    tails: ["comum no interior paulista", "conhecid{o} só pelos tropeiros"],
+    pairs: [
+      "caminho estreito entre plantações",
+      "baixada úmida, brejo raso",
+      "morro pelado, colina sem mata",
+    ],
+  },
+  pessoa: {
+    heads: [
+      ["pessoa", "f"],
+      ["sujeito", "m"],
+      ["artesão", "m"],
+      ["trabalhador", "m"],
+      ["ajudante", "m"],
+      ["aprendiz", "m"],
+    ],
+    quals: [
+      "encarregad{o} de tocar o sino da capela",
+      "que vive de consertar guarda-chuvas",
+      "que conduz tropas de burros",
+      "contratad{o} para carregar andores",
+      "que afina pianos de porta em porta",
+      "que conserta sapatos de couro",
+      "que guarda as chaves da igreja",
+      "que vende água de porta em porta",
+      "que acende os lampiões da rua",
+    ],
+    pairs: [
+      "tropeiro, condutor de mulas",
+      "remendão, sapateiro de rua",
+      "sineiro de capela pequena",
+    ],
+  },
+  estado: {
+    heads: [
+      ["sensação", "f"],
+      ["enjoo", "m"],
+      ["inquietação", "f"],
+      ["vontade", "f"],
+      ["calafrio", "m"],
+      ["aperto", "m"],
+      ["moleza", "f"],
+    ],
+    quals: [
+      "que dá depois de comer demais",
+      "de quem espera notícia que não chega",
+      "que aparece no fim das tardes de domingo",
+      "de ter esquecido algo importante",
+      "causad{o} pelo cheiro de chuva",
+      "de quem acorda antes do galo",
+      "que se sente ao voltar à casa da infância",
+      "que dá ao ouvir o próprio nome de longe",
+      "de quem passou o dia sem ver o sol",
+    ],
+    pairs: [
+      "frio na barriga, nervoso leve",
+      "vontade súbita de espirrar",
+      "aperto no peito sem motivo",
+    ],
+  },
+  atitude: {
+    heads: [
+      ["mania", "f"],
+      ["hábito", "m"],
+      ["costume", "m"],
+      ["jeito", "m"],
+      ["tique", "m"],
+    ],
+    quals: [
+      "de conversar na porta de casa ao entardecer",
+      "de guardar barbantes e tampinhas",
+      "de responder pergunta com outra pergunta",
+      "de contar moedas em voz alta",
+      "de bater três vezes na madeira",
+      "de esconder doces das visitas",
+      "de assobiar enquanto trabalha",
+      "de chamar todo mundo pelo apelido",
+      "de dobrar a ponta das páginas",
+      "de olhar o céu antes de sair de casa",
+      "de visitar parentes no primeiro domingo do mês",
+    ],
+    pairs: [
+      "zelo exagerado com as panelas",
+      "gesto de respeito ao entrar em casa alheia",
+      "costume de rir antes de contar a história",
+      "mania de arrumar o que já está arrumado",
+      "hábito de cumprimentar com a cabeça",
+      "teima de não sentar de costas para a porta",
+    ],
+  },
+  costume: {
+    heads: [
+      ["festa", "f"],
+      ["cerimônia", "f"],
+      ["ritual", "m"],
+      ["dança", "f"],
+      ["brincadeira", "f"],
+      ["cantiga", "f"],
+      ["jogo", "m"],
+    ],
+    quals: [
+      "de colheita celebrad{o} no outono",
+      "em que se queima um boneco de palha",
+      "jogad{o} com tampinhas e giz",
+      "dançad{o} em roda ao som de viola",
+      "cantad{o} durante os mutirões",
+      "em honra do santo padroeiro do rio",
+      "em que os noivos pulam uma fogueira",
+      "realizad{o} na primeira lua cheia do ano",
+      "de origem açoriana praticad{o} no litoral",
+      "em que as crianças trocam figurinhas de santos",
+    ],
+    tails: [
+      "típic{o} do interior gaúcho",
+      "quase esquecid{o} hoje",
+      "comum nas festas de junho",
+    ],
+    pairs: [
+      "roda de viola, cantoria de mutirão",
+      "dança de pares em fila",
+      "brincadeira de roda com lenço",
+    ],
+  },
+  doenca: {
+    heads: [
+      ["mancha", "f"],
+      ["coceira", "f"],
+      ["inchaço", "m"],
+      ["ferida", "f"],
+      ["caroço", "m"],
+      ["vermelhidão", "f"],
+    ],
+    quals: [
+      "que surge nas mãos de lavadeiras",
+      "causad{o} pelo frio nas orelhas",
+      "que aparece nos joelhos de quem anda descalço",
+      "provocad{o} por picada de inseto do mato",
+      "comum em quem trabalha com cal",
+      "que aparece na pele depois de muito sol",
+      "que surge nas costas de quem carrega peso",
+    ],
+    pairs: [
+      "frieira leve entre os dedos",
+      "calo duro na sola do pé",
+      "brotoeja de calor",
+    ],
+  },
+  corpo: {
+    heads: [
+      ["dobra", "f"],
+      ["cartilagem", "f"],
+      ["membrana", "f"],
+      ["saliência", "f"],
+      ["osso", "m"],
+      ["músculo", "m"],
+    ],
+    quals: [
+      "atrás do joelho",
+      "que fica entre o polegar e o indicador",
+      "na base do crânio",
+      "que liga a orelha ao maxilar",
+      "da parte de cima do pé",
+      "que se forma no canto dos olhos",
+    ],
+    pairs: ["covinha do queixo", "dobra da pálpebra"],
+  },
+  cobranca: {
+    heads: [
+      ["tributo", "m"],
+      ["taxa", "f"],
+      ["multa", "f"],
+      ["imposto", "m"],
+    ],
+    quals: [
+      "pag{o} pelos donos de moinhos",
+      "cobrad{o} sobre a venda de gado",
+      "exigid{o} para abrir banca em feira",
+      "aplicad{o} a quem desvia água de rio",
+      "cobrad{o} na travessia de pontes",
+      "devid{o} por quem corta lenha em terra alheia",
+    ],
+    tails: [
+      "previst{o} em leis coloniais",
+      "hoje em desuso",
+      "comum no direito português antigo",
+    ],
+    pairs: ["taxa de pedágio em ponte", "imposto antigo sobre o sal"],
+  },
+  juridico: {
+    heads: [
+      ["cláusula", "f"],
+      ["recurso", "m"],
+      ["licença", "f"],
+      ["contrato", "m"],
+      ["petição", "f"],
+    ],
+    quals: [
+      "que garante a passagem por terra alheia",
+      "que anula uma doação feita por engano",
+      "que permite ao herdeiro adiar a partilha",
+      "firmad{o} entre vizinhos para dividir um poço",
+      "que proíbe construir acima do muro do vizinho",
+      "usad{o} para contestar uma penhora",
+      "que autoriza a pesca em rio particular",
+    ],
+    tails: ["hoje em desuso", "comum no direito português antigo"],
+    pairs: [
+      "direito de pastar em terra alheia",
+      "acordo verbal entre vizinhos",
+      "servidão de passagem em fazenda",
+    ],
+  },
+  texto: {
+    heads: [
+      ["verso", "m"],
+      ["poema", "m"],
+      ["trecho", "m"],
+      ["estrofe", "f"],
+      ["narrativa", "f"],
+      ["cantiga", "f"],
+      ["rima", "f"],
+    ],
+    quals: [
+      "que repete a última palavra do verso anterior",
+      "de doze sílabas usad{o} em sonetos antigos",
+      "em que o autor fala com um objeto",
+      "recitad{o} em feiras para vender folhetos",
+      "que termina com uma pergunta sem resposta",
+      "escrit{o} para ser lid{o} de trás para frente",
+      "cantad{o} pelos trovadores em despedidas",
+      "em que cada estrofe começa com a mesma letra",
+    ],
+    tails: ["comum na poesia medieval", "típic{o} do cordel"],
+    pairs: [
+      "verso solto, sem rima",
+      "poema curto de despedida",
+      "recurso de estilo, repetição enfática",
+    ],
+  },
+  ciencia: {
+    heads: [
+      ["fenômeno", "m"],
+      ["processo", "m"],
+      ["efeito", "m"],
+    ],
+    quals: [
+      "em que a água sobe por tubos muito finos",
+      "observad{o} em lagos muito frios",
+      "que explica o brilho de certos insetos",
+      "que faz o vidro embaçar no frio",
+      "pelo qual o metal escurece com o tempo",
+      "que deixa a areia da praia mais firme molhada",
+    ],
+    pairs: ["unidade antiga de peso", "camada fina de sal sobre a rocha"],
+  },
+  substancia: {
+    heads: [
+      ["substância", "f"],
+      ["composto", "m"],
+      ["resina", "f"],
+      ["pigmento", "m"],
+    ],
+    quals: [
+      "que dá cor avermelhada a certas rochas",
+      "liberad{o} pelas folhas no calor",
+      "extraíd{o} da casca do cajueiro",
+      "que dá o amargor às sementes de abóbora",
+      "usad{o} para endurecer o couro",
+      "que se forma no fundo dos tonéis de vinho",
+    ],
+    pairs: ["pó fino de casca moída", "goma vegetal de colar papel"],
+  },
+  nautica: {
+    heads: [
+      ["embarcação", "f"],
+      ["barco", "m"],
+      ["canoa", "f"],
+      ["jangada", "f"],
+    ],
+    quals: [
+      "de fundo chato usad{o} em rios rasos",
+      "usad{o} para pescar camarão à noite",
+      "de casco estreito movid{o} a remo",
+      "com vela triangular de pano grosso",
+      "usad{o} para levar gado de uma margem a outra",
+    ],
+    pairs: ["canoa de um tronco só", "barcaça de carga de rio"],
+  },
+  manobra: {
+    heads: [
+      ["manobra", "f"],
+      ["nó", "m"],
+      ["amarra", "f"],
+      ["cabo", "m"],
+    ],
+    quals: [
+      "para virar o barco contra o vento",
+      "que prende a rede ao casco",
+      "feit{o} pelos marinheiros para amarrar cargas",
+      "usad{o} para atracar em dia de ventania",
+      "que segura a vela durante a tempestade",
+    ],
+    pairs: ["nó marinheiro de prender redes", "volta de cabo no mastro"],
+  },
+  historia: {
+    heads: [
+      ["cargo", "m"],
+      ["imposto", "m"],
+      ["moeda", "f"],
+      ["título", "m"],
+      ["mensageiro", "m"],
+      ["ofício", "m"],
+    ],
+    quals: [
+      "de pouco valor usad{o} em trocas rurais",
+      "dad{o} aos guardas das portas da cidade",
+      "cobrad{o} sobre o sal no tempo colonial",
+      "encarregad{o} de levar cartas a cavalo",
+      "concedid{o} aos donos de engenho",
+      "que cuidava dos pesos e medidas da vila",
+    ],
+    pairs: [
+      "moeda de cobre do tempo do Império",
+      "fiscal de feira na época colonial",
+    ],
+  },
+  som: {
+    heads: [
+      ["ruído", "m"],
+      ["estalo", "m"],
+      ["zumbido", "m"],
+      ["assobio", "m"],
+      ["chiado", "m"],
+      ["rangido", "m"],
+    ],
+    quals: [
+      "de portas mal fechadas",
+      "que a chaleira faz antes de ferver",
+      "dos moinhos em dia sem vento",
+      "que o couro faz quando seca ao sol",
+      "usad{o} pelos pastores para reunir o rebanho",
+      "da lenha verde no fogo",
+    ],
+    pairs: ["estalido seco de galho", "chiado de rádio antigo"],
+  },
+  sensorial: {
+    heads: [
+      ["cheiro", "m"],
+      ["sabor", "m"],
+      ["gosto", "m"],
+      ["aroma", "m"],
+    ],
+    quals: [
+      "forte que sobe do chão depois da queimada",
+      "amargo que fica após remédios caseiros",
+      "de terra molhada antes da chuva",
+      "que o pão de ontem deixa na boca",
+      "adocicado das goiabas passadas",
+      "de fumaça que fica na roupa depois da fogueira",
+      "metálico da água de poço velho",
+    ],
+    pairs: ["gosto de ferrugem na água", "ranço de manteiga velha"],
+  },
+  cor: {
+    heads: [
+      ["cor", "f"],
+      ["tom", "m"],
+      ["mancha", "f"],
+      ["reflexo", "m"],
+    ],
+    quals: [
+      "desbotad{o} das roupas lavadas no rio",
+      "esverdead{o} que aparece no cobre velho",
+      "arroxead{o} do céu antes da geada",
+      "amarelad{o} de papel guardado",
+      "que a chuva deixa em paredes de barro",
+      "acinzentad{o} das cinzas de fogão",
+    ],
+    pairs: ["tom amarelado de papel velho", "verde desbotado de parede antiga"],
+  },
+};
+
+/** Tipos de núcleo por categoria da palavra (as do acervo + 'custom'). */
+export const CATEGORY_KINDS: Record<string, readonly string[]> = {
+  objeto: ["recipiente", "ferramenta", "vestuario", "casa"],
+  cotidiano: ["recipiente", "ferramenta", "atitude", "som", "sensorial", "cor", "comida"],
+  regional: ["costume", "comida", "atitude", "som", "ferramenta", "terreno"],
+  comportamento: ["atitude", "estado"],
+  sentimento: ["estado", "atitude"],
+  pessoa: ["pessoa"],
+  animal: ["ave", "peixe", "bicho"],
+  planta: ["planta"],
+  natureza: ["fenomeno", "planta", "terreno", "bicho"],
+  gastronomia: ["comida", "bebida", "recipiente"],
+  medicina: ["doenca", "substancia"],
+  corpo: ["corpo", "doenca"],
+  direito: ["juridico", "cobranca"],
+  literatura: ["texto", "atitude"],
+  ciencia: ["ciencia", "substancia", "fenomeno"],
+  lugar: ["terreno", "casa"],
+  historia: ["historia", "costume"],
+  religiao: ["costume", "vestuario"],
+  nautica: ["nautica", "manobra"],
+  infantil: ["costume", "atitude"],
+};
+/** Sem categoria conhecida (palavra da sala, 'custom'): mistura geral. */
+export const DEFAULT_KINDS: readonly string[] = [
+  "recipiente",
+  "ferramenta",
+  "atitude",
+  "costume",
+  "comida",
+  "ave",
+  "bicho",
+  "planta",
+  "estado",
+];
+
+// ---------------------------------------------------------------------------
+// Frases de AÇÃO no infinitivo (verbos, "ato de…", "hábito de…").
+export const ACTS: readonly string[] = [
+  "remendar redes com fio grosso",
+  "espalhar cinza sobre a horta",
+  "bater a roupa na pedra do rio",
+  "amarrar o barco a um tronco",
+  "raspar o fundo da panela",
+  "desembaraçar a lã antes de fiar",
+  "assobiar para chamar o gado",
+  "torcer o pano até secar",
+  "socar o milho no pilão",
+  "trançar palha para fazer cestos",
+  "cutucar a brasa com um graveto",
+  "pisar uvas descalço",
+  "sacudir o tapete na janela",
+  "andar em círculos sem sair do lugar",
+  "esfregar as mãos para espantar o frio",
+  "empilhar lenha junto ao fogão",
+  "assoprar a sopa antes de comer",
+  "balançar a rede devagar",
+  "regar as plantas com água de chuva",
+  "torrar café na panela de ferro",
+  "farejar o ar como um cão",
+  "cortar o cabelo na lua minguante",
+  "bater o pé no chão para chamar atenção",
+  "desfiar o pano até sobrar o fio",
+  "riscar o chão com a ponta do pé",
+  "debulhar o milho com as mãos",
+  "enrolar fumo em palha de milho",
+  "caiar as paredes antes da festa",
+  "tanger os bois para o curral",
+  "peneirar a farinha duas vezes",
+];
+export const ACT_TAILS: readonly string[] = [
+  "aos poucos",
+  "repetidas vezes",
+  "às escondidas",
+  "sem muito cuidado",
+  "antes do amanhecer",
+  "com as duas mãos",
+];
+export const VERB_PAIRS: readonly string[] = [
+  "cutucar, futucar com o dedo",
+  "remexer, revirar gavetas",
+  "cochilar sentado, pescar de sono",
+  "bambolear, andar gingando",
+  "remendar às pressas, alinhavar",
+  "esfarelar, desmanchar com os dedos",
+];
+/** Para verbos em -izar/-ificar/-ecer: "tornar…", "tornar-se…". */
+export const BECOME: readonly string[] = [
+  "liso e brilhante",
+  "duro como pedra",
+  "áspero ao toque",
+  "turvo e sem brilho",
+  "quebradiço com o tempo",
+  "amarelado pelo sol",
+  "mais lento e pesado",
+  "fino como papel",
+];
+
+// ---------------------------------------------------------------------------
+// Orações sobre PESSOAS (3ª pessoa, sem "que"): "pessoa que…", "diz-se de
+// quem…", "mania de quem…".
+export const QUEM: readonly string[] = [
+  "vive mudando de opinião",
+  "conserta guarda-chuvas de porta em porta",
+  "fala sozinho enquanto trabalha",
+  "acorda antes do galo",
+  "coleciona coisas sem serventia",
+  "anda sempre descalço",
+  "dorme de olhos entreabertos",
+  "chega às festas sem ser convidado",
+  "trabalha só à noite",
+  "imita a voz dos outros",
+  "anota tudo num caderninho",
+  "come de pé na cozinha",
+  "decora o nome de todos os santos",
+  "nunca devolve o que pega emprestado",
+];
+
+// ---------------------------------------------------------------------------
+// ADJETIVOS.
+export const ADJ_QUE: readonly string[] = [
+  "muda de cor conforme a luz",
+  "não segura bem o calor",
+  "range ao ser pisado",
+  "tem cheiro de guardado",
+  "se desfaz ao toque",
+  "cresce virado para o sul",
+  "tem o formato de meia-lua",
+  "dá frutos duas vezes por ano",
+  "se dobra sem quebrar",
+  "perdeu o brilho com o tempo",
+  "nasceu no inverno",
+  "vive em lugares úmidos",
+  "foi tingido com casca de árvore",
+  "anda de lado",
+];
+/** "próprio …" / "típico …" + estes (já com "de" contraído). */
+export const ADJ_PROPRIO: readonly string[] = [
+  "do fim do inverno",
+  "das cozinhas de fazenda",
+  "dos ofícios do mar",
+  "das festas de colheita",
+  "de quem vive no litoral",
+  "dos dias de feira",
+  "das noites sem lua",
+  "dos moinhos antigos",
+];
+/** "relativo …" + estes (já com "a" contraído). */
+export const ADJ_RELATIVO: readonly string[] = [
+  "ao gado criado solto",
+  "às margens dos rios",
+  "aos moinhos de vento",
+  "à pesca em águas rasas",
+  "ao couro curtido",
+  "à primeira chuva do ano",
+  "às rendas de bilro",
+  "ao trabalho nas salinas",
+];
+/** "diz-se de …" + estes. */
+export const ADJ_DIZSE: readonly string[] = [
+  "terreno que não segura água",
+  "tecido muito áspero",
+  "animal que não se deixa montar",
+  "fruta colhida antes da hora",
+  "pão que endureceu de um dia para o outro",
+  "madeira que racha ao sol",
+  "caminho cheio de curvas",
+];
+/** Adjetivos em -oso/-osa: "cheio de …". */
+export const ADJ_CHEIO: readonly string[] = [
+  "nós e farpas",
+  "rachaduras finas",
+  "espinhos miúdos",
+  "manchas escuras",
+  "pequenas bolhas",
+  "fiapos soltos",
+  "dobras e vincos",
+];
+/** Adjetivos em -vel: "que pode ser …". */
+export const ADJ_PODE: readonly string[] = [
+  "dobrado sem quebrar",
+  "dividido em partes iguais",
+  "lavado em água fria",
+  "carregado nas costas",
+  "comido cru",
+  "trocado por outro igual",
+  "guardado por muitos anos",
+];
+export const ADJ_PAIRS: readonly string[] = [
+  "arredio, desconfiado com estranhos",
+  "áspero, de toque grosseiro",
+  "torto, mal-acabado",
+  "pegajoso, grudento ao toque",
+  "encardido, de cor gasta",
+  "desajeitado, sem jeito com as mãos",
+  "abafado, sem circulação de ar",
+  "quebradiço como casca seca",
+  "tardio, que demora a amadurecer",
+  "rasteiro, que cresce rente ao chão",
+  "enviesado, posto de través",
+  "miúdo, de grão muito fino",
+];
+
+// ---------------------------------------------------------------------------
+// ADVÉRBIOS (definições prontas; todas com 3+ palavras).
+export const ADVERBS: readonly string[] = [
+  "de modo desajeitado",
+  "às pressas, sem cuidado",
+  "em voz muito baixa",
+  "sem rumo certo",
+  "aos trancos e barrancos",
+  "de cabeça para baixo",
+  "na ponta dos pés",
+  "de tempos em tempos",
+  "às escondidas, sem alarde",
+  "de má vontade",
+  "com muito cuidado",
+  "em fila, um atrás do outro",
+  "de viés, atravessado",
+  "por um triz, quase",
+  "a meio caminho",
+  "de uma vez só",
+  "pouco a pouco, sem pressa",
+  "à beira do fim",
+  "de quando em quando",
+  "ao pé da letra",
+  "em cima da hora",
+  "de orelha em pé",
+  "de mão em mão",
+  "por via das dúvidas",
+];
+/** "de modo …" / "de maneira …" ({o} concorda com modo/maneira). */
+export const ADV_MANNER: readonly string[] = [
+  "desajeitad{o}",
+  "solene",
+  "distraíd{o}",
+  "cerimonios{o}",
+  "atrapalhad{o}",
+  "sorrateir{o}",
+  "desleixad{o}",
+  "minucios{o}",
+  "arrastad{o}",
+  "enviesad{o}",
+  "atabalhoad{o}",
+  "comedid{o}",
+  "vagaros{o}",
+  "ruidos{o}",
+];
+
+// ---------------------------------------------------------------------------
+// MORFOLOGIA: tópicos usados pelas regras de sufixo (offline.ts).
+/** "estudo dos …", "medo exagerado dos …", "gosto pelos …". */
+export const TOPICS: readonly Topic[] = [
+  ["os", "ventos de montanha"],
+  ["as", "rachaduras das pedras"],
+  ["os", "ninhos de aves marinhas"],
+  ["as", "sombras ao meio-dia"],
+  ["os", "sinos de igreja"],
+  ["os", "sonhos repetidos"],
+  ["as", "cascas de árvore"],
+  ["os", "fungos de parede"],
+  ["as", "pegadas de animais"],
+  ["os", "nomes de ruas"],
+  ["as", "linhas da mão"],
+  ["o", "canto dos grilos"],
+  ["a", "poeira das estradas"],
+  ["os", "botões de roupa"],
+  ["os", "espelhos antigos"],
+  ["as", "escadas em caracol"],
+  ["os", "relógios de parede"],
+  ["a", "cor amarela"],
+  ["os", "números ímpares"],
+  ["as", "pontes de madeira"],
+];
+/** Partes do corpo (sufixo -ite: "inflamação da …"). */
+export const BODY_PARTS: readonly Topic[] = [
+  ["a", "ponta dos dedos"],
+  ["o", "céu da boca"],
+  ["as", "pálpebras"],
+  ["os", "tendões do pé"],
+  ["a", "raiz dos cabelos"],
+  ["o", "lóbulo da orelha"],
+  ["a", "sola do pé"],
+  ["as", "dobras do cotovelo"],
+];
+/** Minerais e rochas (sufixo -ite: "mineral …"). */
+export const MINERAL_QUALS: readonly string[] = [
+  "esverdead{o} encontrad{o} em minas de cobre",
+  "brilhante usad{o} em joias baratas",
+  "maci{o} que risca o papel",
+  "cor de ferrugem achad{o} em leitos de rio",
+  "translúcid{o} que se parte em lâminas",
+];
+/** Ideias para -ismo/-ista ("doutrina que defende …", "adepto …"). */
+export const IDEAS: readonly Topic[] = [
+  ["a", "vida longe das cidades"],
+  ["o", "silêncio durante as refeições"],
+  ["o", "uso de remédios caseiros"],
+  ["a", "volta aos costumes antigos"],
+  ["a", "divisão das colheitas entre vizinhos"],
+  ["o", "trabalho sem pressa"],
+  ["a", "leitura em voz alta"],
+  ["o", "plantio guiado pela lua"],
+];
+/** "golpe dado com …" (sufixo -ada). */
+export const STRIKES: readonly string[] = [
+  "o cabo da enxada",
+  "a aba do chapéu",
+  "um galho seco",
+  "a ponta do cotovelo",
+  "um pano molhado",
+];
+/** Para "lugar onde se guardam …" (sufixo -ário). */
+export const STORED: readonly string[] = [
+  "as redes de pesca",
+  "os andores da procissão",
+  "as sementes do ano seguinte",
+  "os queijos para curar",
+  "os arreios dos cavalos",
+];
+/** Para "terreno coberto de …" (substantivos em -al). */
+export const GROVES: readonly string[] = [
+  "pés de araçá",
+  "capim-gordura",
+  "bambus finos",
+  "touceiras de taboa",
+  "cajueiros baixos",
+];
+
+// ---------------------------------------------------------------------------
+// CAMPOS SEMÂNTICOS (mini-tesauro de proteção). Se a verdade (ou os
+// sinônimos cadastrados) toca um campo, NENHUMA candidata pode tocar o mesmo
+// campo: sem juiz semântico, é a defesa contra o bot escrever, com outras
+// palavras, a resposta certa ("alvoroço" × "barulho"). Raízes sem acento,
+// casadas no INÍCIO de cada palavra.
+export const SEMANTIC_FIELDS: Record<string, readonly string[]> = {
+  barulho: [
+    "barulh", "ruid", "alvoro", "grita", "vozer", "algazar", "balburd",
+    "tumult", "zoad", "bulic", "estrond", "estard", "chiad", "zumbi",
+    "estal", "rangi",
+  ],
+  confusao: ["confus", "desord", "bagunc", "rebuli", "agita", "caos", "baderna", "enred"],
+  fofoca: ["fofoc", "mexeri", "intrig", "boato", "falator", "cochich", "fuxic"],
+  conversa: ["conversa", "papo", "prosa", "tagarel", "falar", "fala", "ladainh", "palavrea"],
+  tristeza: ["trist", "melanc", "saudad", "lament", "chor", "pesar", "desanim", "abati"],
+  raiva: ["raiva", "irrit", "zanga", "furia", "coler", "bronca", "aborrec", "ira"],
+  medo: ["medo", "pavor", "temor", "susto", "receio", "fobia", "panico"],
+  alegria: ["alegr", "conten", "jubil", "euforia", "festeir"],
+  preguica: ["pregui", "molez", "indolen", "ocios", "vadia", "lerdez"],
+  engano: ["engan", "mentir", "menti", "trapac", "fraud", "logro", "ludibr", "blefe", "embust", "trapa"],
+  roubo: ["ladr", "roub", "furt", "gatun", "larap", "surrup"],
+  dinheiro: ["dinheir", "moeda", "riquez", "lucro", "enriq", "fortun", "tesour", "pagament", "pago", "cobra"],
+  comida: ["comer", "comida", "alimen", "refeic", "banquet", "quitut", "guloseim", "doce", "bolo"],
+  bebida: ["bebid", "beber", "licor", "aguard", "cachac", "vinho", "embriag", "bebad"],
+  doenca: ["doenc", "molest", "enferm", "febre", "inflam", "infecc", "mazela", "achaque"],
+  sujeira: ["sujo", "sujei", "imund", "desleix", "encard", "porcal", "nojo"],
+  pressa: ["rapid", "pressa", "ligeir", "veloz", "apress", "depress"],
+  efemero: ["passag", "efemer", "breve", "fugaz", "moment", "transit"],
+  humor: ["piada", "graca", "gracej", "zomba", "chacot", "troca", "debocha", "brincad", "riso", "rir"],
+  brilho: ["brilh", "luz", "lumin", "reluz", "cintil", "fulgor", "claro"],
+  cheiro: ["cheir", "odor", "fedor", "aroma", "catinga", "bodum", "perfum", "fartum"],
+  cansaco: ["cansa", "fadiga", "exaust", "esgota"],
+  sono: ["sono", "dormi", "cochil", "sonol"],
+  briga: ["briga", "luta", "conflit", "disput", "rixa", "contend", "pancad", "golpe"],
+  ostentacao: ["luxo", "luxuos", "ostent", "pompa", "vaidad", "esnob", "pedant", "presun"],
+  avareza: ["avar", "mesquin", "sovin", "pao-dur", "unha-de-fome", "economi"],
+  teimosia: ["teim", "birra", "obstin", "insist"],
+  timidez: ["timid", "vergonh", "acanh", "envergonh"],
+  sorte: ["sorte", "azar", "agour", "urucub", "pe-frio", "zica"],
+  doce_tempo: ["inverno", "frio", "gelad", "geada"],
+  agua: ["agua", "chuva", "molhad", "umid", "garoa"],
+  morte: ["morte", "morre", "falec", "enterr", "funer", "velor", "cadav", "luto"],
+  religiao: ["reza", "ora", "oracao", "prece", "santo", "igreja", "capela", "procis", "romar", "devoc"],
+  estudo: ["estud", "cienci", "tratado", "ramo"],
+  descanso: ["descans", "repous", "folga", "ocio"],
+  pessoa_ofic: ["oficio", "profiss", "trabalhad", "artes"],
+  pequeno: ["pequen", "miud", "minusc", "diminut"],
+  velho: ["velh", "antig", "idos", "ancia"],
+  conserto: ["consert", "remend", "repar"],
+  canto: ["canto", "cantig", "cantar", "canta", "cantor", "musica", "melodi"],
+  danca: ["danca", "dancar", "bail"],
+  // Red Team 10/11: "taramela" = "peça que tranca portas" × "que prende a
+  // porteira por dentro" — sem raiz em comum, mesmo sentido
+  fecho: ["tranc", "ferrolh", "trinc", "fechad", "fechar", "trava", "cadead", "taramel", "porta", "porteir", "prend"],
+};
