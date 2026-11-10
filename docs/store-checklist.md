@@ -34,9 +34,17 @@ Em Settings → Secrets and variables → Actions do repo, crie:
 | `ANDROID_KEY_ALIAS` | `verbete` |
 | `ANDROID_KEY_PASSWORD` | senha da chave |
 
-Depois: aba Actions → workflow "Android" → Run workflow → baixe o artifact
-`verbete-release-aab`. **Arquive o AAB aprovado fora do GitHub** (o artifact
-expira: o candidato de agosto sumiu com 30 dias; desde o M1 a retenção é 90).
+Depois: aba Actions → workflow "Android" → Run workflow (escolha o
+`release_channel`; AAB da loja = `production`) → baixe o artifact
+`verbete-release-aab-<canal>`. **Arquive o AAB aprovado fora do GitHub** (o
+artifact expira em 30 dias — `retention-days: 30` no `android.yml`; o candidato
+de agosto sumiu assim). Antes do upload do artifact, o passo "Auditar o AAB"
+roda `scripts/verify-native-artifact.mjs` (bundle web embutido: configuração
+pública, nenhum segredo, canal pedido, versão do `build.gradle`, build ID) e
+escreve no resumo do run o sha256 do AAB e o SHA-256 do certificado de upload
+(esperado `FA:CC…54:65`, o mesmo do vc7/vc8; outro valor reprova o run).
+Para conferir um AAB baixado: `node scripts/verify-native-artifact.mjs <aab>
+--channel production --build-id <sha>` e `keytool -printcert -jarfile <aab>`.
 
 ### 1a'. Configuração pública do bundle nativo (M1)
 
