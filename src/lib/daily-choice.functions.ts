@@ -19,6 +19,7 @@ import {
   poolInput,
   saveDrafts,
   listInput,
+  oldReviewStatus,
   reviewInput,
   reviewSets,
   type AdminItem,
@@ -164,13 +165,14 @@ export const reviewDailyChoices = createServerFn({ method: "POST" })
     return reviewSets(
       {
         get: getItems,
+        // R6: a função antiga só REPROVA ou volta a RASCUNHO; aprovar nunca passa por aqui
         review: async (ids, status) =>
           (await rpcOrThrow("daily_choice_admin_review", {
             p_word_ids: ids,
-            p_status: status,
+            p_status: oldReviewStatus(status),
             p_reviewer: context.userId,
           })) as { updated: number; skipped: number },
-        // R1: manifesto → o banco recalcula o hash na mesma transação do UPDATE
+        // R1/R6: toda aprovação → o banco recalcula o hash na mesma transação do UPDATE
         reviewHashed: async (expected) =>
           (await rpcOrThrow("daily_choice_admin_review_hashed", {
             p_expected: expected,

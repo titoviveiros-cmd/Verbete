@@ -13,6 +13,7 @@ import {
   reviewDailyChoices,
 } from "@/lib/daily-choice.functions";
 import { buildDrafts } from "@/lib/daily-choice-admin";
+import { setHash } from "@/lib/daily-choice-manifest";
 import { DailyChoiceManifest } from "@/components/DailyChoiceManifest";
 
 // Diário D1 — revisão dos conjuntos do modo escolha (papel admin).
@@ -118,7 +119,38 @@ function AdminDailyChoicesPage() {
 
   const doReview = (ids: string[], st: Status) =>
     run(async () => {
-      const r = await review({ data: { wordIds: ids, status: st } });
+      // uma edição aberta não é o que está gravado: salvar ou cancelar antes de aprovar
+      const abertos =
+        st === "aprovado"
+          ? items.filter((x) => ids.includes(x.word_id) && editing[x.word_id])
+          : [];
+      if (abertos.length)
+        return `Salve ou cancele a edição antes de aprovar: ${abertos.map((x) => x.word).join(", ")}. Nada foi aprovado.`;
+      // reabrir um reprovado é um ato deliberado: ele volta a ser aprovável (também por manifesto)
+      if (
+        st === "rascunho" &&
+        !window.confirm(
+          `Voltar ${ids.length} conjunto(s) a RASCUNHO? Eles poderão ser aprovados de novo, inclusive por um manifesto revisado antes da reprovação.`,
+        )
+      )
+        return "Nada mudou.";
+      // R6: aprovar leva o hash do que está NA TELA agora (definição + alternativas
+      // exibidas). O banco recalcula o hash do conteúdo gravado na mesma transação e
+      // só aprova o rascunho que bate.
+      const expected: Record<string, string> = {};
+      if (st === "aprovado")
+        for (const id of ids) {
+          const it = items.find((x) => x.word_id === id);
+          const shown = it?.distractors;
+          if (it && shown?.length === 3)
+            expected[id] = await setHash(id, it.truth, shown);
+        }
+      const r = await review({
+        data:
+          st === "aprovado"
+            ? { wordIds: ids, status: st, expected, source: "painel" as const }
+            : { wordIds: ids, status: st },
+      });
       const probs = r.problems
         .map((p) => `• ${p.word || "?"}: ${p.reasons.join("; ")}`)
         .join("\n");
@@ -194,6 +226,8 @@ function AdminDailyChoicesPage() {
           <button
             key={s.key}
             onClick={() => {
+              setItems([]);
+              setSel(new Set());
               setStatus(s.key);
               setOffset(0);
             }}
@@ -226,13 +260,22 @@ function AdminDailyChoicesPage() {
         <span className="text-muted-foreground">
           {total} neste status · {sel.size} selecionado(s)
         </span>
-        {status !== "aprovado" && (
+        {status === "rascunho" && (
           <button
             disabled={busy || sel.size === 0}
             onClick={() => doReview([...sel], "aprovado")}
             className="btn-pop bg-gradient-mint text-accent-foreground !py-1.5 !px-3 text-xs"
           >
             ✅ Aprovar selecionados ({sel.size})
+          </button>
+        )}
+        {status === "reprovado" && (
+          <button
+            disabled={busy || sel.size === 0}
+            onClick={() => doReview([...sel], "rascunho")}
+            className="btn-pop btn-plain !py-1.5 !px-3 text-xs"
+          >
+            ↩ Voltar a rascunho ({sel.size})
           </button>
         )}
         {status !== "reprovado" && (
@@ -381,13 +424,22 @@ function AdminDailyChoicesPage() {
                   </>
                 ) : (
                   <>
-                    {status !== "aprovado" && (
+                    {status === "rascunho" && (
                       <button
                         disabled={busy}
                         onClick={() => doReview([it.word_id], "aprovado")}
                         className="flex-1 btn-pop bg-gradient-mint text-accent-foreground text-sm !py-2"
                       >
                         ✅ Aprovar
+                      </button>
+                    )}
+                    {status === "reprovado" && (
+                      <button
+                        disabled={busy}
+                        onClick={() => doReview([it.word_id], "rascunho")}
+                        className="flex-1 btn-pop btn-plain text-sm !py-2"
+                      >
+                        ↩ Voltar a rascunho
                       </button>
                     )}
                     {status !== "reprovado" && (
@@ -424,7 +476,11 @@ function AdminDailyChoicesPage() {
         )}
         {total > offset + items.length && (
           <button
-            onClick={() => setOffset((o) => o + 50)}
+            onClick={() => {
+              setItems([]);
+              setSel(new Set());
+              setOffset((o) => o + 50);
+            }}
             className="btn-pop btn-plain text-sm w-full !py-2"
           >
             Próximos 50 →
@@ -432,7 +488,11 @@ function AdminDailyChoicesPage() {
         )}
         {offset > 0 && (
           <button
-            onClick={() => setOffset((o) => Math.max(0, o - 50))}
+            onClick={() => {
+              setItems([]);
+              setSel(new Set());
+              setOffset((o) => Math.max(0, o - 50));
+            }}
             className="btn-pop btn-plain text-sm w-full !py-2"
           >
             ← Anteriores

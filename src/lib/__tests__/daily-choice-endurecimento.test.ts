@@ -10,6 +10,7 @@ import {
   type Manifest,
 } from "../daily-choice-manifest";
 import {
+  SEM_HASH,
   draftsInput,
   editInput,
   editSet,
@@ -291,16 +292,18 @@ describe("R4: aprovar por manifesto não desfaz uma reprovação", () => {
       },
     ]);
   });
-  it("sem manifesto (fluxo antigo, R6 em decisão): comportamento inalterado", async () => {
+  it("R6: sem manifesto (painel antigo sem hash) a aprovação de um REPROVADO é recusada", async () => {
     const review = vi.fn(async (ids: string[]) => ({
       updated: ids.length,
       skipped: 0,
     }));
-    const r = await reviewSets(
-      { get: async () => [item(1, { status: "reprovado" })], review },
-      { wordIds: [ID(1)], status: "aprovado" },
-    );
-    expect(r.updated).toBe(1);
+    await expect(
+      reviewSets(
+        { get: async () => [item(1, { status: "reprovado" })], review },
+        { wordIds: [ID(1)], status: "aprovado" },
+      ),
+    ).rejects.toThrow(SEM_HASH);
+    expect(review).not.toHaveBeenCalled();
   });
 });
 

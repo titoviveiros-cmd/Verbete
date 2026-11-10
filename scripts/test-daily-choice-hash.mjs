@@ -256,6 +256,30 @@ try {
     eq((await estado(id)).distractors, ALTS);
   });
 
+  await t("R6 no banco: REPROVADO com o hash certo não é aprovado; volta a rascunho (sem hash) e aí aprova por hash", async () => {
+    const id = await conjunto("reprovado");
+    const h = hashNode(id, TRUTH, ALTS);
+    eq(await aprovar({ [id]: h }), { updated: 0, skipped: 1 });
+    eq((await estado(id)).status, "reprovado");
+    const [{ r }] = await db.q(`SELECT public.daily_choice_admin_review($1::uuid[], 'rascunho', $2) AS r`, [[id], REVISOR]);
+    eq(r, { updated: 1, skipped: 0 });
+    eq(await aprovar({ [id]: h }), { updated: 1, skipped: 0 });
+    eq((await estado(id)).status, "aprovado");
+  });
+
+  await t("R6 no banco: aprovar de novo um APROVADO não reescreve revisor nem data", async () => {
+    const id = await conjunto();
+    const h = hashNode(id, TRUTH, ALTS);
+    eq(await aprovar({ [id]: h }), { updated: 1, skipped: 0 });
+    const [antes1] = await db.q(`SELECT reviewed_by, reviewed_at FROM public.daily_choice_sets WHERE word_id = $1`, [id]);
+    const outro = randomUUID();
+    const [{ r }] = await db.q(`SELECT public.daily_choice_admin_review_hashed($1::jsonb, $2) AS r`, [JSON.stringify({ [id]: h }), outro]);
+    eq(r, { updated: 0, skipped: 1 });
+    const [depois] = await db.q(`SELECT reviewed_by, reviewed_at FROM public.daily_choice_sets WHERE word_id = $1`, [id]);
+    eq(String(depois.reviewed_by), String(antes1.reviewed_by));
+    eq(String(depois.reviewed_at), String(antes1.reviewed_at));
+  });
+
   await t("permissões: só service_role executa as funções novas", async () => {
     const fns = ["daily_choice_set_hash(uuid,text,text[])", "daily_choice_alt_ok(text[])",
       "daily_choice_admin_review_hashed(jsonb,uuid)", "daily_choice_admin_edit_guarded(uuid,text[],jsonb,boolean,boolean)"];
@@ -329,6 +353,52 @@ try {
         await a.query("COMMIT");
         eq((await pb).rows[0].r, { updated: 0, blocked: "aprovado" });
         eq(await estado(id), { status: "aprovado", distractors: ALTS });
+      } finally {
+        await a.end();
+        await b.end();
+      }
+    });
+
+    await t("R6 corrida: reprovação em andamento × aprovação do painel por hash → espera e NÃO aprova o reprovado", async () => {
+      const id = await conjunto();
+      const a = await db.conn();
+      const b = await db.conn();
+      try {
+        await a.query("BEGIN");
+        await a.query(`SELECT public.daily_choice_admin_review($1::uuid[], 'reprovado', $2)`, [[id], REVISOR]);
+        let terminou = false;
+        const pb = b.query(`SELECT public.daily_choice_admin_review_hashed($1::jsonb, $2) AS r`,
+          [JSON.stringify({ [id]: hashNode(id, TRUTH, ALTS) }), REVISOR]).then((x) => ((terminou = true), x));
+        await new Promise((r) => setTimeout(r, 400));
+        ok(!terminou, "a aprovação não esperou a reprovação terminar (sem trava)");
+        await a.query("COMMIT");
+        eq((await pb).rows[0].r, { updated: 0, skipped: 1 });
+        eq((await estado(id)).status, "reprovado");
+      } finally {
+        await a.end();
+        await b.end();
+      }
+    });
+
+    await t("R6 corrida: duas aprovações do painel ao mesmo tempo → só uma grava; o revisor da 1ª fica", async () => {
+      const id = await conjunto();
+      const h = JSON.stringify({ [id]: hashNode(id, TRUTH, ALTS) });
+      const outro = randomUUID();
+      const a = await db.conn();
+      const b = await db.conn();
+      try {
+        await a.query("BEGIN");
+        const ra = (await a.query(`SELECT public.daily_choice_admin_review_hashed($1::jsonb, $2) AS r`, [h, REVISOR])).rows[0].r;
+        let terminou = false;
+        const pb = b.query(`SELECT public.daily_choice_admin_review_hashed($1::jsonb, $2) AS r`, [h, outro])
+          .then((x) => ((terminou = true), x));
+        await new Promise((r) => setTimeout(r, 400));
+        ok(!terminou, "a 2ª aprovação não esperou a 1ª (sem trava)");
+        await a.query("COMMIT");
+        eq(ra, { updated: 1, skipped: 0 });
+        eq((await pb).rows[0].r, { updated: 0, skipped: 1 });
+        const [x] = await db.q(`SELECT status, reviewed_by FROM public.daily_choice_sets WHERE word_id = $1`, [id]);
+        eq({ status: x.status, by: String(x.reviewed_by) }, { status: "aprovado", by: REVISOR });
       } finally {
         await a.end();
         await b.end();

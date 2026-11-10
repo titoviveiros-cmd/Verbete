@@ -3,7 +3,10 @@
 //  * o gerador só grava RASCUNHOS; aprovação é sempre um ato do revisor sobre
 //    ids que ele escolheu (individual ou lote selecionado), nunca automática;
 //  * aprovar re-valida o conteúdo ATUAL (validador + definição igual à revisada);
-//    o banco confere de novo (daily_choice_admin_review);
+//  * R6: TODA aprovação leva o hash do que o revisor viu (painel principal: o que
+//    está na tela; manifesto: o que foi revisado fora) e o banco recalcula o hash
+//    na mesma transação do UPDATE (daily_choice_admin_review_hashed). Não existe
+//    mais aprovação sem hash; a função antiga só reprova ou volta a rascunho;
 //  * manifesto (lote revisado fora do painel): importação e aprovação conferem o
 //    HASH de cada conjunto no servidor — nada diferente do revisado entra;
 //  * alternativas nunca têm quebra de linha nem caractere de controle (R2);
@@ -65,8 +68,24 @@ export const reviewInput = z
       .record(z.string().uuid(), z.string().regex(HASH_RE))
       .refine((r) => Object.keys(r).length <= MAX_BATCH)
       .optional(),
+    // R6: de onde vem o hash (muda só as mensagens; a regra é a mesma)
+    source: z.enum(["painel", "manifesto"]).optional(),
   })
   .strict();
+
+/**
+ * R6: a função antiga (daily_choice_admin_review) só reprova ou volta a rascunho.
+ * O banco ainda aceitaria "aprovado" sem hash: a trava é esta, no Worker.
+ */
+export function oldReviewStatus(status: string): "reprovado" | "rascunho" {
+  if (status !== "reprovado" && status !== "rascunho")
+    throw new Error("daily_choice_admin_review: só reprovar ou rascunho");
+  return status;
+}
+
+/** R6: aprovação sem hash do conteúdo visto é recusada inteira. */
+export const SEM_HASH =
+  "Aprovar exige o hash do conteúdo exibido. Recarregue o painel e tente de novo.";
 export const idsInput = z
   .object({ wordIds: z.array(z.string().uuid()).min(1).max(MAX_BATCH) })
   .strict();
@@ -194,16 +213,17 @@ export async function saveDrafts(
 
 /**
  * Aprovar/reprovar/voltar a rascunho SÓ os ids escolhidos pelo revisor.
- * R1: com manifesto, a aprovação vai para `reviewHashed`, que confere o hash DE
- * NOVO dentro do banco, na mesma transação do UPDATE. Nunca cai na aprovação
- * sem hash: sem `reviewHashed`, falha.
+ * R1/R6: aprovar vai SEMPRE para `reviewHashed`, que confere o hash DE NOVO
+ * dentro do banco, na mesma transação do UPDATE (só aprova RASCUNHO cujo
+ * conteúdo atual tem exatamente aquele hash). Sem `expected` ou sem
+ * `reviewHashed`, falha: nunca cai numa aprovação sem hash.
  */
 export async function reviewSets(
   deps: {
     get: (ids: string[]) => Promise<AdminItem[]>;
     review: (
       ids: string[],
-      status: string,
+      status: "reprovado" | "rascunho",
     ) => Promise<{ updated: number; skipped: number }>;
     reviewHashed?: (
       expected: Record<string, string>,
@@ -220,6 +240,9 @@ export async function reviewSets(
     const r = await deps.review(ids, input.status);
     return { ...r, problems: [] };
   }
+  const expected = input.expected;
+  if (!expected) throw new Error(SEM_HASH);
+  const painel = input.source === "painel";
   const items = await deps.get(ids);
   const ok: string[] = [];
   const problems: Array<{ word_id: string; word: string; reasons: string[] }> =
@@ -232,24 +255,34 @@ export async function reviewSets(
       reasons.push(
         "a definição mudou depois do rascunho: edite e salve de novo",
       );
-    if (input.expected) {
-      // R4: o lote em massa não desfaz uma reprovação; reavaliar é no painel principal
-      if (it.status === "reprovado")
-        reasons.push("reprovado antes: reavalie no painel principal");
-      // R2: conjunto antigo com quebra de linha não entra por hash (a junção seria ambígua)
-      if (it.distractors?.some((d) => ALT_PROIBIDO.test(d)))
-        reasons.push("alternativa gravada com quebra de linha: edite antes");
-      // o banco confere o hash SEM aparar: alternativa antiga com espaço nas pontas não entra
-      if (it.distractors?.some((d) => d !== d.trim()))
-        reasons.push("alternativa gravada com espaço nas pontas: edite antes");
-      const exp = input.expected[it.word_id];
-      if (!exp) reasons.push("fora do manifesto");
-      else if (
-        !it.distractors ||
-        (await setHash(it.word_id, it.truth, it.distractors)) !== exp
-      )
-        reasons.push("conteúdo diferente do revisado (hash)");
-    }
+    // R4/R6: aprovar não desfaz uma reprovação de uma vez; no painel, primeiro volta a rascunho
+    if (it.status === "reprovado")
+      reasons.push(
+        painel
+          ? "reprovado: volte a rascunho antes de aprovar"
+          : "reprovado antes: reavalie no painel principal",
+      );
+    if (it.status === "aprovado") reasons.push("já aprovado");
+    // R2: conjunto antigo com quebra de linha não entra por hash (a junção seria ambígua)
+    if (it.distractors?.some((d) => ALT_PROIBIDO.test(d)))
+      reasons.push("alternativa gravada com quebra de linha: edite antes");
+    // o banco confere o hash SEM aparar: alternativa antiga com espaço nas pontas não entra
+    if (it.distractors?.some((d) => d !== d.trim()))
+      reasons.push("alternativa gravada com espaço nas pontas: edite antes");
+    const exp = expected[it.word_id];
+    if (!exp)
+      reasons.push(
+        painel ? "sem o hash do que foi exibido" : "fora do manifesto",
+      );
+    else if (
+      !it.distractors ||
+      (await setHash(it.word_id, it.truth, it.distractors)) !== exp
+    )
+      reasons.push(
+        painel
+          ? "mudou depois de exibido (hash): recarregue e confira de novo"
+          : "conteúdo diferente do revisado (hash)",
+      );
     if (it.distractors) {
       const v = validateChoiceSet({
         word: it.word,
@@ -266,17 +299,13 @@ export async function reviewSets(
     else ok.push(it.word_id);
   }
   const missing = ids.length - items.length;
-  const expected = input.expected;
-  let r = { updated: 0, skipped: 0 };
-  if (ok.length && expected) {
-    if (!deps.reviewHashed)
-      throw new Error(
-        "Aprovação por manifesto indisponível (sem hash no banco).",
-      );
-    r = await deps.reviewHashed(
-      Object.fromEntries(ok.map((id) => [id, expected[id]!])),
-    );
-  } else if (ok.length) r = await deps.review(ok, "aprovado");
+  if (ok.length && !deps.reviewHashed)
+    throw new Error("Aprovação indisponível (sem hash no banco).");
+  const r = ok.length
+    ? await deps.reviewHashed!(
+        Object.fromEntries(ok.map((id) => [id, expected[id]!])),
+      )
+    : { updated: 0, skipped: 0 };
   return {
     updated: r.updated,
     skipped: ids.length - r.updated,
