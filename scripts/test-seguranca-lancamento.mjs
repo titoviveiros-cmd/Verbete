@@ -302,10 +302,18 @@ if (!antes) {
     const [s] = await q(`SELECT payload FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_ok`]);
     check("payload do tamanho do client real fica inteiro", s?.payload?.message === "erro real");
 
-    const [{ n: base }] = await q(`SELECT count(*)::int AS n FROM public.ops_events WHERE session_key IS NULL AND at > now() - interval '1 minute'`);
+    // A cota conta só os 4 tipos do client: eventos do servidor sem session_key
+    // (bot_ai_error, stalled_advance…) não entram. Na CI o banco é compartilhado:
+    // compara com o que já existe NA JANELA, e semeia de propósito eventos dos dois
+    // tipos para provar que o teto é da janela, não só das chamadas deste teste.
+    const semSessaoCli = `SELECT count(*)::int AS n FROM public.ops_events WHERE session_key IS NULL AND kind IN ('client_error', 'boundary_crash', 'rpc_failure', 'reconnect') AND at > now() - interval '1 minute'`;
+    await db.query(`INSERT INTO public.ops_events (kind, payload) SELECT 'client_error', '{}'::jsonb FROM generate_series(1, 20)`);
+    await db.query(`INSERT INTO public.ops_events (kind, payload) SELECT 'bot_ai_error', '{}'::jsonb FROM generate_series(1, 25)`);
+    const [{ n: base }] = await q(semSessaoCli);
     for (let i = 0; i < 70; i++) await db.query(`SELECT public.log_ops_event('reconnect', '{}'::jsonb, NULL, NULL, $1)`, [`t${tag}`]);
-    const [{ n: semSessao }] = await q(`SELECT count(*)::int AS n FROM public.ops_events WHERE session_key IS NULL AND at > now() - interval '1 minute'`);
-    check("sem session_key: teto de 60/min (antes: ilimitado)", semSessao === Math.max(60, base), `antes=${base} depois=${semSessao}`);
+    const [{ n: semSessao }] = await q(semSessaoCli);
+    const [{ n: deste }] = await q(`SELECT count(*)::int AS n FROM public.ops_events WHERE build = $1`, [`t${tag}`]);
+    check("sem session_key: teto de 60/min CONTANDO o que já havia na janela", base >= 20 && semSessao === Math.max(60, base) && deste === Math.max(0, 60 - base), `já havia=${base} depois=${semSessao} aceitas=${deste}`);
 
     // trocar a chave a cada chamada não fura o teto global (300/min)
     await db.query(`INSERT INTO public.ops_events (kind, session_key) SELECT 'reconnect', 'ops_${tag}_g' || g FROM generate_series(1, 300) g`);
