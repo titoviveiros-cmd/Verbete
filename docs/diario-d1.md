@@ -25,6 +25,7 @@
 - **Modo ilegível = recusa:** se a leitura de `daily_mode` falhar (fora "função ausente"), o envio do juiz é recusado sem gastar a tentativa.
 - **Forma uniforme:** as 4 alternativas aparecem com maiúscula inicial e sem pontuação final (a correta não se denuncia pela forma).
 - **Telemetria:** `ops_events` `daily_choice_start` / `daily_choice_finish` com `{mode, result, latency_ms}`. Nunca palavra, alternativas, escolha ou jogador.
+- **Aprovação só por hash (R1/R6):** toda aprovação leva o hash v1 (`verbete-d1-v1`, id, definição, 3 alternativas) do que o revisor viu: no painel principal, o que está **na tela** (inclusive uma edição aberta e não salva, que por isso não bate com o gravado); no manifesto, o que foi revisado fora. O servidor confere e explica; o banco recalcula na mesma transação do UPDATE (`daily_choice_admin_review_hashed`, trava a linha, só aprova **rascunho** cujo conteúdo atual tem aquele hash). Não existe aprovação sem hash: `daily_choice_admin_review` (a função antiga) só reprova ou volta a rascunho. Um **reprovado** não é aprovado de uma vez: no painel, "↩ Voltar a rascunho" e depois aprovar.
 - **Segurança:** tabelas `daily_choice_sets` e `daily_choice_sessions` com RLS e sem acesso para `anon`/`authenticated`; todas as funções novas só para `service_role` (o Worker); a revisão confere o papel admin no servidor.
 
 ## 3. Procedimento de ativação (cada passo exige autorização própria)
@@ -73,6 +74,9 @@ SELECT count(*) AS duplicadas FROM (SELECT user_id, challenge_hour FROM public.d
 | `src/lib/__tests__/daily-choice-content.test.ts` | unitário | 19 + gerador |
 | `src/lib/__tests__/daily-choice-admin.test.ts` | unitário | D-e (rascunho, aprovação só humana) |
 | `src/components/__tests__/daily-choice-view.test.tsx` | componente | 1, 2, 3 |
+| `src/lib/__tests__/daily-choice-r6.test.ts` | unitário | R6: sem hash = recusa; hash do exibido; reprovado/aprovado; corrida servidor × banco |
+| `src/components/__tests__/admin-daily-choices-r6.test.tsx` | componente | R6: o painel envia o hash do que está na tela; reprovados só voltam a rascunho |
+| `scripts/test-daily-choice-hash.mjs` | Postgres real (CI) e PGlite (offline) | R1–R4, R6 no banco + corridas (edição, reprovação e 2 aprovações simultâneas) |
 | `e2e/visual/daily-choice.spec.ts` | navegador (Supabase simulado) | 1, 2, 3, pausa, juiz intacto |
 | `scripts/test-daily-choice.mjs` | Postgres real (CI) e PGlite (offline) | 5, 6, 7, 8, 9, 10–16, 18, 21, rollback, Red Team (palavra antes da hora, multiplayer, sorteio imprevisível, hora da resposta) |
 | `scripts/test-security-rest.mjs` | Postgres real (CI) | 5 (allowlist) |

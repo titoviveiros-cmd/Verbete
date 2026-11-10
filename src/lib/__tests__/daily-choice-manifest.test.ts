@@ -9,6 +9,7 @@ import {
   type Manifest,
 } from "../daily-choice-manifest";
 import {
+  SEM_HASH,
   draftsInput,
   reviewInput,
   reviewSets,
@@ -204,16 +205,20 @@ describe("servidor: aprovação por manifesto confere o hash", () => {
       [ID(3), "fora do manifesto"],
     ]);
   });
-  it("sem manifesto, a aprovação segue como antes (sem exigir hash)", async () => {
+  it("R6: sem hash, a aprovação é recusada inteira (não existe mais aprovação sem hash)", async () => {
     const review = vi.fn(async (ids: string[]) => ({
       updated: ids.length,
       skipped: 0,
     }));
-    const r = await reviewSets(
-      { get: async () => [item(1)], review },
-      { wordIds: [ID(1)], status: "aprovado" },
-    );
-    expect(r.updated).toBe(1);
+    const reviewHashed = vi.fn();
+    await expect(
+      reviewSets(
+        { get: async () => [item(1)], review, reviewHashed },
+        { wordIds: [ID(1)], status: "aprovado" },
+      ),
+    ).rejects.toThrow(SEM_HASH);
+    expect(review).not.toHaveBeenCalled();
+    expect(reviewHashed).not.toHaveBeenCalled();
   });
   it("entrada: expected só com uuid → SHA-256 hex", () => {
     expect(() =>

@@ -10,6 +10,7 @@ import {
   reviewSets,
   type AdminItem,
 } from "../daily-choice-admin";
+import { setHash } from "../daily-choice-manifest";
 
 const TRUTH = "Peixe de água doce, comum nos rios da Amazônia";
 const BONS = [
@@ -120,24 +121,42 @@ describe("gerador (no navegador do revisor) → servidor re-valida → só RASCU
 });
 
 describe("aprovação: individual ou lote SELECIONADO, nunca automática", () => {
-  it("aprova só os válidos; explica os pulados", async () => {
+  it("aprova só os válidos (sempre por hash, R6); explica os pulados", async () => {
     const review = vi.fn(async (ids: string[]) => ({
       updated: ids.length,
       skipped: 0,
     }));
+    const reviewHashed = vi.fn(async (e: Record<string, string>) => ({
+      updated: Object.keys(e).length,
+      skipped: 0,
+    }));
+    const it4 = ["Ave pequena", BONS[1]!, BONS[2]!];
+    const expected = {
+      [ID(1)]: await setHash(ID(1), TRUTH, BONS),
+      [ID(2)]: await setHash(ID(2), TRUTH, BONS),
+      [ID(3)]: await setHash(ID(3), TRUTH, BONS),
+      [ID(4)]: await setHash(ID(4), TRUTH, it4),
+    };
     const r = await reviewSets(
       {
         get: async () => [
           item(1),
-          item(2, { truth_changed: true }),
-          item(3, { published: false }),
-          item(4, { distractors: ["Ave pequena", BONS[1]!, BONS[2]!] }),
+          item(2, { word_id: ID(2), truth_changed: true }),
+          item(3, { word_id: ID(3), published: false }),
+          item(4, { word_id: ID(4), distractors: it4 }),
         ],
         review,
+        reviewHashed,
       },
-      { wordIds: [ID(1), ID(2), ID(3), ID(4), ID(1)], status: "aprovado" },
+      {
+        wordIds: [ID(1), ID(2), ID(3), ID(4), ID(1)],
+        status: "aprovado",
+        expected,
+        source: "painel",
+      },
     );
-    expect(review).toHaveBeenCalledWith([ID(1)], "aprovado");
+    expect(review).not.toHaveBeenCalled();
+    expect(reviewHashed).toHaveBeenCalledWith({ [ID(1)]: expected[ID(1)] });
     expect(r.updated).toBe(1);
     expect(r.skipped).toBe(3);
     expect(r.problems.map((p) => p.word_id)).toEqual([ID(2), ID(3), ID(4)]);
