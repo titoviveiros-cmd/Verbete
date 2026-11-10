@@ -36,6 +36,8 @@
 | 2 | Migration `20261108120000_diario_d1_escolha.sql` em produção | `daily_mode = 'juiz'`; md5 de `submit_daily_attempt_scored` = `e41b8c87…`; Diário igual | inerte (aditiva) |
 | 3 | Worker novo **sem tráfego** (`wrangler versions upload`) e smoke na Version URL | Diário no modo juiz igual ao atual; `/admin/daily-choices` abre | não promover |
 | 4 | Promover o Worker para 100% | 7/7 páginas, console limpo | `wrangler rollback` para a versão anterior |
+| 4a | Worker com a **R6** (master 3f01726+, aprovação só por hash) **sem tráfego** → teste → promoção 100% | IDs de server function iguais aos da produção; painel aprova só por hash | `wrangler rollback` para a versão anterior |
+| 4b | Migration **R6b** `20261110180000_d1_r6b_aprovar_so_por_hash.sql` — **só depois do 4a a 100%** | md5(prosrc) de `daily_choice_admin_review` = `17ac325f87ac8a12746b0591327cc884`; `daily_choice_admin_review([...], 'aprovado', …)` → 42501 | `supabase/rollback/d1_r6b_aprovar_so_por_hash.sql` (md5 volta a `220b3183acf63bc3b017fa17c2dfa23c`) + `supabase migration repair --status reverted 20261110180000` |
 | 5 | `/admin/daily-choices` → **Gerar rascunhos** (repetir até cobrir as elegíveis) e **revisar** | contador "aprovados jogáveis" ≥ **168** | reprovar/editar |
 | 6 | **Lançamento:** `daily_mode = 'escolha'` (autorização expressa) e 1 rodada numa conta de teste | `ops_events daily_choice_*` com `result=ok`/`correct`/`wrong`; 0 `judge_ai_*` do Diário | `daily_mode = 'juiz'` |
 | 7 | Observar 24–48 h | 0 tentativas duplicadas; `sem_estoque` = 0; nenhuma reclamação | idem |
@@ -49,7 +51,8 @@ Comando do passo 6 (só com autorização): `DB_URL=... node scripts/set-app-con
 1. `daily_mode = 'juiz'` — volta ao fluxo atual no envio seguinte, sem migration de volta. Uma sessão aberta no modo escolha recebe "modo mudou, recarregue" e **não gasta** a tentativa.
 2. `daily_mode = 'pausa'` — Diário pausado nos dois modos, nada gasto.
 3. Worker anterior (`wrangler rollback`). O Worker D1 sem a migration também funciona (lê `daily_mode` com falha = `'juiz'`).
-4. Remoção total: `supabase/rollback/diario_d1_escolha.sql` (depois do passo 1 e com o Worker anterior). Mantém tentativas, pontos, sequências e conquistas; apaga os conjuntos e as sessões; tira a coluna `mode`.
+4. R6b: `supabase/rollback/d1_r6b_aprovar_so_por_hash.sql` → `supabase migration repair --status reverted 20261110180000`. **Sempre antes** do rollback da R1 (`supabase/rollback/d1_hash_no_banco.sql`): sem a R1 e com a R6b, nada aprova.
+5. Remoção total: `supabase/rollback/diario_d1_escolha.sql` (depois do passo 1 e com o Worker anterior). Mantém tentativas, pontos, sequências e conquistas; apaga os conjuntos e as sessões; tira a coluna `mode`.
 
 ## 5. Observação (consultas só de leitura)
 

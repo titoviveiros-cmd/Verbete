@@ -4,7 +4,10 @@
 -- Nenhum dado, tabela ou outra função é tocado. Permissões: as mesmas (reafirmadas).
 -- O Worker do R6 continua funcionando igual (nunca manda "aprovado" para esta função).
 -- ORDEM: este rollback vem ANTES do da R1 (d1_hash_no_banco.sql). Ele não apaga a linha da
--- R6b em supabase_migrations.schema_migrations (padrão do repo: registrar à parte).
+-- R6b em supabase_migrations.schema_migrations: depois dele, rodar
+--   supabase migration repair --status reverted 20261110180000
+-- (senão um db push futuro não reaplica a R6b e a aprovação sem hash fica reaberta).
+-- Conferência: md5(prosrc) de daily_choice_admin_review volta a 220b3183acf63bc3b017fa17c2dfa23c.
 CREATE OR REPLACE FUNCTION public.daily_choice_admin_review(p_word_ids uuid[], p_status text, p_reviewer uuid)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
