@@ -173,7 +173,7 @@ describe("aprovação: individual ou lote SELECIONADO, nunca automática", () =>
 
 describe("edição", () => {
   it("valida contra a definição ATUAL e grava o resultado", async () => {
-    const edit = vi.fn(async () => 1);
+    const edit = vi.fn(async () => ({ updated: 1 }));
     const r = await editSet(
       { get: async () => [item(1)], edit },
       { wordId: ID(1), distractors: [" Ave pequena ", BONS[1]!, BONS[2]!] },
@@ -183,6 +183,8 @@ describe("edição", () => {
       ID(1),
       ["Ave pequena", BONS[1]!, BONS[2]!],
       r.validacao,
+      // sem pedido explícito: o banco recusa se estiver aprovado ou reprovado
+      { approved: false, rejected: false },
     );
   });
   it("exige exatamente 3 textos", () => {

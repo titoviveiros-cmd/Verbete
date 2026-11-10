@@ -176,8 +176,9 @@ describe("servidor: importação confere o hash", () => {
 
 describe("servidor: aprovação por manifesto confere o hash", () => {
   it("aprova só os idênticos; recusa conteúdo diferente e ids fora do manifesto", async () => {
-    const review = vi.fn(async (ids: string[]) => ({
-      updated: ids.length,
+    const review = vi.fn();
+    const reviewHashed = vi.fn(async (e: Record<string, string>) => ({
+      updated: Object.keys(e).length,
       skipped: 0,
     }));
     const h1 = await setHash(ID(1), TRUTH, BONS);
@@ -186,6 +187,7 @@ describe("servidor: aprovação por manifesto confere o hash", () => {
       {
         get: async () => [item(1), item(2, { distractors: OUTRAS }), item(3)],
         review,
+        reviewHashed,
       },
       {
         wordIds: [ID(1), ID(2), ID(3)],
@@ -193,7 +195,9 @@ describe("servidor: aprovação por manifesto confere o hash", () => {
         expected: { [ID(1)]: h1, [ID(2)]: h2 },
       },
     );
-    expect(review).toHaveBeenCalledWith([ID(1)], "aprovado");
+    // R1: só os que passaram aqui, com o hash revisado, para o banco conferir de novo
+    expect(reviewHashed).toHaveBeenCalledWith({ [ID(1)]: h1 });
+    expect(review).not.toHaveBeenCalled();
     expect(r.updated).toBe(1);
     expect(r.problems.map((p) => [p.word_id, p.reasons[0]])).toEqual([
       [ID(2), "conteúdo diferente do revisado (hash)"],

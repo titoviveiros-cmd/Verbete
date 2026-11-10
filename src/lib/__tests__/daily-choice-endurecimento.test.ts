@@ -132,7 +132,7 @@ describe("aprovação por manifesto: conjunto antigo com espaço nas pontas", ()
 
 describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem ele)", () => {
   it("sem allowApproved: nada é gravado e a resposta diz o motivo", async () => {
-    const edit = vi.fn(async () => 1);
+    const edit = vi.fn(async () => ({ updated: 1 }));
     const r = await editSet(
       { get: async () => [item(1, { status: "aprovado" })], edit },
       { wordId: ID(1), distractors: [...BONS] },
@@ -141,7 +141,7 @@ describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem 
     expect(edit).not.toHaveBeenCalled();
   });
   it("com allowApproved (editor do painel principal): grava e volta a rascunho", async () => {
-    const edit = vi.fn(async () => 1);
+    const edit = vi.fn(async () => ({ updated: 1 }));
     const r = await editSet(
       { get: async () => [item(1, { status: "aprovado" })], edit },
       { wordId: ID(1), distractors: [...BONS], allowApproved: true },
@@ -151,7 +151,7 @@ describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem 
     expect(edit).toHaveBeenCalledTimes(1);
   });
   it("rascunho continua editável sem pedido extra", async () => {
-    const edit = vi.fn(async () => 1);
+    const edit = vi.fn(async () => ({ updated: 1 }));
     const r = await editSet(
       { get: async () => [item(1)], edit },
       { wordId: ID(1), distractors: [...BONS] },
@@ -159,7 +159,7 @@ describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem 
     expect(r.updated).toBe(1);
   });
   it("R4 por tabela: REPROVADO só é editado com allowRejected (senão voltaria ao lote de aprovação)", async () => {
-    const edit = vi.fn(async () => 1);
+    const edit = vi.fn(async () => ({ updated: 1 }));
     const sem = await editSet(
       { get: async () => [item(1, { status: "reprovado" })], edit },
       { wordId: ID(1), distractors: [...BONS] },
@@ -183,10 +183,88 @@ describe("R3: editar um APROVADO exige pedido explícito (o servidor recusa sem 
   });
 });
 
+describe("R1/R3 ligados ao banco (as funções da migration 20261110120000)", () => {
+  it("R1: manifesto nunca cai na aprovação sem hash; sem reviewHashed, falha", async () => {
+    const review = vi.fn(async () => ({ updated: 1, skipped: 0 }));
+    await expect(
+      reviewSets(
+        { get: async () => [item(1)], review },
+        {
+          wordIds: [ID(1)],
+          status: "aprovado",
+          expected: { [ID(1)]: await setHash(ID(1), TRUTH, BONS) },
+        },
+      ),
+    ).rejects.toThrow(/sem hash no banco/);
+    expect(review).not.toHaveBeenCalled();
+  });
+  it("R1: o resultado é o que o BANCO aprovou (ele pode recusar o que passou aqui)", async () => {
+    const h = await setHash(ID(1), TRUTH, BONS);
+    const r = await reviewSets(
+      {
+        get: async () => [item(1)],
+        review: vi.fn(),
+        reviewHashed: async () => ({ updated: 0, skipped: 1 }),
+      },
+      { wordIds: [ID(1)], status: "aprovado", expected: { [ID(1)]: h } },
+    );
+    expect(r.updated).toBe(0);
+    expect(r.skipped).toBe(1);
+  });
+  it("R3: aprovado no meio do caminho → o banco recusa e a resposta diz o motivo", async () => {
+    // aqui o conjunto ainda era rascunho; no banco, com a linha travada, já estava aprovado
+    const edit = vi.fn(async () => ({
+      updated: 0,
+      blocked: "aprovado" as const,
+    }));
+    const r = await editSet(
+      { get: async () => [item(1)], edit },
+      { wordId: ID(1), distractors: [...BONS] },
+    );
+    expect(r).toEqual({ updated: 0, validacao: null, blocked: "aprovado" });
+    expect(edit).toHaveBeenCalledWith(ID(1), BONS, expect.anything(), {
+      approved: false,
+      rejected: false,
+    });
+  });
+  it("R4: reprovado no meio do caminho → o banco recusa; o pedido explícito chega ao banco", async () => {
+    const edit = vi.fn(async () => ({
+      updated: 0,
+      blocked: "reprovado" as const,
+    }));
+    const r = await editSet(
+      { get: async () => [item(1)], edit },
+      { wordId: ID(1), distractors: [...BONS] },
+    );
+    expect(r).toEqual({ updated: 0, validacao: null, blocked: "reprovado" });
+    const ok = vi.fn(async () => ({ updated: 1 }));
+    await editSet(
+      { get: async () => [item(1, { status: "reprovado" })], edit: ok },
+      { wordId: ID(1), distractors: [...BONS], allowRejected: true },
+    );
+    expect(ok).toHaveBeenCalledWith(ID(1), BONS, expect.anything(), {
+      approved: false,
+      rejected: true,
+    });
+  });
+  it("R3: o pedido explícito do painel principal chega ao banco", async () => {
+    const edit = vi.fn(async () => ({ updated: 1 }));
+    await editSet(
+      { get: async () => [item(1, { status: "aprovado" })], edit },
+      { wordId: ID(1), distractors: [...BONS], allowApproved: true },
+    );
+    expect(edit).toHaveBeenCalledWith(ID(1), BONS, expect.anything(), {
+      approved: true,
+      rejected: false,
+    });
+  });
+});
+
 describe("R4: aprovar por manifesto não desfaz uma reprovação", () => {
   it("com manifesto: REPROVADO idêntico é pulado com o motivo", async () => {
-    const review = vi.fn(async (ids: string[]) => ({
-      updated: ids.length,
+    const review = vi.fn();
+    const reviewHashed = vi.fn(async (e: Record<string, string>) => ({
+      updated: Object.keys(e).length,
       skipped: 0,
     }));
     const h = await setHash(ID(1), TRUTH, BONS);
@@ -195,6 +273,7 @@ describe("R4: aprovar por manifesto não desfaz uma reprovação", () => {
       {
         get: async () => [item(1, { status: "reprovado" }), item(2)],
         review,
+        reviewHashed,
       },
       {
         wordIds: [ID(1), ID(2)],
@@ -202,7 +281,8 @@ describe("R4: aprovar por manifesto não desfaz uma reprovação", () => {
         expected: { [ID(1)]: h, [ID(2)]: h2 },
       },
     );
-    expect(review).toHaveBeenCalledWith([ID(2)], "aprovado");
+    expect(reviewHashed).toHaveBeenCalledWith({ [ID(2)]: h2 });
+    expect(review).not.toHaveBeenCalled();
     expect(r.problems).toEqual([
       {
         word_id: ID(1),
