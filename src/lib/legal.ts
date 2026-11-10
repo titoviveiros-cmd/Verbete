@@ -134,11 +134,28 @@ export function pendingNoAiLegal(
 ): string[] {
   if (mode !== "desligada") return [];
   const out: string[] = [];
-  const name = values.developerName.trim();
-  if (name.length < 3 || name.includes(LEGAL_PENDING_MARK))
+  if (!isPlausibleLegalName(values.developerName))
     out.push("DEVELOPER_LEGAL_NAME");
-  if (!isIsoDate(values.termsVersion)) out.push("NO_AI_TERMS_VERSION");
+  // Data válida, DIFERENTE e POSTERIOR à dos Termos com IA: texto novo sem
+  // versão nova = mudança sem novo aceite.
+  if (
+    !isIsoDate(values.termsVersion) ||
+    values.termsVersion <= AI_TERMS_VERSION
+  )
+    out.push("NO_AI_TERMS_VERSION");
   return out;
+}
+
+/**
+ * Nome legal plausível: ≥ 3 caracteres com letra, sem "<"/">" e sem sobra de
+ * marcador ("PENDENTE", "confirmar", "TODO", sem diferenciar maiúsculas).
+ * Apagar só o "<" do marcador NÃO passa.
+ */
+export function isPlausibleLegalName(raw: string): boolean {
+  const name = raw.trim();
+  if (name.length < 3 || !/\p{L}/u.test(name)) return false;
+  if (/[<>]/.test(name)) return false;
+  return !/pendente|confirmar|\btodo\b/i.test(name);
 }
 
 function isIsoDate(v: string): boolean {

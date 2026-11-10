@@ -198,9 +198,8 @@ function PrivacyPage() {
             <p>
               O Verbete não usa serviços externos de inteligência artificial: as
               definições, os palpites e os outros textos que você escreve não
-              são enviados a nenhum provedor de IA. As definições dos bots vêm
-              de textos prontos do jogo, e as opções do Desafio Diário, das
-              definições do próprio acervo de palavras.
+              são enviados a nenhum provedor de IA. As definições dos bots e as
+              opções do Desafio Diário vêm de textos prontos do próprio jogo.
             </p>
             <p className="mt-2">
               Antes dessa mudança, quando os recursos de inteligência artificial

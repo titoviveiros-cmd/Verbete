@@ -192,6 +192,12 @@ describe("modo 'desligada': textos legais e de jogo", () => {
     expect(p).not.toMatch(/plano gratuito/);
     // o que foi enviado ANTES da mudança continua explicado
     expect(p).toMatch(/Antes dessa mudança/);
+    // Red Team do PR #63 (P2): nada de prometer a origem "acervo" (há
+    // alternativas sem fonte no acervo)
+    expect(p).not.toMatch(/acervo/);
+    expect(p).toMatch(
+      /As definições dos bots e as opções do Desafio Diário vêm de textos prontos do próprio jogo/,
+    );
     // fatos que não dependem da IA continuam
     for (const keep of [
       "Supabase:",
@@ -215,12 +221,21 @@ describe("modo 'desligada': textos legais e de jogo", () => {
     expect(s).toMatch(/De 4 a 12/);
   });
 
-  it("Excluir conta: sem 'contagem de avaliações', prazo de 3 dias mantido", async () => {
+  it("Excluir conta: resíduos do antigo modo de escrita expiram em 3 dias; os da múltipla escolha saem com a conta", async () => {
     await withMode("desligada");
     const d = flat(await page("deleteAccount"));
-    expect(d).not.toMatch(/contagem de avaliações/);
-    expect(d).toMatch(/limite de uso do Desafio Diário/);
+    expect(d).toMatch(/antigo modo de escrita do Desafio Diário/);
+    expect(d).toMatch(/limite de uso/);
     expect(d).toMatch(/expiram sozinhos em 3 dias/);
+    // daily_choice_sessions: FK ON DELETE CASCADE (migration D1)
+    expect(d).toMatch(/múltipla escolha saem junto com a conta/);
+    const m = readFileSync(
+      resolve(ROOT, "supabase/migrations/20261108120000_diario_d1_escolha.sql"),
+      "utf8",
+    );
+    expect(m).toMatch(
+      /daily_choice_sessions \(\s*user_id\s+uuid\s+NOT NULL REFERENCES auth\.users\(id\) ON DELETE CASCADE/,
+    );
   });
 
   // (com a IA ligada, o texto de sempre: copy-sem-ia.test.tsx)
@@ -259,6 +274,70 @@ describe("trava do nome legal e da data (build de produção)", () => {
       }),
     ).toEqual(["DEVELOPER_LEGAL_NAME", "NO_AI_TERMS_VERSION"]);
     expect(pendingNoAiLegal("ligada")).toEqual([]);
+  });
+
+  // Red Team do PR #63 (P2): estes nomes PASSAVAM na 1ª versão da trava
+  // (só "<PENDENTE" e < 3 caracteres eram recusados).
+  it.each([
+    "PENDENTE: confirmar com o dono>",
+    "pendente",
+    "Fulano (Pendente)",
+    "<a confirmar>",
+    "Confirmar com o dono",
+    "TODO",
+    "Nome todo: definir",
+    "Fulano <x>",
+    "Fulano > Beltrano",
+    "123",
+    "   \t ",
+    "ab",
+  ])("nome implausível reprova: %j", async (name) => {
+    const { pendingNoAiLegal, isPlausibleLegalName } =
+      await import("@/lib/legal");
+    expect(isPlausibleLegalName(name)).toBe(false);
+    expect(
+      pendingNoAiLegal("desligada", {
+        developerName: name,
+        termsVersion: "2026-11-24",
+      }),
+    ).toEqual(["DEVELOPER_LEGAL_NAME"]);
+  });
+
+  it.each(["Fulano de Tal", "Ana Lú", "Tito Viveiros ME", "J. P. Souza"])(
+    "nome plausível passa: %j",
+    async (name) => {
+      const { isPlausibleLegalName } = await import("@/lib/legal");
+      expect(isPlausibleLegalName(name)).toBe(true);
+    },
+  );
+
+  // Red Team do PR #63 (P2): datas válidas iguais/anteriores aos Termos com
+  // IA PASSAVAM — texto novo sem versão nova = mudança sem novo aceite.
+  it.each(["2026-10-27", "2026-10-26", "2026-05-18", "2025-12-31"])(
+    "data dos Termos sem IA igual ou anterior a 2026-10-27 reprova: %s",
+    async (termsVersion) => {
+      const { pendingNoAiLegal, AI_TERMS_VERSION } =
+        await import("@/lib/legal");
+      expect(termsVersion <= AI_TERMS_VERSION).toBe(true);
+      expect(
+        pendingNoAiLegal("desligada", {
+          developerName: "Fulano de Tal",
+          termsVersion,
+        }),
+      ).toEqual(["NO_AI_TERMS_VERSION"]);
+    },
+  );
+
+  it("data posterior e válida passa; formato inválido reprova", async () => {
+    const { pendingNoAiLegal } = await import("@/lib/legal");
+    const ok = (termsVersion: string) =>
+      pendingNoAiLegal("desligada", {
+        developerName: "Fulano de Tal",
+        termsVersion,
+      });
+    expect(ok("2026-10-28")).toEqual([]);
+    for (const bad of ["2026-11-31", "24/11/2026", "2026-1-5", ""])
+      expect(ok(bad), bad).toEqual(["NO_AI_TERMS_VERSION"]);
   });
 
   it("vite.config: build de produção FALHA com pendência e passa sem ela", async () => {
