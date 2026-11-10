@@ -118,3 +118,10 @@ export function montarManifesto(
   };
   fora: Array<{ palavra: string; motivo: string }>;
 }>;
+export const LOTE_RE: RegExp;
+export function loteValido(lote: unknown): string;
+export function gravarManifesto(
+  saida: string,
+  lote: string | number,
+  manifesto: { itens: unknown[] },
+): { arquivo: string; gravado: boolean; apagouAntigo: boolean };

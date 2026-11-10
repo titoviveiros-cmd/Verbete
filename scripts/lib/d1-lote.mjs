@@ -31,6 +31,8 @@ import {
   setHash,
 } from "../../src/lib/daily-choice-manifest.ts";
 import { definitionIssue, revealsWord } from "../../src/lib/text-filter.ts";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 export { SET_HASH_VERSION, setHash };
 
@@ -820,7 +822,9 @@ export function resumir(cs) {
 // CSV (separador ";" + BOM: abre direto no Excel em português)
 // ---------------------------------------------------------------------------
 export function csvCampo(v) {
-  const s = v == null ? "" : String(v);
+  const bruto = v == null ? "" : String(v);
+  // célula que começa com = + - @ (ou tab/CR) vira fórmula no Excel: prefixo ' neutraliza
+  const s = /^[=+\-@\t\r]/.test(bruto) ? `'${bruto}` : bruto;
   return /[";\r\n]/.test(s) || /^\s|\s$/.test(s)
     ? `"${s.replace(/"/g, '""')}"`
     : s;
@@ -1065,4 +1069,29 @@ export async function montarManifesto(relatorio, decisoes, lote) {
       throw new Error(`manifesto inválido: ${r.error.issues[0]?.message}`);
   }
   return { manifesto, fora };
+}
+
+/** Lotes válidos (o número vira nome de arquivo): 1 a 7 ou R (reservas). */
+export const LOTE_RE = /^(?:[1-7]|R)$/;
+export function loteValido(lote) {
+  const l = String(lote ?? "");
+  if (!LOTE_RE.test(l))
+    throw new Error(`lote inválido: "${l}" (use 1 a 7 ou R)`);
+  return l;
+}
+
+/**
+ * Grava manifesto-lote-<lote>.json. Sem nenhum item aprovado, NÃO deixa um manifesto
+ * antigo do mesmo lote na pasta (ele ainda passaria no painel, porque o hash bate):
+ * apaga e avisa.
+ */
+export function gravarManifesto(saida, lote, manifesto) {
+  const arquivo = join(saida, `manifesto-lote-${loteValido(lote)}.json`);
+  if (manifesto.itens.length) {
+    writeFileSync(arquivo, JSON.stringify(manifesto));
+    return { arquivo, gravado: true, apagouAntigo: false };
+  }
+  const antigo = existsSync(arquivo);
+  if (antigo) rmSync(arquivo);
+  return { arquivo, gravado: false, apagouAntigo: antigo };
 }

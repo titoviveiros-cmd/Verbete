@@ -3,6 +3,9 @@
 import { describe, expect, it } from "vitest";
 import {
   conferirLote,
+  csvCampo,
+  gravarManifesto,
+  loteValido,
   formatoTela,
   grafiaAntiga,
   lerAcervo,
@@ -21,6 +24,9 @@ import {
 } from "../../../scripts/lib/d1-lote.mjs";
 import { parseManifest, setHash } from "../daily-choice-manifest";
 import { validateChoiceSet } from "../daily-choice-content";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -392,5 +398,60 @@ describe("D1 lote — decisões → manifesto (nada é aprovado aqui)", () => {
     expect(fora.some((f) => /repetida/.test(f.motivo))).toBe(true);
     const nada = await montarManifesto(rel, lerDecisoes(json), "2");
     expect(nada.manifesto.itens).toEqual([]);
+  });
+});
+
+describe("D1 lote — ressalvas do Red Team do PR #61", () => {
+  it("lote 1 aprovado e depois rejeitado: o manifesto ANTIGO é apagado (o painel o aceitaria)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "d1-lote-"));
+    try {
+      const rel = await conferirLote([limpo()], { acervo: ACERVO });
+      const c0 = rel.conjuntos[0]!;
+      const dec = (decisao: string) =>
+        lerDecisoes(
+          JSON.stringify({
+            itens: [{ word_id: c0.word_id, decisao, hash: c0.hash }],
+          }),
+        );
+      const m1 = await montarManifesto(rel, dec("aprovar"), "1");
+      const g1 = gravarManifesto(dir, "1", m1.manifesto);
+      expect(g1.gravado).toBe(true);
+      expect(JSON.parse(readFileSync(g1.arquivo, "utf8")).itens).toHaveLength(
+        1,
+      );
+      const m2 = await montarManifesto(rel, dec("rejeitar"), "1");
+      expect(m2.manifesto.itens).toEqual([]);
+      const g2 = gravarManifesto(dir, "1", m2.manifesto);
+      expect(g2).toEqual({
+        arquivo: g1.arquivo,
+        gravado: false,
+        apagouAntigo: true,
+      });
+      expect(existsSync(g1.arquivo)).toBe(false);
+      // sem arquivo antigo: nada a apagar
+      expect(gravarManifesto(dir, "1", m2.manifesto).apagouAntigo).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("lote só 1–7 ou R (vira nome de arquivo)", () => {
+    for (const ok of ["1", "7", "R", 3])
+      expect(loteValido(ok)).toBe(String(ok));
+    for (const ruim of ["0", "8", "r", "../x", "1/../../a", "", "1 "])
+      expect(() => loteValido(ruim)).toThrow(/lote inválido/);
+    expect(() => gravarManifesto(tmpdir(), "../x", { itens: [] })).toThrow(
+      /lote inválido/,
+    );
+  });
+
+  it("planilha: célula que começa com = + - @ não vira fórmula no Excel", () => {
+    expect(csvCampo("=HYPERLINK(1)")).toBe("'=HYPERLINK(1)");
+    expect(csvCampo("+1")).toBe("'+1");
+    expect(csvCampo("-x")).toBe("'-x");
+    expect(csvCampo("@soma")).toBe("'@soma");
+    expect(csvCampo("=a;b")).toBe('"\'=a;b"');
+    expect(csvCampo("livro antigo")).toBe("livro antigo");
+    expect(csvCampo(3)).toBe("3");
   });
 });

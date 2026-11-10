@@ -24,7 +24,9 @@ import {
   lerConjuntos,
   lerDecisoes,
   lerExtras,
+  gravarManifesto,
   linhasRevisao,
+  loteValido,
   montarManifesto,
   paraCsv,
 } from "./lib/d1-lote.mjs";
@@ -124,7 +126,7 @@ if (cmd === "conferir") {
       ]),
     ),
   );
-  const lotes = [...new Set(rel.conjuntos.map((c) => c.lote))];
+  const lotes = [...new Set(rel.conjuntos.map((c) => c.lote))].map(loteValido);
   for (const l of lotes)
     writeFileSync(
       join(saida, `REVISAO-LOTE-${l}.csv`),
@@ -146,17 +148,20 @@ if (cmd === "conferir") {
 } else if (cmd === "manifesto") {
   const rel = lerJson(um("relatorio"));
   const dec = lerDecisoes(readFileSync(resolve(um("decisoes")), "utf8"));
-  const lote = um("lote");
+  const lote = loteValido(um("lote"));
   const saida = resolve(um("saida"));
   mkdirSync(saida, { recursive: true });
   const { manifesto, fora } = await montarManifesto(rel, dec, lote);
-  const arq = join(saida, `manifesto-lote-${lote}.json`);
-  if (manifesto.itens.length) writeFileSync(arq, JSON.stringify(manifesto));
+  const g = gravarManifesto(saida, lote, manifesto);
   console.log(
-    manifesto.itens.length
-      ? `${arq}: ${manifesto.itens.length} para importar/aprovar no painel`
+    g.gravado
+      ? `${g.arquivo}: ${manifesto.itens.length} para importar/aprovar no painel`
       : "nenhum conjunto aprovado com hash conferido: manifesto NÃO gerado",
   );
+  if (g.apagouAntigo)
+    console.log(
+      `⚠ manifesto ANTIGO deste lote APAGADO (${g.arquivo}): não use cópias dele no painel`,
+    );
   console.log(`fora do manifesto: ${fora.length}`);
   for (const f of fora) console.log(`  - ${f.palavra}: ${f.motivo}`);
 } else {
