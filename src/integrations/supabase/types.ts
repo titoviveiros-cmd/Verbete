@@ -1367,6 +1367,16 @@ export type Database = {
         Args: { p_distractors: string[]; p_validacao: Json; p_word_id: string };
         Returns: Json;
       };
+      daily_choice_admin_edit_guarded: {
+        Args: {
+          p_allow_approved: boolean;
+          p_allow_rejected: boolean;
+          p_distractors: string[];
+          p_validacao: Json;
+          p_word_id: string;
+        };
+        Returns: Json;
+      };
       daily_choice_admin_get: { Args: { p_word_ids: string[] }; Returns: Json };
       daily_choice_admin_list: {
         Args: { p_limit?: number; p_offset?: number; p_status?: string };
@@ -1376,6 +1386,14 @@ export type Database = {
       daily_choice_admin_review: {
         Args: { p_reviewer: string; p_status: string; p_word_ids: string[] };
         Returns: Json;
+      };
+      daily_choice_admin_review_hashed: {
+        Args: { p_expected: Json; p_reviewer: string };
+        Returns: Json;
+      };
+      daily_choice_alt_ok: {
+        Args: { p_distractors: string[] };
+        Returns: boolean;
       };
       daily_choice_cleanup: {
         Args: Record<PropertyKey, never>;
@@ -1389,6 +1407,10 @@ export type Database = {
       daily_choice_new_perm: {
         Args: Record<PropertyKey, never>;
         Returns: number[];
+      };
+      daily_choice_set_hash: {
+        Args: { p_distractors: string[]; p_truth: string; p_word_id: string };
+        Returns: string;
       };
       daily_choice_start: { Args: { p_user_id: string }; Returns: Json };
       daily_claim: {
