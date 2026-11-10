@@ -1,5 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AI_PROVIDER, CONTACT_EMAIL } from "@/lib/legal";
+import {
+  AI_PROVIDER,
+  CONTACT_EMAIL,
+  NO_AI_LEGAL,
+  formatLegalDate,
+} from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 // A data de "Última atualização" É a versão aceita (TERMS_VERSION em
@@ -8,6 +13,10 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 // Sem prazo de retenção no texto: a licença vale enquanto o conteúdo
 // estiver guardado (prazos na Política; mudar só a Política não muda
 // TERMS_VERSION).
+// Modo sem IA externa (NO_AI_LEGAL != null; docs/sem-ia-externa.md): §5 sem
+// IA, licença sem "processar pela IA", nome legal do desenvolvedor e a data
+// NO_AI_TERMS_VERSION (= TERMS_VERSION nesse modo: UM novo aceite). A data
+// literal abaixo continua sendo a dos Termos com IA (2026-10-27).
 export const Route = createFileRoute("/terms")({
   head: () => ({
     meta: [
@@ -26,6 +35,7 @@ export const Route = createFileRoute("/terms")({
 });
 
 function TermsPage() {
+  const noAi = NO_AI_LEGAL;
   return (
     <div className="mobile-shell">
       <header className="mb-4">
@@ -37,11 +47,21 @@ function TermsPage() {
         </Link>
         <h1 className="font-display text-3xl mt-2">Termos de Uso</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Última atualização: 27 de outubro de 2026
+          {noAi
+            ? `Última atualização: ${formatLegalDate(noAi.termsVersion)}`
+            : "Última atualização: 27 de outubro de 2026"}
         </p>
       </header>
 
       <article className="flex flex-col gap-4 pb-8 text-sm leading-relaxed text-foreground/90">
+        {noAi ? (
+          <p>
+            Estes Termos valem entre você e{" "}
+            <strong>{noAi.developerName}</strong>, que desenvolve e mantém o
+            Verbete.
+          </p>
+        ) : null}
+
         <section>
           <h2 className="font-display text-lg mb-1">1. Aceitação</h2>
           <p>
@@ -126,30 +146,49 @@ function TermsPage() {
           </p>
         </section>
 
-        <section>
-          <h2 className="font-display text-lg mb-1">
-            5. Inteligência artificial
-          </h2>
-          <p>
-            As definições dos bots são criadas por inteligência artificial (
-            {AI_PROVIDER.name}), que também avalia a semelhança entre as
-            definições e a verdadeira (bônus 🧠) e os palpites do Desafio
-            Diário. Para isso, as definições e os palpites que você escreve são
-            enviados ao {AI_PROVIDER.shortName}, sem seu nome, e-mail ou
-            identificadores. A IA pode errar, e o conteúdo gerado por ela também
-            pode ser denunciado. Não escreva dados pessoais nas definições e nos
-            palpites.
-          </p>
-        </section>
+        {noAi ? (
+          <section>
+            <h2 className="font-display text-lg mb-1">
+              5. Sem inteligência artificial externa
+            </h2>
+            <p>
+              O Verbete não usa serviços externos de inteligência artificial: as
+              definições e os palpites que você escreve não são enviados a
+              nenhum provedor de IA. As definições dos bots e as opções do
+              Desafio Diário são escolhidas pelo próprio jogo, a partir de
+              textos prontos, e também podem ser denunciadas pela bandeira 🚩.
+              Não escreva dados pessoais nas definições e nos palpites.
+            </p>
+          </section>
+        ) : (
+          <section>
+            <h2 className="font-display text-lg mb-1">
+              5. Inteligência artificial
+            </h2>
+            <p>
+              As definições dos bots são criadas por inteligência artificial (
+              {AI_PROVIDER.name}), que também avalia a semelhança entre as
+              definições e a verdadeira (bônus 🧠) e os palpites do Desafio
+              Diário. Para isso, as definições e os palpites que você escreve
+              são enviados ao {AI_PROVIDER.shortName}, sem seu nome, e-mail ou
+              identificadores. A IA pode errar, e o conteúdo gerado por ela
+              também pode ser denunciado. Não escreva dados pessoais nas
+              definições e nos palpites.
+            </p>
+          </section>
+        )}
 
         <section>
           <h2 className="font-display text-lg mb-1">6. Seu conteúdo</h2>
           <p>
             Você mantém os direitos do que escreve. Ao enviar conteúdo, você
             concede ao Verbete licença gratuita e não exclusiva para guardá-lo,
-            exibi-lo aos jogadores da sala, processá-lo — inclusive pela
-            inteligência artificial, como descrito acima — e usá-lo na moderação
-            e no funcionamento do jogo, enquanto ele estiver guardado (veja a{" "}
+            exibi-lo aos jogadores da sala, processá-lo
+            {noAi
+              ? " "
+              : " — inclusive pela inteligência artificial, como descrito acima — "}
+            e usá-lo na moderação e no funcionamento do jogo, enquanto ele
+            estiver guardado (veja a{" "}
             <Link to="/privacy" className="underline">
               Política de Privacidade
             </Link>

@@ -11,6 +11,7 @@
 // Nada aqui registra log nem devolve o VALOR de uma variável: só nomes.
 
 import { GEMINI_CHAT_URL, GEMINI_MODEL, type ChatTarget } from "./ai.ts";
+import { EXTERNAL_AI_MODE, type ExternalAiMode } from "./external-ai.ts";
 
 export const AI_PROVIDER_ENV = "AI_PROVIDER";
 export const AI_MODEL_ENV = "AI_MODEL";
@@ -139,8 +140,16 @@ function isProviderId(v: string): v is AiProviderId {
  * provedor só por variável de ambiente, sem o texto acompanhar, não chama a IA.
  * Trocar = incluir o id aqui + AI_PROVIDER/TERMS_VERSION em legal.ts + deploy
  * (legal-pages.test.ts amarra os dois). docs/provedor-ia.md.
+ * Com EXTERNAL_AI_MODE = "desligada" (external-ai.ts) a lista fica VAZIA:
+ * IA suspensa por CÓDIGO, com ou sem chave e com ou sem ai_mode.
  */
-export const AI_PROVIDERS_DISCLOSED: readonly AiProviderId[] = ["gemini"];
+export function disclosedProvidersFor(
+  mode: ExternalAiMode,
+): readonly AiProviderId[] {
+  return mode === "desligada" ? [] : ["gemini"];
+}
+export const AI_PROVIDERS_DISCLOSED: readonly AiProviderId[] =
+  disclosedProvidersFor(EXTERNAL_AI_MODE);
 
 /**
  * Perfil ativo a partir do ambiente, com a trava do texto legal. Nunca lança

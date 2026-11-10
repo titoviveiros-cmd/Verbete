@@ -19,6 +19,7 @@ import {
   readAndroidVersion,
   resolveReleaseChannel,
 } from "./build/native-env";
+import { assertNoAiLegalReady } from "./build/legal-guard";
 import { assertWebEnv } from "./build/web-env";
 
 export default defineConfig(({ mode, command }) => {
@@ -54,6 +55,11 @@ export default defineConfig(({ mode, command }) => {
   // (`vite build --mode development`) ficam de fora.
   if (command === "build" && !isCapacitor && mode !== "development") {
     assertWebEnv(loadEnv(mode, process.cwd(), "VITE_"));
+  }
+  // Modo sem IA externa: nome legal do desenvolvedor e data dos Termos não
+  // podem estar pendentes em NENHUM build de produção (web ou nativo/AAB).
+  if (command === "build" && mode !== "development") {
+    assertNoAiLegalReady();
   }
   // Rodapé de versão da Home (src/lib/version-label.ts): versionName sempre
   // do build.gradle (sem override: nunca diverge do APK) e o canal decidido

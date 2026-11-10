@@ -4,6 +4,7 @@ import {
   ANDROID_PACKAGE,
   CONTACT_EMAIL,
   DELETE_ACCOUNT_PATH,
+  NO_AI_LEGAL,
   contactMailto,
 } from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
@@ -150,11 +151,12 @@ function DeleteAccountPage() {
             <li>
               <strong>Registros técnicos:</strong> eventos de erro e de saúde do
               jogo, sem nome, e-mail ou IP, apagados automaticamente após 30
-              dias; os registros de limite de uso do Desafio Diário (hora das
-              tentativas e contagem de avaliações, ligados ao código interno da
-              sessão ou da conta), que não são apagados na hora mas expiram
-              sozinhos em 3 dias; e os registros dos provedores de
-              infraestrutura (Supabase e Cloudflare), pelos prazos de cada um.
+              dias;{" "}
+              {NO_AI_LEGAL
+                ? "os registros de limite de uso do Desafio Diário que ainda existirem (ligados ao código interno da sessão ou da conta), que expiram sozinhos em 3 dias;"
+                : "os registros de limite de uso do Desafio Diário (hora das tentativas e contagem de avaliações, ligados ao código interno da sessão ou da conta), que não são apagados na hora mas expiram sozinhos em 3 dias;"}{" "}
+              e os registros dos provedores de infraestrutura (Supabase e
+              Cloudflare), pelos prazos de cada um.
             </li>
           </ul>
           <p className="mt-2">

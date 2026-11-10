@@ -61,3 +61,110 @@ export const AI_PROVIDER: AiProvider = {
 
 /** Identificador do app Android na Play (capacitor.config.ts → appId). */
 export const ANDROID_PACKAGE = "app.verbete.game";
+
+// ---------------------------------------------------------------------------
+// Modo "sem IA externa" (13+, 10/11/2026) — docs/sem-ia-externa.md.
+// O interruptor é EXTERNAL_AI_MODE (supabase/functions/_shared/external-ai.ts),
+// uma constante de código: hoje "ligada" = páginas exatamente como antes.
+// Com "desligada", as páginas trocam a IA por "o jogo não usa serviços
+// externos de inteligência artificial", passam a citar o nome legal do
+// desenvolvedor e os Termos ganham a versão NO_AI_TERMS_VERSION (UM novo
+// aceite, nome + sem IA juntos).
+// ---------------------------------------------------------------------------
+
+import {
+  EXTERNAL_AI_MODE,
+  type ExternalAiMode,
+} from "../../supabase/functions/_shared/external-ai.ts";
+
+export {
+  EXTERNAL_AI_MODE,
+  isExternalAiOff,
+  type ExternalAiMode,
+} from "../../supabase/functions/_shared/external-ai.ts";
+
+/** Marca de pendência: nunca pode chegar a um build de produção sem IA. */
+export const LEGAL_PENDING_MARK = "<PENDENTE";
+
+/**
+ * Nome legal do desenvolvedor (controlador dos dados), IGUAL ao da conta do
+ * Play Console. PENDENTE: confirmar com o dono. Só aparece nas páginas do
+ * modo sem IA; com o modo "desligada" e este valor pendente, o build de
+ * produção FALHA (build/legal-guard.ts, verify-web-bundle e
+ * legal-sem-ia.test.ts).
+ */
+export const DEVELOPER_LEGAL_NAME = "<PENDENTE: confirmar com o dono>";
+
+/**
+ * Versão (= data "Última atualização", AAAA-MM-DD) dos Termos sem IA. É
+ * preenchida no PR de ativação com a data da publicação. PENDENTE.
+ */
+export const NO_AI_TERMS_VERSION = "<PENDENTE: data da ativação AAAA-MM-DD>";
+
+/** Versão dos Termos com a IA ligada (texto publicado em 27/10/2026). */
+export const AI_TERMS_VERSION = "2026-10-27";
+
+export type NoAiLegal = {
+  /** Nome legal do desenvolvedor exibido em /privacy e /terms. */
+  developerName: string;
+  /** Versão/data dos Termos sem IA (TERMS_VERSION neste modo). */
+  termsVersion: string;
+};
+
+/**
+ * Pacote do modo sem IA, ou null com a IA ligada. As páginas usam SÓ isto:
+ * com o modo "ligada" a comparação é constante e o bundle de produção nem
+ * leva o nome pendente (verify-web-bundle confere).
+ */
+export const NO_AI_LEGAL: NoAiLegal | null =
+  EXTERNAL_AI_MODE === "desligada"
+    ? { developerName: DEVELOPER_LEGAL_NAME, termsVersion: NO_AI_TERMS_VERSION }
+    : null;
+
+/**
+ * O que ainda falta para publicar o modo sem IA (vazio = pronto). Com a IA
+ * ligada nada é exigido: o nome e a data só entram no modo sem IA.
+ */
+export function pendingNoAiLegal(
+  mode: ExternalAiMode = EXTERNAL_AI_MODE,
+  values: NoAiLegal = {
+    developerName: DEVELOPER_LEGAL_NAME,
+    termsVersion: NO_AI_TERMS_VERSION,
+  },
+): string[] {
+  if (mode !== "desligada") return [];
+  const out: string[] = [];
+  const name = values.developerName.trim();
+  if (name.length < 3 || name.includes(LEGAL_PENDING_MARK))
+    out.push("DEVELOPER_LEGAL_NAME");
+  if (!isIsoDate(values.termsVersion)) out.push("NO_AI_TERMS_VERSION");
+  return out;
+}
+
+function isIsoDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+const MESES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/** "2026-11-24" → "24 de novembro de 2026"; pendente → o próprio valor. */
+export function formatLegalDate(iso: string): string {
+  if (!isIsoDate(iso)) return iso;
+  const [y, m, d] = iso.split("-");
+  return `${Number(d)} de ${MESES[Number(m) - 1]} de ${y}`;
+}
