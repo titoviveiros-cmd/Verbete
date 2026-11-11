@@ -51,7 +51,9 @@ function Mail() {
 export function ReportsPageLink() {
   const router = useRouter();
   const exists = Boolean(
-    (router.routesByPath as Record<string, unknown>)[REPORTS_PAGE_PATH],
+    (router.routesByPath as unknown as Record<string, unknown>)[
+      REPORTS_PAGE_PATH
+    ],
   );
   if (!exists) return null;
   return (

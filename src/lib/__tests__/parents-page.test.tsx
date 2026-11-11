@@ -15,6 +15,7 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  type AnyRoute,
 } from "@tanstack/react-router";
 import { Route as PaisRoute } from "@/routes/pais";
 import { CONTACT_EMAIL } from "@/lib/legal";
@@ -40,7 +41,7 @@ afterEach(cleanup);
 
 async function montar({ comDenuncias }: { comDenuncias: boolean }) {
   const root = createRootRoute({ component: () => <Outlet /> });
-  const filhos = [
+  const filhos: AnyRoute[] = [
     createRoute({
       getParentRoute: () => root,
       path: PARENTS_PAGE_PATH,
