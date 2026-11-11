@@ -378,7 +378,8 @@ try {
     eq(a.status, "ok");
     for (const o of a.options) {
       ok(/^[A-ZÀ-Ý]/.test(o.text), `minúscula no início: ${o.text}`);
-      ok(!/[s.;,:]$/.test(o.text), `pontuação no fim: ${o.text}`);
+      // \s (espaço) — antes era "s" literal: falhava quando o sufixo aleatório terminava em "s"
+      ok(!/[\s.;,:]$/.test(o.text), `pontuação ou espaço no fim: ${o.text}`);
     }
     ok(a.options.some((o) => o.text === `Espinho; recife à flor da água ${tag}`), "a correta não foi só reformatada");
     const s = await sessao(u);
