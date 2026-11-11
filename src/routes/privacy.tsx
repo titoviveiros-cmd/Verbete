@@ -151,11 +151,24 @@ function PrivacyPage() {
               </li>
             )}
           </ul>
-          <p className="mt-2">
-            Não coletamos localização, contatos, fotos, câmera ou microfone. O
-            app pede só acesso à internet e à vibração do aparelho. Não há
-            anúncios, nem ferramentas de publicidade ou de análise de terceiros.
-          </p>
+          {noAi ? (
+            // Coerência com o Data Safety (11/11/2026): a foto do perfil do
+            // Google (login opcional) é declarada lá como "Fotos"; aqui o que
+            // NÃO acessamos são as fotos e os arquivos do APARELHO.
+            <p className="mt-2">
+              Não acessamos localização, contatos, câmera, microfone nem as
+              fotos e os arquivos do aparelho. O app pede só acesso à internet e
+              à vibração do aparelho. Não há anúncios, nem ferramentas de
+              publicidade ou de análise de terceiros.
+            </p>
+          ) : (
+            <p className="mt-2">
+              Não coletamos localização, contatos, fotos, câmera ou microfone. O
+              app pede só acesso à internet e à vibração do aparelho. Não há
+              anúncios, nem ferramentas de publicidade ou de análise de
+              terceiros.
+            </p>
+          )}
         </section>
 
         <section>
@@ -364,7 +377,8 @@ function PrivacyPage() {
             </li>
             <li>
               Presença na mesa: 2 dias. Registros de erro e saúde: 30 dias.
-              Registros de limite de uso do Desafio Diário: 3 dias.
+              Registros de limite de uso do Desafio Diário: 3 dias
+              {noAi ? " (ou na hora, se você excluir a conta)." : "."}
             </li>
           </ul>
         </section>
@@ -377,9 +391,11 @@ function PrivacyPage() {
             estatísticas, as conquistas, o histórico de partidas e os palpites
             do Desafio Diário. Permanecem os registros das salas (apelido,
             definições, votos e identificadores técnicos), as denúncias e os
-            banimentos, e os registros técnicos acima — os de limite de uso do
-            Desafio Diário não são apagados na hora, mas expiram sozinhos em 3
-            dias. Sem o app, peça por <Mail /> — detalhes em{" "}
+            banimentos, e os registros técnicos acima —{" "}
+            {noAi
+              ? "os de limite de uso do Desafio Diário saem junto com a conta; só os do antigo modo de escrita, se ainda houver algum, expiram sozinhos em 3 dias."
+              : "os de limite de uso do Desafio Diário não são apagados na hora, mas expiram sozinhos em 3 dias."}{" "}
+            Sem o app, peça por <Mail /> — detalhes em{" "}
             <Link to="/delete-account" className="underline">
               Excluir conta
             </Link>

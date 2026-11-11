@@ -105,6 +105,14 @@ describe("estado do repositório — backend e textos sempre juntos", () => {
     expect(p).toContain("Última atualização: 8 de novembro de 2026");
     expect(p).toMatch(/Google Gemini: a inteligência artificial descrita/);
     expect(p).not.toMatch(/desenvolvido e mantido por/);
+    // coerência 11/11 (só no modo sem IA): com a IA ligada, texto de sempre
+    expect(p).toContain(
+      "os de limite de uso do Desafio Diário não são apagados na hora, mas expiram sozinhos em 3 dias. Sem o app",
+    );
+    expect(p).toContain("Não coletamos localização, contatos, fotos, câmera");
+    expect(p).toContain(
+      "Registros de limite de uso do Desafio Diário: 3 dias.",
+    );
     cleanup();
     const t = flat(await page("terms"));
     expect(t).toContain("Última atualização: 27 de outubro de 2026");
@@ -210,6 +218,20 @@ describe("modo 'desligada': textos legais e de jogo", () => {
     expect(p).toContain(
       `Última atualização: ${legal.formatLegalDate(legal.NO_AI_TERMS_VERSION)}`,
     );
+    // Coerência (11/11/2026): no modo sem IA os registros do Diário de
+    // múltipla escolha saem com a conta (FK CASCADE) — a seção "Exclusão da
+    // conta" e "Por quanto tempo" não podem dizer o contrário (igual a
+    // /delete-account); e a foto do perfil do Google (Data Safety "Fotos")
+    // não contradiz o "não acessamos fotos do aparelho".
+    expect(p).toMatch(
+      /os de limite de uso do Desafio Diário saem junto com a conta; só os do antigo modo de escrita, se ainda houver algum, expiram sozinhos em 3 dias/,
+    );
+    expect(p).not.toMatch(/não são apagados na hora, mas expiram/);
+    expect(p).toContain(
+      "Registros de limite de uso do Desafio Diário: 3 dias (ou na hora, se você excluir a conta).",
+    );
+    expect(p).toContain("nem as fotos e os arquivos do aparelho");
+    expect(p).not.toMatch(/Não coletamos localização, contatos, fotos/);
   });
 
   it("Suporte: sem 🧠, Desafio só de múltipla escolha, pergunta direta sobre IA", async () => {

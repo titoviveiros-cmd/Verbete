@@ -128,6 +128,19 @@ Fonte: `supabase/migrations/20261105150000_daily_guard_v2.sql` (§8 limpeza,
 | Demais tipos (nome, e-mail, IDs do dispositivo, interações, falhas, diagnóstico, fotos do login Google) | — | **sem mudança** |
 | Política de Famílias | Não participa (13+) | **sem mudança** (13+ não inclui menores de 13) |
 
+**Coerência conferida em 11/11/2026 (modo sem IA, textos deste PR):**
+- "Fotos" (foto do perfil do Google, login opcional) segue **coletada,
+  opcional, não compartilhada**; a `/privacy` sem IA diz que o app não acessa
+  as fotos e os arquivos **do aparelho** e cita a foto do Google em "Conta"
+  — os dois batem.
+- Registros de limite do Desafio (`daily_choice_sessions`): a `/privacy`
+  ("O que coletamos", "Por quanto tempo", "Exclusão da conta") e a
+  `/delete-account` dizem o mesmo — 3 dias, ou na hora ao excluir a conta;
+  só resíduos do antigo modo de escrita expiram em 3 dias.
+- Ficha da loja e capturas sem IA: nenhuma menção a IA/Gemini e nenhum 🧠
+  (capturas de 11/11 em `verbete-release/play-store-sem-ia-2026-11-11`, fora
+  do repositório).
+
 Resultado esperado no resumo público: "Nenhum dado compartilhado com
 terceiros". Conferir também a ficha da loja (nenhuma menção a "inteligência
 artificial"/"Gemini") e o questionário IARC (se houver pergunta sobre IA
