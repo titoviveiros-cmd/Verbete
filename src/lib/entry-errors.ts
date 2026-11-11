@@ -15,6 +15,13 @@ const KNOWN: ReadonlyArray<readonly [RegExp, string]> = [
   [/player_banned|banido/i, BANNED],
   [/session_required|sessão de jogo/i, SESSION_REQUIRED_MESSAGE],
   [/aceite os Termos/i, "Para continuar, aceite os Termos de Uso."],
+  // Teto de criação por jogador (migration 20261111100000): 5 salas abertas,
+  // 12 por hora, 40 por dia. O APK vc8 não conhece o motivo e mostra o
+  // texto genérico de "criar" (aceitável).
+  [
+    /room_rate_limited/i,
+    "Você criou muitas salas em pouco tempo. Feche as que não usa ou espere alguns minutos.",
+  ],
   [/sala pública/i, "Não foi possível encontrar uma sala pública."],
   [
     /failed to fetch|networkerror|network request failed|load failed/i,
