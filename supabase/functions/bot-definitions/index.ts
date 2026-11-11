@@ -27,6 +27,7 @@ import {
 } from "./logic.ts";
 import {
   generateOfflineDefinitions,
+  laneSlotFor,
   OFFLINE_RESERVE_EXTRA,
   offlineGeneratorEnabled,
   offlineServeBatch,
@@ -207,6 +208,9 @@ Deno.serve(async (req) => {
           avoidRound: servedNorms,
           // G3: faixa própria das 💡 (bots e 🤖 sorteiam em outras)
           lane: "dica",
+          // G3 pior caso (11/11 noite): sub-faixa do jogador (hash do token
+          // da sessão; o valor não é gravado nem registrado)
+          laneSlot: laneSlotFor(bearerToken(req.headers.get("authorization"))),
           // 2 a mais: o lote final tira as parecidas entre si e com a rodada
           count: count + OFFLINE_RESERVE_EXTRA,
           seed: `${memRoomId}:${memRound}:${crypto.randomUUID()}`,

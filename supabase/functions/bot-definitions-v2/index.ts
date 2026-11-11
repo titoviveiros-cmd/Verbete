@@ -62,6 +62,7 @@ import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
 import {
   generateOfflineDefinitions,
+  laneSlotFor,
   OFFLINE_RESERVE_EXTRA,
   offlineGeneratorEnabled,
   offlineServeBatch,
@@ -269,6 +270,12 @@ Deno.serve(async (req) => {
           avoidRound: servedNorms,
           // G3: faixa por tipo de chamada (count 1 = 🤖; sala de 1 bot cai junto)
           lane: count === 1 ? "robo" : "bots",
+          // G3 pior caso (11/11 noite): sub-faixa do jogador no 🤖 (hash do
+          // token da sessão; o valor não é gravado nem registrado)
+          laneSlot:
+            count === 1
+              ? laneSlotFor(bearerToken(req.headers.get("authorization")))
+              : undefined,
           // só o necessário (+3 de folga para os filtros): a edge devolve
           // count + OFFLINE_RESERVE_EXTRA; as fixas completam a fila de 12
           count: Math.min(RESERVE_COUNT, count + OFFLINE_RESERVE_EXTRA + 3),

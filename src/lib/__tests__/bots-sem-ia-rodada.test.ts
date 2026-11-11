@@ -12,8 +12,14 @@ import {
   vetReserves,
 } from "../../../supabase/functions/bot-definitions/logic.ts";
 import {
+  generateOfflineCandidates,
   generateOfflineDefinitions,
   laneOf,
+  laneSlotFor,
+  laneBucketOf,
+  OFFLINE_LANE_BUCKETS,
+  OFFLINE_LANE_SLOTS,
+  slotBuckets,
   OFFLINE_MAX_CHARS,
   OFFLINE_MAX_WORDS,
   OFFLINE_RESERVE_EXTRA,
@@ -35,6 +41,9 @@ import { pickReserves } from "../../../supabase/functions/bot-definitions-v2/res
 //       numa faixa própria do banco (pedidos simultâneos não se veem).
 //  G7 — banco de adjetivos/verbos/advérbios ampliado; molde de adjetivo na
 //       proporção do tamanho de cada lista.
+// R4 (11/11 noite, G3 no pior caso simultâneo): dentro das faixas 🤖 e 💡,
+//  cada jogador sorteia primeiro na SUA sub-faixa (hash do token da sessão);
+//  faltando, a faixa inteira completa (e depois o banco, como antes).
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -84,13 +93,16 @@ function edgeCall(
   snapshot: string[],
   rng: () => number,
   seed: string,
+  laneSlot?: number,
 ): Pending {
   if (kind === "dica") {
-    // bot-definitions (v1): count + extra da faixa das 💡 → filtros → lote
+    // bot-definitions (v1): count + extra da sub-faixa/faixa das 💡 →
+    // filtros → lote
     const gen = generateOfflineDefinitions({
       ...w,
       avoidRound: snapshot,
       lane: "dica",
+      laneSlot,
       count: count + OFFLINE_RESERVE_EXTRA,
       seed,
     });
@@ -107,6 +119,7 @@ function edgeCall(
     avoid: partida,
     avoidRound: snapshot,
     lane,
+    laneSlot: count === 1 ? laneSlot : undefined,
     count: Math.min(12, count + OFFLINE_RESERVE_EXTRA + 3),
     seed,
   });
@@ -146,13 +159,22 @@ function playRound(
   mode: "seq" | "pior",
   rng: () => number,
   tag: string,
+  slots?: Array<number | undefined>,
 ): RoundResult {
   const served: string[] = [];
-  const calls: Array<{ kind: Kind; count: number }> = [
+  const calls: Array<{ kind: Kind; count: number; slot?: number }> = [
     { kind: "bots", count: nBots },
   ];
-  for (let h = 0; h < humans; h++)
-    calls.push({ kind: "robo", count: 1 }, { kind: "dica", count: 2 });
+  // sub-faixa de cada humano = hash de um token sintético (como a edge faz
+  // com o token da sessão); `slots` força valores (teste de sub-faixas)
+  for (let h = 0; h < humans; h++) {
+    const slot = slots ? slots[h] : laneSlotFor(`tok:${tag}:${h}`);
+    // (slots com undefined = sem sub-faixa: o gerador fica idêntico ao R3)
+    calls.push(
+      { kind: "robo", count: 1, slot },
+      { kind: "dica", count: 2, slot },
+    );
+  }
   const res: RoundResult = {
     bots: [],
     robo: [],
@@ -200,13 +222,31 @@ function playRound(
       run(
         c,
         i,
-        edgeCall(c.kind, w, c.count, partida, [...served], rng, `${tag}:${i}`),
+        edgeCall(
+          c.kind,
+          w,
+          c.count,
+          partida,
+          [...served],
+          rng,
+          `${tag}:${i}`,
+          c.slot,
+        ),
       );
   } else {
     const fins = pend.map(({ c, i }) => ({
       c,
       i,
-      fin: edgeCall(c.kind, w, c.count, partida, S0, rng, `${tag}:${i}`),
+      fin: edgeCall(
+        c.kind,
+        w,
+        c.count,
+        partida,
+        S0,
+        rng,
+        `${tag}:${i}`,
+        c.slot,
+      ),
     }));
     fins.sort(() => rng() - 0.5);
     for (const { c, i, fin } of fins) run(c, i, fin);
@@ -279,6 +319,17 @@ describe("G3: edges — devolvem e gravam o MESMO lote; campos iguais (web e APK
       expect(branch.split(k).length - 1).toBe(2);
     // faixa por tipo de chamada
     expect(v2).toContain('lane: count === 1 ? "robo" : "bots",');
+    // R4: sub-faixa do jogador só no 🤖 e só dentro do if (offlineGen)
+    expect(v2).toMatch(
+      /laneSlot:\s*count === 1\s*\?\s*laneSlotFor\(bearerToken\(req\.headers\.get\("authorization"\)\)\)\s*:\s*undefined,/,
+    );
+    expect(v2.split("laneSlotFor(").length - 1).toBe(1);
+    expect(v2.indexOf("laneSlotFor(")).toBeGreaterThan(
+      v2.indexOf("if (offlineGen) {"),
+    );
+    expect(v2.indexOf("laneSlotFor(")).toBeLessThan(
+      v2.indexOf("if (suspended) {"),
+    );
   });
 
   it("v1: faixa das 💡, memória relida e lote = o que é gravado e devolvido", () => {
@@ -291,6 +342,11 @@ describe("G3: edges — devolvem e gravam o MESMO lote; campos iguais (web e APK
       ),
     );
     expect(branch).toContain('lane: "dica",');
+    // R4: sub-faixa do jogador (só aqui, no ramo do gerador)
+    expect(branch).toContain(
+      'laneSlot: laneSlotFor(bearerToken(req.headers.get("authorization"))),',
+    );
+    expect(v1.split("laneSlotFor(").length - 1).toBe(1);
     expect(branch).toMatch(
       /offlineServeBatch\(vetted, count, \[\.\.\.servedNorms, \.\.\.servedNow\]\)/,
     );
@@ -344,18 +400,30 @@ describe("G3: partidas simuladas (bots + 2 humanos com 🤖 e 💡)", () => {
     });
   }
 
-  it("simultâneo (pior caso): faixas + gravação atômica — nada IGUAL na rodada", () => {
-    const rng = seededRng("g3:pior");
+  // pior caso: todas as chamadas da rodada leem a memória juntas e nenhuma
+  // releitura vê a gravação das outras. `slots` força as sub-faixas.
+  const pior = (seed: string, slots?: Array<number | undefined>) => {
+    const rng = seededRng(seed);
     let rounds = 0;
     let crossEqual = 0;
     let crossClose = 0;
     let anyEqual = 0;
+    let anyClose = 0;
     for (let m = 0; m < 20; m++) {
       const partida: string[] = [];
       for (let r = 0; r < 10; r++) {
         rounds++;
         const w = sample[(m * 13 + r * 5) % sample.length]!;
-        const res = playRound(w, 4, 2, partida, "pior", rng, `p:${m}:${r}`);
+        const res = playRound(
+          w,
+          4,
+          2,
+          partida,
+          "pior",
+          rng,
+          `p:${m}:${r}`,
+          slots,
+        );
         const tagged = [
           ...res.bots.map((t) => ["bots", t] as const),
           ...res.robo.map((t) => ["robo", t] as const),
@@ -363,26 +431,160 @@ describe("G3: partidas simuladas (bots + 2 humanos com 🤖 e 💡)", () => {
         ];
         let eq = false;
         let cl = false;
+        let any = false;
         for (let i = 0; i < tagged.length; i++)
           for (let j = i + 1; j < tagged.length; j++) {
             // igual entre QUALQUER par (inclusive 🤖×🤖 e 💡×💡 de humanos diferentes)
             if (normTxt(tagged[i]![1]) === normTxt(tagged[j]![1])) anyEqual++;
+            // parecido entre QUALQUER par (o G3 do simulador)
+            if (close(tagged[i]![1], tagged[j]![1])) any = true;
             if (tagged[i]![0] === tagged[j]![0]) continue;
             if (normTxt(tagged[i]![1]) === normTxt(tagged[j]![1])) eq = true;
             else if (close(tagged[i]![1], tagged[j]![1])) cl = true;
           }
         if (eq) crossEqual++;
         if (cl) crossClose++;
+        if (any) anyClose++;
         partida.push(...res.bots);
       }
     }
-    // medido em 11/11: 0 iguais; parecidos (Dice > 0,5, outro trecho) ≈ 10%
+    return { rounds, crossEqual, crossClose, anyEqual, anyClose };
+  };
+
+  it("simultâneo (pior caso): faixas + sub-faixas + gravação atômica — nada IGUAL na rodada", () => {
+    const r = pior("g3:pior");
+    // mesma semente, sem sub-faixa (= gerador do R3, 907f4a2). Medido em
+    // 11/11 noite: parecidos em qualquer par 84/200 sem → 74/200 com; iguais 0
+    const r3 = pior("g3:pior", [undefined, undefined]);
     console.info(
-      `[G3 pior] rodadas=${rounds} iguais=${crossEqual} paresIguais=${anyEqual} parecidosEntreTipos=${crossClose}`,
+      `[G3 pior, sem sub-faixa] rodadas=${r3.rounds} paresIguais=${r3.anyEqual} parecidosEntreTipos=${r3.crossClose} parecidosQualquerPar=${r3.anyClose}`,
     );
-    expect(crossEqual / rounds).toBeLessThanOrEqual(0.005);
-    expect(anyEqual / rounds).toBeLessThanOrEqual(0.01);
-    expect(crossClose / rounds).toBeLessThan(0.25);
+    console.info(
+      `[G3 pior] rodadas=${r.rounds} iguais=${r.crossEqual} paresIguais=${r.anyEqual} parecidosEntreTipos=${r.crossClose} parecidosQualquerPar=${r.anyClose}`,
+    );
+    expect(r.crossEqual / r.rounds).toBeLessThanOrEqual(0.005);
+    expect(r.anyEqual / r.rounds).toBeLessThanOrEqual(0.01);
+    expect(r.crossClose / r.rounds).toBeLessThan(0.25);
+    // parecidos em qualquer par (inclusive 🤖×🤖 e 💡×💡 de humanos diferentes)
+    expect(r.anyClose).toBeLessThan(r3.anyClose);
+    expect(r.anyEqual).toBeLessThanOrEqual(r3.anyEqual);
+  });
+
+  it("simultâneo (pior caso), humanos em sub-faixas diferentes: quase nada parecido", () => {
+    const r = pior("g3:pior:distintas", [0, 10]); // pedaços 0-1 × 2-3
+    // medido em 11/11 noite: 0 iguais; parecidos em qualquer par 27/200
+    console.info(
+      `[G3 pior, sub-faixas distintas] rodadas=${r.rounds} paresIguais=${r.anyEqual} parecidosQualquerPar=${r.anyClose}`,
+    );
+    expect(r.anyEqual / r.rounds).toBeLessThanOrEqual(0.01);
+    expect(r.anyClose / r.rounds).toBeLessThan(0.25);
+  });
+});
+
+describe("R4: sub-faixa por jogador nas faixas 🤖 e 💡", () => {
+  it("laneSlotFor: estável, dentro do intervalo, vazio = sem sub-faixa, bem distribuído", () => {
+    expect(OFFLINE_LANE_BUCKETS).toBe(6);
+    expect(OFFLINE_LANE_SLOTS).toBe(30);
+    expect(laneSlotFor("")).toBeUndefined();
+    expect(laneSlotFor(null)).toBeUndefined();
+    expect(laneSlotFor(undefined)).toBeUndefined();
+    expect(laneSlotFor("abc.def.ghi")).toBe(laneSlotFor("abc.def.ghi"));
+    // cada pedaço da faixa cabe a ~1/3 dos jogadores
+    const n = new Array(OFFLINE_LANE_BUCKETS).fill(0);
+    for (let i = 0; i < 6000; i++) {
+      const s = laneSlotFor(`eyJ.sintetico.${i}`)!;
+      expect(Number.isInteger(s) && s >= 0 && s < OFFLINE_LANE_SLOTS).toBe(
+        true,
+      );
+      for (const b of slotBuckets(s)) n[b]++;
+    }
+    for (const c of n) {
+      expect(c / 6000).toBeGreaterThan(0.28);
+      expect(c / 6000).toBeLessThan(0.39);
+    }
+  });
+
+  it("slotBuckets: 2 pedaços distintos; cada par aparece 2 vezes (mesma sub-faixa = 1 em 15)", () => {
+    const pairs = new Map<string, number>();
+    for (let s = 0; s < OFFLINE_LANE_SLOTS; s++) {
+      const [a, b] = slotBuckets(s);
+      expect(a).not.toBe(b);
+      for (const x of [a, b])
+        expect(x >= 0 && x < OFFLINE_LANE_BUCKETS).toBe(true);
+      const k = [a, b].sort().join("-");
+      pairs.set(k, (pairs.get(k) ?? 0) + 1);
+    }
+    expect(pairs.size).toBe(15);
+    for (const c of pairs.values()) expect(c).toBe(2);
+  });
+
+  it("laneBucketOf não depende de laneOf: os trechos das faixas 🤖/💡 se espalham pelos pedaços", () => {
+    const parts = [
+      ...BANK.ADJ_QUE,
+      ...BANK.ACTS,
+      ...BANK.ADVERBS,
+      ...BANK.QUEM,
+    ];
+    for (const lane of ["robo", "dica"] as const) {
+      const mine = parts.filter((p) => laneOf(p) === lane);
+      const n = new Array(OFFLINE_LANE_BUCKETS).fill(0);
+      for (const p of mine) n[laneBucketOf(p)]++;
+      for (const c of n) expect(c, `${lane}: ${n}`).toBeGreaterThan(0);
+      expect(Math.max(...n) / mine.length, `${lane}: ${n}`).toBeLessThan(0.35);
+    }
+  });
+
+  it("sem efeito fora das faixas 🤖/💡 ou com valor inválido (mesma saída de antes)", () => {
+    const w = WORDS.find((x) => x.classe === "verbo")!;
+    const base = { ...w, count: 6, seed: "r4:igual" };
+    expect(
+      generateOfflineDefinitions({ ...base, lane: "bots", laneSlot: 1 }),
+    ).toEqual(generateOfflineDefinitions({ ...base, lane: "bots" }));
+    expect(generateOfflineDefinitions({ ...base, laneSlot: 2 })).toEqual(
+      generateOfflineDefinitions(base),
+    );
+    for (const bad of [-1, OFFLINE_LANE_SLOTS, 1.5, Number.NaN])
+      expect(
+        generateOfflineDefinitions({ ...base, lane: "robo", laneSlot: bad }),
+      ).toEqual(generateOfflineDefinitions({ ...base, lane: "robo" }));
+  });
+
+  it("cada jogador sorteia primeiro na sua sub-faixa; faltando, a faixa completa", () => {
+    const sample = WORDS.filter((x) =>
+      ["verbo", "adjetivo", "advérbio"].includes(x.classe),
+    );
+    let total = 0;
+    let own = 0;
+    for (const [k, w] of sample.entries())
+      for (const lane of ["robo", "dica"] as const)
+        for (const s of [0, 7, 14, 21, 28]) {
+          const count = lane === "robo" ? 6 : 4;
+          const out = generateOfflineCandidates({
+            ...w,
+            lane,
+            laneSlot: s,
+            count,
+            seed: `r4:${k}:${lane}:${s}`,
+          });
+          // nunca entrega menos do que sem a sub-faixa
+          expect(out.length, w.word).toBeGreaterThanOrEqual(
+            generateOfflineCandidates({
+              ...w,
+              lane,
+              count,
+              seed: `r4:${k}:${lane}:${s}`,
+            }).length,
+          );
+          const mineB = slotBuckets(s);
+          for (const c of out) {
+            total++;
+            if (mineB.includes(laneBucketOf(c.parts[0] ?? c.text))) own++;
+          }
+        }
+    console.info(`[R4 sub-faixa] saídas=${total} na própria=${own}`);
+    // medido em 11/11 noite: 2.242/2.600 = 86% na própria sub-faixa
+    // o resto vem da faixa inteira (sub-faixa pequena): nunca falta
+    expect(own / total).toBeGreaterThan(0.5);
   });
 });
 

@@ -539,6 +539,17 @@ export type OfflineInput = {
    * banco inteiro (como antes). Esgotada a faixa, o nível 4 usa o banco todo.
    */
   lane?: OfflineLane;
+  /**
+   * G3, pior caso simultâneo (11/11 noite): sub-faixa do JOGADOR dentro das
+   * faixas 🤖 e 💡 (`laneSlotFor`). Dois humanos pedindo 🤖 (ou 💡) ao mesmo
+   * tempo sorteavam na mesma faixa de 10%. A faixa tem OFFLINE_LANE_BUCKETS
+   * pedaços e cada jogador sorteia primeiro em 2 deles: dois jogadores só têm
+   * a MESMA sub-faixa em 1 de 15 vezes (com 1 pedaço só, eram 1 de 4, e aí o
+   * lote inteiro coincidia e saía texto igual). Só vale com `lane` "robo" ou
+   * "dica"; ausente = como antes. Faltando, a faixa inteira completa (e,
+   * depois, o banco inteiro, como antes).
+   */
+  laneSlot?: number;
   count: number;
   seed: string;
 };
@@ -548,6 +559,36 @@ export type OfflineLane = "bots" | "robo" | "dica";
 export function laneOf(mainPart: string): OfflineLane {
   const h = hashSeed(normTxt(mainPart)) % 10;
   return h === 0 ? "robo" : h === 1 ? "dica" : "bots";
+}
+
+/** Pedaços de cada faixa 🤖/💡; cada jogador fica com 2 (1/3 da faixa). */
+export const OFFLINE_LANE_BUCKETS = 6;
+/** Sub-faixas possíveis = pares ordenados de pedaços distintos (6 × 5). */
+export const OFFLINE_LANE_SLOTS = OFFLINE_LANE_BUCKETS * (OFFLINE_LANE_BUCKETS - 1);
+
+/**
+ * Pedaço da faixa do trecho principal. Hash com OUTRO prefixo que o de
+ * `laneOf`: com o mesmo hash, `h % 10 === 0` amarraria `h % 6`.
+ */
+export function laneBucketOf(mainPart: string): number {
+  return hashSeed(`subfaixa:${normTxt(mainPart)}`) % OFFLINE_LANE_BUCKETS;
+}
+
+/** Os 2 pedaços (distintos) da sub-faixa `slot` (0 ≤ slot < OFFLINE_LANE_SLOTS). */
+export function slotBuckets(slot: number): [number, number] {
+  const a = Math.floor(slot / (OFFLINE_LANE_BUCKETS - 1));
+  return [a, (a + 1 + (slot % (OFFLINE_LANE_BUCKETS - 1))) % OFFLINE_LANE_BUCKETS];
+}
+
+/**
+ * Sub-faixa de quem pede, a partir de um identificador do pedido (o token
+ * da sessão). Só o resto da divisão sai daqui: o valor nunca é gravado nem
+ * registrado. Vazio = sem sub-faixa (como antes).
+ */
+export function laneSlotFor(callerKey: string | null | undefined): number | undefined {
+  const k = String(callerKey ?? "");
+  if (!k) return undefined;
+  return hashSeed(`jogador:${k}`) % OFFLINE_LANE_SLOTS;
 }
 
 /**
@@ -583,27 +624,39 @@ export function generateOfflineCandidates(input: OfflineInput): Candidate[] {
     ns.some((a, k) => a === n || diceSets(gs[k]!, g) > MATCH_REPEAT_THRESHOLD);
   const containsPart = (p: string, ns: string[]) =>
     p.length >= 10 && ns.some((a) => a.includes(p));
-  // nível 0 = estrito (o de sempre); 1 = variedade no pedido; 2 = trecho da
-  // partida; 3 = Dice contra a partida (com teto); 4 = sem a faixa (só com
-  // `lane`). Cada nível só roda se faltar.
+  // sub-faixa do jogador: só nas faixas 🤖/💡 e com valor válido
+  const slotIn =
+    (input.lane === "robo" || input.lane === "dica") &&
+    Number.isInteger(input.laneSlot) &&
+    input.laneSlot! >= 0 &&
+    input.laneSlot! < OFFLINE_LANE_SLOTS
+      ? input.laneSlot!
+      : undefined;
+  const slot = slotIn === undefined ? undefined : slotBuckets(slotIn);
+  // nível -1 = estrito na sub-faixa do jogador (só com `laneSlot`); 0 =
+  // estrito (o de sempre); 1 = variedade no pedido; 2 = trecho da partida;
+  // 3 = Dice contra a partida (com teto); 4 = sem a faixa (só com `lane`).
+  // Cada nível só roda se faltar.
   const lastLevel = input.lane ? 4 : 3;
-  for (let level = 0; level <= lastLevel && out.length < want; level++) {
-    const attempts = level === 0 ? MAX_ATTEMPTS : RELAX_ATTEMPTS;
+  for (let level = slot === undefined ? 0 : -1; level <= lastLevel && out.length < want; level++) {
+    const strict = level <= 0;
+    const attempts = strict ? MAX_ATTEMPTS : RELAX_ATTEMPTS;
     const cap = level === 3 ? Math.min(want, out.length + PARTIDA_RELAX_MAX) : want;
     for (let i = 0; i < attempts && out.length < cap; i++) {
       const c = make();
       // checagens baratas primeiro; trigramas só no fim (perfil: 1/3 do tempo)
       if (tooLong(c.text)) continue;
       if (input.lane && level < 4 && laneOf(c.parts[0] ?? c.text) !== input.lane) continue;
+      if (level === -1 && !slot!.includes(laneBucketOf(c.parts[0] ?? c.text))) continue;
       // o mesmo núcleo duas vezes no pedido só depois de metade das tentativas
-      if (level === 0 && c.head && usedHeads.has(c.head) && i < MAX_ATTEMPTS / 2) continue;
+      if (strict && c.head && usedHeads.has(c.head) && i < MAX_ATTEMPTS / 2) continue;
       const partNorms = c.parts.map(normTxt);
       // trecho do banco já usado neste pedido (nível 0) ou na rodada (sempre)
       // ou na partida (níveis 0–1)
       if (
         partNorms.some(
           (p) =>
-            (level === 0 && usedParts.has(p)) ||
+            (strict && usedParts.has(p)) ||
             containsPart(p, roundNorms) ||
             (level <= 1 && containsPart(p, partidaNorms)),
         )
