@@ -546,3 +546,114 @@ describe("bots sem IA: variedade, repetição e determinismo", () => {
     expect(performance.now() - t0).toBeLessThan(5000);
   });
 });
+
+describe("bots sem IA: revisão editorial frase a frase (11/11)", () => {
+  // 180 palavras × 20 sementes × 3 = 10.800 definições (a mesma base acima)
+  const OUT = WORDS.flatMap((w) =>
+    Array.from({ length: 20 }, (_, i) => ({ w, defs: gen(w, `rev${i}`) })),
+  );
+
+  it("não repete as 62 reservas fixas (já manjadas e iguais à lista local do app)", () => {
+    // antes da revisão: 732 de 10.800 com Dice > 0,6 e cópias exatas
+    const fixed = BOT_FAKE_DEFINITIONS_TEMPLATES.map(normTxt);
+    let close = 0;
+    let total = 0;
+    for (const { defs } of OUT)
+      for (const d of defs) {
+        total++;
+        const best = Math.max(...fixed.map((f) => dice(normTxt(d), f)));
+        expect(best, d).toBeLessThan(0.7);
+        if (best > 0.6) close++;
+      }
+    expect(close / total).toBeLessThan(0.005);
+  });
+
+  it("combinações incoerentes corrigidas não voltam", () => {
+    const BAD = [
+      /^(chuva|geada|neblina|clarao)\b.*\b(sopra|quente|levanta poeira)/,
+      /\b(cabaca|tacho|tigela|pote|jarro|vasilha|cuia) de couro\b/,
+      /^(camarao|caranguejo)\b/,
+      /^doce (de feijao|de peixe|de mandioca|de banana verde|temperado)/,
+      /^conserva (servida|cozida|assada|frita|de milho)/,
+      /^manobra (que|para|feita|usada)\b/,
+      /^(moeda|imposto|mensageiro) (encarregad|que cuidava|dad|concedid)/,
+      /^(trilha|atalho|vale|encosta)\b/,
+      /\bclareira aberto\b/,
+      /^de jeito /,
+      /\bpisar uvas\b/,
+      /\bde frutas silvestres amassad[oa]\b/,
+    ];
+    for (const { w, defs } of OUT)
+      for (const d of defs)
+        for (const re of BAD)
+          expect(re.test(normTxt(d)), `${w.word}: ${d}`).toBe(false);
+  });
+
+  it("verdade por acaso: 'plenilúnio' (lua cheia) nunca recebe 'lua'", () => {
+    // "cheia" é palavra genérica no filtro de raiz: antes saía
+    // "ritual realizado na primeira lua cheia do ano" (59 em 24.000)
+    const w = {
+      word: "plenilúnio",
+      meaning: "lua cheia",
+      category: "natureza",
+      classe: "substantivo",
+    };
+    for (let i = 0; i < 300; i++)
+      for (const d of gen(w, `lua${i}`, 12))
+        expect(/\blua\b/.test(normTxt(d)), d).toBe(false);
+  });
+
+  it("pares 'palavra comum, definição' não viram a resposta de um sinônimo raro", () => {
+    const CASES: Array<[W, RegExp]> = [
+      [
+        {
+          word: "esquivo",
+          meaning: "que evita contato; arisco",
+          category: "qualidade",
+          classe: "adjetivo",
+        },
+        /arredio|desconfiad/,
+      ],
+      [
+        {
+          word: "espreitar",
+          meaning: "olhar às escondidas, espiar",
+          category: "",
+          classe: "verbo",
+        },
+        /espiar|bisbilhot|fresta/,
+      ],
+      [
+        {
+          word: "esboroar",
+          meaning: "desfazer em pó, esmigalhar",
+          category: "",
+          classe: "verbo",
+        },
+        /esfarel|desmanch/,
+      ],
+      [
+        {
+          word: "saracotear",
+          meaning: "requebrar o corpo, gingar",
+          category: "",
+          classe: "verbo",
+        },
+        /bambole|gingando/,
+      ],
+      [
+        {
+          word: "lânguido",
+          meaning: "frouxo, sem forças",
+          category: "qualidade",
+          classe: "adjetivo",
+        },
+        /froux/,
+      ],
+    ];
+    for (const [w, re] of CASES)
+      for (let i = 0; i < 200; i++)
+        for (const d of gen(w, `par${i}`, 12))
+          expect(re.test(normTxt(d)), `${w.word}: ${d}`).toBe(false);
+  });
+});

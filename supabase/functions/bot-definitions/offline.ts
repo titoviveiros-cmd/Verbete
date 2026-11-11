@@ -376,7 +376,8 @@ function adverbCandidate(rng: () => number): Candidate {
     const [lead, g] = pick(rng, [
       ["de modo", "m"],
       ["de maneira", "f"],
-      ["de jeito", "m"],
+      // "de um jeito" (revisão 11/11: "de jeito solene" soava errado)
+      ["de um jeito", "m"],
     ] as const);
     const m = agree(pick(rng, ADV_MANNER), g);
     return { text: `${lead} ${m}`, parts: [m], via: "adverbio" };
