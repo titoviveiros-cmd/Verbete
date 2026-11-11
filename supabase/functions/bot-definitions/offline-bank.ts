@@ -11,6 +11,10 @@
 //   - Tudo em português comum; o jogo normaliza para minúsculas sem acento.
 //   - Nada de palavrão, tema sensível (violência, sexo, drogas, religião
 //     ofensiva, política, doença grave) ou pessoa/marca real.
+//   - Público 13+ (Red Team 10/11): sem bebida alcoólica, fumo, "golpe",
+//     doença crônica nem origem étnica; o teste "editorial 13+" barra.
+//   - Ampliado em 10/11 (advérbios, maneiras e ações) para a partida longa
+//     não esgotar o banco — trechos novos também PENDENTES de revisão.
 // Sem APIs do Deno: testável no Vitest.
 // =====================================================================
 
@@ -136,7 +140,7 @@ export const NOUN_KINDS: Record<string, NounKind> = {
     ],
     tails: [
       "comum no litoral nordestino",
-      "de origem moura",
+      "trazid{o} pelos tropeiros",
       "usad{o} só em dias santos",
     ],
     pairs: [
@@ -220,23 +224,23 @@ export const NOUN_KINDS: Record<string, NounKind> = {
   bebida: {
     heads: [
       ["bebida", "f"],
-      ["licor", "m"],
+      ["garapa", "f"],
       ["infusão", "f"],
       ["refresco", "m"],
       ["chá", "m"],
     ],
     quals: [
-      "de frutas silvestres fermentad{o}",
+      "de frutas silvestres amassad{o}",
       "de casca de árvore tomad{o} como remédio",
       "servid{o} em festivais de inverno",
-      "de milho fermentad{o} em pote de barro",
+      "de milho cozid{o} em pote de barro",
       "de folhas amargas para depois do almoço",
       "de caju servid{o} bem gelad{o}",
     ],
     pairs: [
       "refresco de rapadura com limão",
       "chá de erva-cidreira adoçado",
-      "licor caseiro de jabuticaba",
+      "suco caseiro de jabuticaba",
     ],
   },
   ave: {
@@ -644,7 +648,7 @@ export const NOUN_KINDS: Record<string, NounKind> = {
       "extraíd{o} da casca do cajueiro",
       "que dá o amargor às sementes de abóbora",
       "usad{o} para endurecer o couro",
-      "que se forma no fundo dos tonéis de vinho",
+      "que se forma no fundo das panelas de cobre",
     ],
     pairs: ["pó fino de casca moída", "goma vegetal de colar papel"],
   },
@@ -823,10 +827,50 @@ export const ACTS: readonly string[] = [
   "desfiar o pano até sobrar o fio",
   "riscar o chão com a ponta do pé",
   "debulhar o milho com as mãos",
-  "enrolar fumo em palha de milho",
+  "forrar o cesto com palha de milho",
   "caiar as paredes antes da festa",
   "tanger os bois para o curral",
   "peneirar a farinha duas vezes",
+  "varrer o quintal com vassoura de piaçava",
+  "dobrar a roupa ainda morna",
+  "chamar as galinhas para o milho",
+  "costurar botões na camisa",
+  "secar o feijão ao sol",
+  "medir o terreno com passos largos",
+  "catar pedrinhas no feijão",
+  "apanhar do chão as frutas caídas",
+  "encher o pote na bica",
+  "esticar o couro para secar",
+  "pendurar as panelas na parede",
+  "acender o lampião ao anoitecer",
+  "descascar mandioca na sombra",
+  "lixar a madeira até ficar lisa",
+  "amassar o barro com os pés",
+  "empinar pipa no fim da tarde",
+  "pular corda na calçada",
+  "recolher a roupa do varal",
+  "abanar o fogo com um leque de palha",
+  "ralar o coco na beira da pia",
+  "desenhar no chão com carvão",
+  "abrir covas na terra para o plantio",
+  "trocar a palha do colchão",
+  "enrolar o fio no carretel",
+  "cercar o canteiro com bambu",
+  "arrastar os móveis para limpar o chão",
+  "embrulhar presentes em papel pardo",
+  "rachar lenha no terreiro",
+  "escovar o cavalo depois da lida",
+  "juntar as folhas secas do quintal",
+  "esticar a rede entre duas árvores",
+  "assar milho na brasa",
+  "engraxar as botas no domingo",
+  "contar os ovos do galinheiro",
+  "tirar a poeira dos retratos",
+  "amarrar os sacos com barbante",
+  "soltar barquinhos de papel na enxurrada",
+  "pintar o portão de azul",
+  "arear as panelas com areia do rio",
+  "fiar o algodão na roca",
 ];
 export const ACT_TAILS: readonly string[] = [
   "aos poucos",
@@ -843,6 +887,12 @@ export const VERB_PAIRS: readonly string[] = [
   "bambolear, andar gingando",
   "remendar às pressas, alinhavar",
   "esfarelar, desmanchar com os dedos",
+  "chacoalhar, sacudir com força",
+  "rabiscar, riscar sem capricho",
+  "bisbilhotar, xeretar a vida alheia",
+  "tamborilar, bater os dedos na mesa",
+  "embrulhar, envolver em papel",
+  "espiar, olhar pela fresta",
 ];
 /** Para verbos em -izar/-ificar/-ecer: "tornar…", "tornar-se…". */
 export const BECOME: readonly string[] = [
@@ -874,6 +924,16 @@ export const QUEM: readonly string[] = [
   "come de pé na cozinha",
   "decora o nome de todos os santos",
   "nunca devolve o que pega emprestado",
+  "guarda barbante em todas as gavetas",
+  "conversa com as plantas do quintal",
+  "sabe o nome de todas as estrelas",
+  "anda sempre com um lápis na orelha",
+  "conta a mesma história toda semana",
+  "acorda de madrugada para ver o tempo",
+  "não sai de casa sem guarda-chuva",
+  "assobia a mesma música o dia inteiro",
+  "troca o dia pela noite",
+  "dá nome a todos os bichos da casa",
 ];
 
 // ---------------------------------------------------------------------------
@@ -893,6 +953,16 @@ export const ADJ_QUE: readonly string[] = [
   "vive em lugares úmidos",
   "foi tingido com casca de árvore",
   "anda de lado",
+  "gruda nos dedos quando úmido",
+  "estala ao ser dobrado",
+  "boia mesmo quando molhado",
+  "esfria depressa ao vento",
+  "cresce enrolado nos troncos",
+  "guarda o calor por horas",
+  "se esconde debaixo das pedras",
+  "solta pó amarelo ao ser tocado",
+  "só aparece depois das chuvas",
+  "fica áspero quando seca",
 ];
 /** "próprio …" / "típico …" + estes (já com "de" contraído). */
 export const ADJ_PROPRIO: readonly string[] = [
@@ -925,6 +995,14 @@ export const ADJ_DIZSE: readonly string[] = [
   "pão que endureceu de um dia para o outro",
   "madeira que racha ao sol",
   "caminho cheio de curvas",
+  "fruta de casca grossa e pouca polpa",
+  "roupa que encolheu na lavagem",
+  "cavalo que anda de lado",
+  "chão de terra batida e irregular",
+  "porta que não fecha direito",
+  "panela que pega no fundo",
+  "linha que embaraça com facilidade",
+  "cadeira de pernas desiguais",
 ];
 /** Adjetivos em -oso/-osa: "cheio de …". */
 export const ADJ_CHEIO: readonly string[] = [
@@ -959,6 +1037,16 @@ export const ADJ_PAIRS: readonly string[] = [
   "rasteiro, que cresce rente ao chão",
   "enviesado, posto de través",
   "miúdo, de grão muito fino",
+  "desbotado, que perdeu a cor",
+  "rugoso, cheio de pregas",
+  "frouxo, mal amarrado",
+  "empoeirado, coberto de pó",
+  "manhoso, cheio de dengo",
+  "teimoso, difícil de convencer",
+  "esguio, alto e fino",
+  "bojudo, de barriga larga",
+  "ensebado, de toque gorduroso",
+  "remendado, cheio de emendas",
 ];
 
 // ---------------------------------------------------------------------------
@@ -988,6 +1076,53 @@ export const ADVERBS: readonly string[] = [
   "de orelha em pé",
   "de mão em mão",
   "por via das dúvidas",
+  "com o canto do olho",
+  "de costas para a porta",
+  "de trás para a frente",
+  "de uma ponta à outra",
+  "em roda, de mãos dadas",
+  "por cima do ombro",
+  "de bruços no chão",
+  "às avessas, do avesso",
+  "sentado de cócoras",
+  "de olhos fechados",
+  "com a mão esquerda",
+  "em zigue-zague pelo caminho",
+  "bem rente ao chão",
+  "a torto e a direito",
+  "de ponta-cabeça, virado",
+  "de porta em porta",
+  "em segredo, a sós",
+  "ao redor da mesa",
+  "do lado de fora",
+  "ao ar livre, sem teto",
+  "de improviso, sem ensaio",
+  "com unhas e dentes",
+  "em cima do muro",
+  "à moda antiga",
+  "de bom grado",
+  "com um pé atrás",
+  "de manhã bem cedo",
+  "ao cair da tarde",
+  "de cor e salteado",
+  "frente a frente, cara a cara",
+  "com as mãos nos bolsos",
+  "de braços cruzados",
+  "às cegas, tateando",
+  "de olho no relógio",
+  "de joelhos no chão",
+  "na surdina, sem avisar",
+  "a contragosto, resmungando",
+  "em bando, todos juntos",
+  "um por um, em ordem",
+  "de cabo a rabo",
+  "de fio a pavio",
+  "em vão, sem resultado",
+  "por acaso, sem querer",
+  "de propósito, por gosto",
+  "de antemão, antes de tudo",
+  "à toa, sem motivo",
+  "de sobra, além da conta",
 ];
 /** "de modo …" / "de maneira …" ({o} concorda com modo/maneira). */
 export const ADV_MANNER: readonly string[] = [
@@ -1005,6 +1140,24 @@ export const ADV_MANNER: readonly string[] = [
   "comedid{o}",
   "vagaros{o}",
   "ruidos{o}",
+  "desastrad{o}",
+  "teatral",
+  "precavid{o}",
+  "espalhafatos{o}",
+  "matreir{o}",
+  "caprichos{o}",
+  "desconfiad{o}",
+  "solt{o}",
+  "orgulhos{o}",
+  "zombeteir{o}",
+  "tranquil{o}",
+  "desenvolt{o}",
+  "estabanad{o}",
+  "metódic{o}",
+  "improvisad{o}",
+  "obediente",
+  "curios{o}",
+  "silencios{o}",
 ];
 
 // ---------------------------------------------------------------------------
@@ -1062,13 +1215,13 @@ export const IDEAS: readonly Topic[] = [
   ["a", "leitura em voz alta"],
   ["o", "plantio guiado pela lua"],
 ];
-/** "golpe dado com …" (sufixo -ada). */
+/** "movimento rápido feito com …" (sufixo -ada). */
 export const STRIKES: readonly string[] = [
-  "o cabo da enxada",
   "a aba do chapéu",
-  "um galho seco",
-  "a ponta do cotovelo",
-  "um pano molhado",
+  "um lenço branco",
+  "a ponta do pincel",
+  "uma pena de galinha",
+  "o cabo da vassoura",
 ];
 /** Para "lugar onde se guardam …" (sufixo -ário). */
 export const STORED: readonly string[] = [
@@ -1115,6 +1268,8 @@ export const SEMANTIC_FIELDS: Record<string, readonly string[]> = {
   doenca: ["doenc", "molest", "enferm", "febre", "inflam", "infecc", "mazela", "achaque"],
   sujeira: ["sujo", "sujei", "imund", "desleix", "encard", "porcal", "nojo"],
   pressa: ["rapid", "pressa", "ligeir", "veloz", "apress", "depress"],
+  // Red Team 10/11: "devagar" recebia "de modo vagaroso" (= a verdade)
+  lentidao: ["lent", "vagar", "devag", "moros", "lerd", "arrast", "pachorr", "demora", "tardi"],
   efemero: ["passag", "efemer", "breve", "fugaz", "moment", "transit"],
   humor: ["piada", "graca", "gracej", "zomba", "chacot", "troca", "debocha", "brincad", "riso", "rir"],
   brilho: ["brilh", "luz", "lumin", "reluz", "cintil", "fulgor", "claro"],

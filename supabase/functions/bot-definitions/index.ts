@@ -197,7 +197,8 @@ Deno.serve(async (req) => {
           category,
           classe,
           sinonimos,
-          avoid: servedNorms,
+          // a v1 só conhece a rodada: memória dura (nunca relaxada)
+          avoidRound: servedNorms,
           count,
           seed: `${memRoomId}:${memRound}:${crypto.randomUUID()}`,
         });

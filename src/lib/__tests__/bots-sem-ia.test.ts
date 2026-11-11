@@ -10,6 +10,7 @@ import {
 import { BOT_FAKE_DEFINITIONS_TEMPLATES } from "@/lib/bot-names";
 import {
   dice,
+  dropAlreadyServed,
   LEAK_THRESHOLD,
   MATCH_REPEAT_THRESHOLD,
   normTxt,
@@ -175,6 +176,149 @@ describe("bots sem IA: conteúdo", () => {
 
   it("acervo de teste carregado (seeds v2+v3)", () => {
     expect(WORDS.length).toBeGreaterThanOrEqual(150);
+  });
+
+  it("editorial 13+: sem álcool, golpe, doença, origem étnica nem fumo (Red Team 10/11)", () => {
+    // só o conteúdo que vira texto (o mini-tesauro de proteção fica de fora:
+    // ele PRECISA conhecer "licor"/"golpe" para barrar o blefe)
+    const { SEMANTIC_FIELDS: _fields, ...content } = BANK;
+    void _fields;
+    const texts: string[] = [];
+    const walk = (v: unknown) => {
+      if (typeof v === "string") texts.push(normTxt(v.replace(/\{o\}/g, "o")));
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") Object.values(v).forEach(walk);
+    };
+    walk(content);
+    // moldes escritos no próprio gerador
+    texts.push(normTxt(read("supabase/functions/bot-definitions/offline.ts")));
+    const BANNED = [
+      "licor",
+      "ferment",
+      "vinho",
+      "cachac",
+      "cerveja",
+      "aguardente",
+      "golpe",
+      "doenca cronica",
+      "moura",
+      "mouro",
+      "fumo",
+      "tabaco",
+      "cigarr",
+    ];
+    for (const t of texts)
+      for (const b of BANNED)
+        expect(` ${t}`.includes(` ${b}`), `${t.slice(0, 60)} ~ ${b}`).toBe(
+          false,
+        );
+  });
+});
+
+describe("bots sem IA: partida longa (Red Team 10/11 — banco se esgotava)", () => {
+  // Advérbio, verbo e adjetivo de bancos pequenos: a MESMA classe em todas
+  // as rodadas é o pior caso. Antes: 0 frases a partir da 6ª/7ª rodada.
+  const LONG: W[] = [
+    {
+      word: "devagar",
+      meaning: "com lentidão; sem pressa",
+      category: "",
+      classe: "adverbio",
+    },
+    {
+      word: "cochilar",
+      meaning: "dormir levemente, por pouco tempo",
+      category: "",
+      classe: "verbo",
+    },
+    {
+      word: "barulhento",
+      meaning: "que faz muito barulho; ruidoso",
+      category: "",
+      classe: "adjetivo",
+    },
+  ];
+
+  it("20 rodadas (bots + 2 💡 por rodada): nunca devolve lista vazia nem repete a rodada", () => {
+    for (const w of LONG) {
+      const guard = truthGuard(w.meaning);
+      const partida: string[] = [];
+      for (let round = 1; round <= 20; round++) {
+        const rodada: string[] = [];
+        const take = (defs: string[], want: number, tag: string) => {
+          expect(
+            defs.length,
+            `${w.word} rodada ${round} ${tag}`,
+          ).toBeGreaterThanOrEqual(want);
+          for (const d of defs) {
+            // a rodada é dura: nada parecido com o que ela já serviu
+            for (const r of rodada)
+              expect(
+                dice(d, r),
+                `${w.word} r${round}: ${d} ~ ${r}`,
+              ).toBeLessThanOrEqual(MATCH_REPEAT_THRESHOLD);
+            // e a verdade continua protegida em todos os níveis
+            expect(truthIssue(d, guard), `${w.word}: ${d}`).toBeNull();
+            expect(definitionIssue(d, w.word), d).toBeNull();
+          }
+        };
+        // bots (v2): fila de 12, os 3 primeiros vão à mesa
+        const fila = generateOfflineDefinitions({
+          ...w,
+          count: 12,
+          seed: `longa:${round}`,
+          avoid: partida,
+          avoidRound: rodada,
+        });
+        take(fila, 3, "bots");
+        rodada.push(...fila.slice(0, 3));
+        // 💡 (v1): 3 por chamada, duas chamadas por rodada
+        for (let h = 0; h < 2; h++) {
+          const dicas = dropAlreadyServed(
+            generateOfflineDefinitions({
+              ...w,
+              count: 3,
+              seed: `longa:${round}:${h}`,
+              avoid: partida,
+              avoidRound: rodada,
+            }),
+            rodada.map(normTxt),
+          ).kept;
+          take(dicas, 3, `💡${h}`);
+          rodada.push(...dicas);
+        }
+        partida.push(...rodada);
+      }
+    }
+  });
+
+  it("os níveis só relaxam quando falta: partida curta = filtro estrito de sempre", () => {
+    const w = LONG[0]!;
+    const partida: string[] = [];
+    for (let round = 1; round <= 4; round++) {
+      const defs = generateOfflineDefinitions({
+        ...w,
+        count: 3,
+        seed: `curta:${round}`,
+        avoid: partida,
+      });
+      expect(defs.length).toBe(3);
+      for (const d of defs)
+        for (const p of partida)
+          expect(dice(d, p), `${d} ~ ${p}`).toBeLessThanOrEqual(
+            MATCH_REPEAT_THRESHOLD,
+          );
+      partida.push(...defs);
+    }
+  });
+
+  it("'devagar' nunca recebe 'vagaroso'/'lento' de blefe (campo lentidão)", () => {
+    const w = LONG[0]!;
+    for (let i = 0; i < 200; i++)
+      for (const d of gen(w, `lento${i}`, 3)) {
+        expect(semanticFields(d).has("lentidao"), d).toBe(false);
+        expect(/\b(vagaros|lent)/.test(normTxt(d)), d).toBe(false);
+      }
   });
 });
 

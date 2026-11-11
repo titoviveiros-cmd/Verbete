@@ -13,7 +13,14 @@
 //      verdade (Dice < LEAK_THRESHOLD), raiz em comum com a verdade ou com
 //      os sinônimos, CAMPO SEMÂNTICO em comum (mini-tesauro do banco),
 //      repetição na partida/rodada (Dice e trecho reaproveitado) e
-//      parecidas entre si.
+//      parecidas entre si;
+//   4. NÍVEIS (Red Team 10/11: numa partida longa da mesma classe o banco se
+//      esgotava e a lista voltava vazia na 6ª/7ª rodada). Só quando falta
+//      candidata, relaxa nesta ordem: (1) variedade DENTRO do pedido
+//      (núcleo/trecho repetido), (2) trecho reaproveitado da PARTIDA,
+//      (3) Dice contra a PARTIDA — no máximo PARTIDA_RELAX_MAX por pedido.
+//      Nunca relaxam: forma, verdade (Dice, raiz, campo) e a RODADA
+//      (`avoidRound`: o que 💡/🤖/bots já serviram nela).
 // Conteúdo em offline-bank.ts (PENDENTE REVISÃO EDITORIAL).
 // Sem APIs do Deno: testável no Vitest (src/lib/__tests__/bots-sem-ia.test.ts).
 import {
@@ -75,6 +82,14 @@ export const OFFLINE_MAX_WORDS = 11;
 export const OFFLINE_MAX_CHARS = 72;
 /** Tentativas por pedido (cada uma = 1 candidata montada e filtrada). */
 const MAX_ATTEMPTS = 400;
+/** Tentativas de cada nível de relaxamento (só rodam se faltar candidata). */
+const RELAX_ATTEMPTS = 200;
+/**
+ * Nível 3 (Dice contra a partida relaxado): teto por pedido. Na v2 a fila
+ * das reservas é cortada em 12 e a edge ainda filtra a partida — com o teto,
+ * as reservas fixas seguem completando a fila dos bots.
+ */
+export const PARTIDA_RELAX_MAX = 3;
 
 // ---------------------------------------------------------------------------
 // Semente → PRNG (xmur3 + mulberry32): mesma semente, mesma saída.
@@ -232,7 +247,7 @@ function nounBySuffix(w: string, g: Gender, rng: () => number): Candidate | null
   }
   if (/ose$/.test(w)) {
     const b = pick(rng, BODY_PARTS);
-    const text = pick(rng, [`doença crônica ${prep("de", b)}`, `endurecimento ${prep("de", b)}`]);
+    const text = pick(rng, [`ressecamento ${prep("de", b)}`, `endurecimento ${prep("de", b)}`]);
     return { text, parts: [b[1]], via: "sufixo-ose" };
   }
   if (/ismo$/.test(w)) {
@@ -256,7 +271,7 @@ function nounBySuffix(w: string, g: Gender, rng: () => number): Candidate | null
   if (/ada$/.test(w) && w.length >= 6) {
     if (rng() < 0.5) {
       const s = pick(rng, STRIKES);
-      return { text: `golpe dado com ${s}`, parts: [s], via: "sufixo-ada" };
+      return { text: `movimento rápido feito com ${s}`, parts: [s], via: "sufixo-ada" };
     }
     const act = pick(rng, ACTS);
     return { text: `ato de ${act}`, parts: [act], via: "sufixo-ada" };
@@ -452,8 +467,10 @@ export type OfflineInput = {
   category?: string | null;
   classe?: string | null;
   sinonimos?: readonly string[] | null;
-  /** O que a partida/rodada já usou (textos crus ou normalizados). */
+  /** O que a PARTIDA já usou (rodadas anteriores): evitado, mas relaxável. */
   avoid?: readonly string[];
+  /** O que a RODADA atual já serviu (💡, 🤖, bots): evitado SEMPRE. */
+  avoidRound?: readonly string[];
   count: number;
   seed: string;
 };
@@ -467,39 +484,66 @@ export function generateOfflineCandidates(input: OfflineInput): Candidate[] {
   const klass = inferWordClass(input);
   const category = String(input.category ?? "").trim().toLowerCase();
   const guard = truthGuard(input.meaning ?? "", (input.sinonimos ?? []).filter((s) => typeof s === "string"));
-  const avoidNorms = (input.avoid ?? []).map((a) => normTxt(String(a ?? ""))).filter(Boolean);
+  const norms = (xs: readonly string[] | undefined) =>
+    (xs ?? []).map((a) => normTxt(String(a ?? ""))).filter(Boolean);
+  const partidaNorms = norms(input.avoid);
+  const roundNorms = norms(input.avoidRound);
+  const partidaGrams = partidaNorms.map(grams);
+  const roundGrams = roundNorms.map(grams);
   const out: Candidate[] = [];
+  const outNorms = new Set<string>();
   const usedParts = new Set<string>();
   const usedHeads = new Set<string>();
-  const avoidGrams = avoidNorms.map(grams);
   const outGrams: Set<string>[] = [];
   const want = Math.max(0, Math.min(20, Math.floor(input.count)));
-  for (let i = 0; i < MAX_ATTEMPTS && out.length < want; i++) {
-    const c =
-      klass === "verbo"
-        ? verbCandidate(input.word, rng)
-        : klass === "adjetivo"
-          ? adjectiveCandidate(input.word, rng)
-          : klass === "adverbio"
-            ? adverbCandidate(rng)
-            : nounCandidate(input.word, category, rng);
-    // checagens baratas primeiro; trigramas só no fim (perfil: 1/3 do tempo)
-    if (tooLong(c.text)) continue;
-    // o mesmo núcleo duas vezes no pedido só depois de metade das tentativas
-    if (c.head && usedHeads.has(c.head) && i < MAX_ATTEMPTS / 2) continue;
-    const partNorms = c.parts.map(normTxt);
-    // trecho do banco já usado neste pedido ou presente no que a partida usou
-    if (partNorms.some((p) => usedParts.has(p) || avoidNorms.some((a) => p.length >= 10 && a.includes(p)))) continue;
-    const n = normTxt(c.text);
-    if (!n || definitionShapeIssue(c.text, input.word)) continue;
-    if (truthIssue(c.text, guard)) continue;
-    const g = grams(n);
-    if (avoidNorms.some((a, k) => a === n || diceSets(avoidGrams[k]!, g) > MATCH_REPEAT_THRESHOLD)) continue;
-    if (outGrams.some((o) => diceSets(o, g) > SELF_SIMILAR_THRESHOLD)) continue;
-    out.push(c);
-    outGrams.push(g);
-    partNorms.forEach((p) => usedParts.add(p));
-    if (c.head) usedHeads.add(c.head);
+  const make = () =>
+    klass === "verbo"
+      ? verbCandidate(input.word, rng)
+      : klass === "adjetivo"
+        ? adjectiveCandidate(input.word, rng)
+        : klass === "adverbio"
+          ? adverbCandidate(rng)
+          : nounCandidate(input.word, category, rng);
+  const repeats = (n: string, g: Set<string>, ns: string[], gs: Set<string>[]) =>
+    ns.some((a, k) => a === n || diceSets(gs[k]!, g) > MATCH_REPEAT_THRESHOLD);
+  const containsPart = (p: string, ns: string[]) =>
+    p.length >= 10 && ns.some((a) => a.includes(p));
+  // nível 0 = estrito (o de sempre); 1 = variedade no pedido; 2 = trecho da
+  // partida; 3 = Dice contra a partida (com teto). Cada nível só roda se faltar.
+  for (let level = 0; level <= 3 && out.length < want; level++) {
+    const attempts = level === 0 ? MAX_ATTEMPTS : RELAX_ATTEMPTS;
+    const cap = level === 3 ? Math.min(want, out.length + PARTIDA_RELAX_MAX) : want;
+    for (let i = 0; i < attempts && out.length < cap; i++) {
+      const c = make();
+      // checagens baratas primeiro; trigramas só no fim (perfil: 1/3 do tempo)
+      if (tooLong(c.text)) continue;
+      // o mesmo núcleo duas vezes no pedido só depois de metade das tentativas
+      if (level === 0 && c.head && usedHeads.has(c.head) && i < MAX_ATTEMPTS / 2) continue;
+      const partNorms = c.parts.map(normTxt);
+      // trecho do banco já usado neste pedido (nível 0) ou na rodada (sempre)
+      // ou na partida (níveis 0–1)
+      if (
+        partNorms.some(
+          (p) =>
+            (level === 0 && usedParts.has(p)) ||
+            containsPart(p, roundNorms) ||
+            (level <= 1 && containsPart(p, partidaNorms)),
+        )
+      )
+        continue;
+      const n = normTxt(c.text);
+      if (!n || outNorms.has(n) || definitionShapeIssue(c.text, input.word)) continue;
+      if (truthIssue(c.text, guard)) continue;
+      const g = grams(n);
+      if (repeats(n, g, roundNorms, roundGrams)) continue;
+      if (level <= 2 && repeats(n, g, partidaNorms, partidaGrams)) continue;
+      if (outGrams.some((o) => diceSets(o, g) > SELF_SIMILAR_THRESHOLD)) continue;
+      out.push(c);
+      outNorms.add(n);
+      outGrams.push(g);
+      partNorms.forEach((p) => usedParts.add(p));
+      if (c.head) usedHeads.add(c.head);
+    }
   }
   return out;
 }

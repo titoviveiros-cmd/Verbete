@@ -261,7 +261,9 @@ Deno.serve(async (req) => {
           category,
           classe,
           sinonimos,
-          avoid: [...previous, ...servedNorms],
+          // partida = evitada (relaxável se o banco acabar); rodada = sempre
+          avoid: previous,
+          avoidRound: servedNorms,
           count: RESERVE_COUNT,
           seed: `${roomId}:${round}:${crypto.randomUUID()}`,
         }),
