@@ -23,3 +23,24 @@ export function travaAppConfig(o: {
   emergencia?: boolean;
   query: Query;
 }): Promise<{ ok: boolean; prontidao?: Prontidao; erro?: string; aviso?: string }>;
+
+export const FASES: readonly ["escolha", "suspender", "textos", "revogar"];
+export const EVENTOS_IA: readonly string[];
+export const SQL_FASES_SEM_IA: string;
+
+export type FaseResultado = {
+  ok: boolean;
+  fase: string;
+  bloqueios: string[];
+  avisos: string[];
+  manuais: string[];
+  dados?: Record<string, unknown>;
+};
+
+export function avaliarFaseSemIa(
+  fase: string,
+  row: Record<string, unknown> | null | undefined,
+  meta?: number,
+): FaseResultado;
+
+export function checarFaseSemIa(query: Query, fase: string, meta?: number): Promise<FaseResultado>;

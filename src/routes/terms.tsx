@@ -3,19 +3,22 @@ import {
   AI_PROVIDER,
   CONTACT_EMAIL,
   NO_AI_LEGAL,
+  TERMS_DISPLAY_DATE,
   formatLegalDate,
 } from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
-// A data de "Última atualização" É a versão aceita (TERMS_VERSION em
-// src/lib/terms-record.ts; terms-consent.test.ts exige as duas juntas).
-// Mudou a data = todo aparelho aceita de novo antes do próximo conteúdo.
+// "Última atualização" = TERMS_DISPLAY_DATE (última revisão); a versão
+// aceita (TERMS_VERSION) é a da última revisão MATERIAL (legal.ts,
+// TERMS_CHANGES; terms-consent.test.ts amarra as duas). Revisão material =
+// todo aparelho aceita de novo antes do próximo conteúdo; não material = só
+// a data muda.
 // Sem prazo de retenção no texto: a licença vale enquanto o conteúdo
 // estiver guardado (prazos na Política; mudar só a Política não muda
 // TERMS_VERSION).
 // Modo sem IA externa (NO_AI_LEGAL != null; docs/sem-ia-externa.md): §5 sem
 // IA, licença sem "processar pela IA", nome legal do desenvolvedor e a data
-// NO_AI_TERMS_VERSION (= TERMS_VERSION nesse modo: UM novo aceite). A data
+// NO_AI_TERMS_VERSION (pacote material único com /denuncias: UM novo aceite). A data
 // literal abaixo continua sendo a dos Termos com IA (2026-10-27).
 export const Route = createFileRoute("/terms")({
   head: () => ({
@@ -50,7 +53,7 @@ function TermsPage() {
         <h1 className="font-display text-3xl mt-2">Termos de Uso</h1>
         <p className="text-xs text-muted-foreground mt-1">
           {noAi
-            ? `Última atualização: ${formatLegalDate(noAi.termsVersion)}`
+            ? `Última atualização: ${formatLegalDate(TERMS_DISPLAY_DATE)}`
             : "Última atualização: 27 de outubro de 2026"}
         </p>
       </header>
@@ -69,8 +72,10 @@ function TermsPage() {
           <p>
             Para criar conteúdo no Verbete — apelido, definições, nome no
             ranking ou palpites do Desafio Diário — você precisa marcar que leu
-            e aceita estes Termos. Quando eles mudarem de forma relevante, a
-            data acima muda e pedimos um novo aceite antes do próximo conteúdo.
+            e aceita estes Termos.{" "}
+            {noAi
+              ? "Quando eles mudarem de forma relevante — no que coletamos ou compartilhamos, nas suas obrigações e direitos ou em quem responde pelo Verbete —, pedimos um novo aceite antes do próximo conteúdo; ajustes de redação só mudam a data acima."
+              : "Quando eles mudarem de forma relevante, a data acima muda e pedimos um novo aceite antes do próximo conteúdo."}{" "}
             Se não concorda, não use o serviço.
           </p>
         </section>
@@ -143,8 +148,21 @@ function TermsPage() {
             bloqueadas e links) e o dono da sala pode remover jogadores. A
             moderação analisa as denúncias e pode remover conteúdo e banir, por
             um prazo ou definitivamente, o aparelho e/ou a conta de quem violar
-            estes Termos, tirando-o da partida em andamento. Para contestar uma
-            decisão, escreva para o contato abaixo.
+            estes Termos, tirando-o da partida em andamento.{" "}
+            {noAi ? (
+              <>
+                Quem denuncia acompanha o resultado na página{" "}
+                <a href="/denuncias" className="underline">
+                  Denúncias
+                </a>
+                ; quem teve conteúdo removido ou a conta suspensa recebe um
+                aviso com o motivo e pode contestar a decisão por lá, nos prazos
+                informados nessa página. Quem foi denunciado nunca sabe quem
+                denunciou.
+              </>
+            ) : (
+              "Para contestar uma decisão, escreva para o contato abaixo."
+            )}
           </p>
         </section>
 
@@ -221,8 +239,10 @@ function TermsPage() {
         <section>
           <h2 className="font-display text-lg mb-1">9. Mudanças</h2>
           <p>
-            Podemos atualizar estes termos. Mudanças relevantes mudam a data no
-            topo da página e pedem um novo aceite antes do próximo conteúdo.
+            Podemos atualizar estes termos.{" "}
+            {noAi
+              ? "Mudanças relevantes pedem um novo aceite antes do próximo conteúdo; ajustes de redação só mudam a data no topo da página."
+              : "Mudanças relevantes mudam a data no topo da página e pedem um novo aceite antes do próximo conteúdo."}
           </p>
         </section>
 

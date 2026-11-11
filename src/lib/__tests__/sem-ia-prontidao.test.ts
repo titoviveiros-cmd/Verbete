@@ -4,7 +4,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
+  avaliarFaseSemIa,
   avaliarProntidaoSemIa,
+  checarFaseSemIa,
+  EVENTOS_IA,
+  FASES,
+  SQL_FASES_SEM_IA,
   checarProntidaoSemIa,
   META_APROVADOS_JOGAVEIS,
   SQL_PRONTIDAO_SEM_IA,
@@ -182,5 +187,131 @@ describe("travaAppConfig (set-app-config.mjs)", () => {
     expect(escrita).toBeGreaterThan(src.indexOf("async function gravar()"));
     expect(del).toBeGreaterThan(src.indexOf("async function gravar()"));
     expect(src).toMatch(/process\.exitCode = 3/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Portões por fase (R3): escolha → suspender → textos → revogar.
+// ---------------------------------------------------------------------------
+const PRONTO = {
+  daily_mode: "escolha",
+  h_desde_daily_mode: 30,
+  ai_mode: "suspenso",
+  min_desde_ai_mode: 26 * 60,
+  aprovado_jogavel: 170,
+  escolha_jogadas_24h: 40,
+  sem_estoque_24h: 0,
+  ia_desde_ai_mode: 0,
+  ia_24h: 0,
+  fns_suspensas_1h: [
+    "score-similarity",
+    "bot-definitions-v2",
+    "bot-definitions",
+  ],
+};
+
+describe("portões por fase (só leitura, falha fechada)", () => {
+  it("ordem fixa das fases", () => {
+    expect(FASES).toEqual(["escolha", "suspender", "textos", "revogar"]);
+  });
+
+  it("com tudo pronto, as 4 fases liberam (e cada uma lista o que conferir fora do banco)", () => {
+    for (const f of FASES) {
+      const r = avaliarFaseSemIa(f, PRONTO);
+      expect(r.bloqueios, f).toEqual([]);
+      expect(r.ok, f).toBe(true);
+      expect(r.manuais.length, f).toBeGreaterThan(0);
+    }
+  });
+
+  it("escolha: só o estoque conta (167 bloqueia)", () => {
+    expect(
+      avaliarFaseSemIa("escolha", {
+        ...PRONTO,
+        daily_mode: "juiz",
+        aprovado_jogavel: 168,
+      }).ok,
+    ).toBe(true);
+    expect(
+      avaliarFaseSemIa("escolha", { ...PRONTO, aprovado_jogavel: 167 }).ok,
+    ).toBe(false);
+  });
+
+  it("suspender: exige escolha há ≥ 24 h, jogada concluída e zero sem_estoque", () => {
+    const base = { ...PRONTO, ai_mode: "ligado", min_desde_ai_mode: 9000 };
+    expect(avaliarFaseSemIa("suspender", base).ok).toBe(true);
+    for (const [campo, valor, re] of [
+      ["daily_mode", "juiz", /daily_mode = 'juiz'/],
+      ["h_desde_daily_mode", 3, /< 24 h/],
+      ["escolha_jogadas_24h", 0, /nenhuma jogada/],
+      ["sem_estoque_24h", 2, /sem_estoque/],
+      ["aprovado_jogavel", 100, /< 168/],
+    ] as const) {
+      const r = avaliarFaseSemIa("suspender", { ...base, [campo]: valor });
+      expect(r.ok, campo).toBe(false);
+      expect(r.bloqueios.join(), campo).toMatch(re);
+    }
+  });
+
+  it("textos: IA suspensa há ≥ 5 min e NENHUM evento de IA depois da suspensão", () => {
+    const t = { ...PRONTO, min_desde_ai_mode: 6 };
+    expect(avaliarFaseSemIa("textos", t).ok).toBe(true);
+    expect(avaliarFaseSemIa("textos", { ...t, ai_mode: "ligado" }).ok).toBe(
+      false,
+    );
+    expect(avaliarFaseSemIa("textos", { ...t, min_desde_ai_mode: 2 }).ok).toBe(
+      false,
+    );
+    expect(
+      avaliarFaseSemIa("textos", {
+        ...t,
+        ia_desde_ai_mode: 1,
+      }).bloqueios.join(),
+    ).toMatch(/depois da suspensão/);
+    // sem tráfego: só aviso
+    const quieto = avaliarFaseSemIa("textos", { ...t, fns_suspensas_1h: [] });
+    expect(quieto.ok).toBe(true);
+    expect(quieto.avisos.join()).toMatch(/score-similarity/);
+  });
+
+  it("revogar: ≥ 24 h suspensa e zero IA em 24 h", () => {
+    expect(
+      avaliarFaseSemIa("revogar", { ...PRONTO, min_desde_ai_mode: 60 }).ok,
+    ).toBe(false);
+    expect(avaliarFaseSemIa("revogar", { ...PRONTO, ia_24h: 3 }).ok).toBe(
+      false,
+    );
+  });
+
+  it("valor ilegível ou fase desconhecida = bloqueio", () => {
+    for (const campo of [
+      "aprovado_jogavel",
+      "escolha_jogadas_24h",
+      "sem_estoque_24h",
+      "ia_desde_ai_mode",
+      "min_desde_ai_mode",
+      "h_desde_daily_mode",
+    ])
+      expect(
+        avaliarFaseSemIa("revogar", { ...PRONTO, [campo]: "x" }).ok,
+        campo,
+      ).toBe(false);
+    expect(avaliarFaseSemIa("qualquer", PRONTO).ok).toBe(false);
+  });
+
+  it("checarFaseSemIa: banco fora ou sem linha = bloqueio", async () => {
+    expect((await checarFaseSemIa(quebrado(), "textos")).ok).toBe(false);
+    expect((await checarFaseSemIa(banco(null), "textos")).ok).toBe(false);
+    expect((await checarFaseSemIa(banco(PRONTO), "textos")).ok).toBe(true);
+  });
+
+  it("a consulta só LÊ e conta exatamente os eventos de chamada ao provedor", () => {
+    const sql = SQL_FASES_SEM_IA.toUpperCase();
+    for (const w of ["INSERT", "UPDATE ", "DELETE", "ALTER", "DROP", "CREATE"])
+      expect(sql).not.toContain(w);
+    for (const k of EVENTOS_IA) expect(SQL_FASES_SEM_IA).toContain(`'${k}'`);
+    expect(EVENTOS_IA).not.toContain("ai_suspended");
+    const cli = readFileSync("scripts/check-sem-ia-prontidao.mjs", "utf8");
+    expect(cli).toMatch(/READ ONLY/);
   });
 });

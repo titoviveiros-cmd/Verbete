@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SQL_PRONTIDAO_SEM_IA } from "./lib/sem-ia-prontidao.mjs";
+import { SQL_FASES_SEM_IA, SQL_PRONTIDAO_SEM_IA } from "./lib/sem-ia-prontidao.mjs";
 
 const db = new pg.Client({
   connectionString: process.env.DB_URL,
@@ -205,6 +205,18 @@ if (pront.aprovado_jogavel < 168) {
   );
   const gate = node(["scripts/check-sem-ia-prontidao.mjs"]);
   check("trava 168: portão só de leitura sai 1 (não pronto)", gate.status === 1, `exit=${gate.status}`);
+  // R3: a consulta dos portões por fase roda no banco migrado (colunas e
+  // tipos reais) e cada fase bloqueia sem estoque
+  const fases = await one(SQL_FASES_SEM_IA);
+  check(
+    "portões por fase: a consulta roda no banco migrado (só leitura)",
+    Number.isInteger(fases?.aprovado_jogavel) && Number.isInteger(fases?.ia_24h) && Array.isArray(fases?.fns_suspensas_1h),
+    JSON.stringify(fases),
+  );
+  const porFase = ["escolha", "suspender", "textos", "revogar"].map(
+    (f) => node(["scripts/check-sem-ia-prontidao.mjs", "--fase", f]).status,
+  );
+  check("portões por fase: as 4 fases saem 1 sem estoque", porFase.every((s) => s === 1), JSON.stringify(porFase));
   const emer = node(["scripts/set-app-config.mjs", "ai_mode", "suspenso", "--emergencia"]);
   const emerVal = await cfgVal("ai_mode");
   await restoreCfg("ai_mode", aiOrig);

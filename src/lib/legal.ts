@@ -104,6 +104,65 @@ export const NO_AI_TERMS_VERSION = "<PENDENTE: data da ativação AAAA-MM-DD>";
 /** Versão dos Termos com a IA ligada (texto publicado em 27/10/2026). */
 export const AI_TERMS_VERSION = "2026-10-27";
 
+// ---------------------------------------------------------------------------
+// Data exibida × versão de CONSENTIMENTO (11/11/2026).
+// Cada revisão dos Termos entra em TERMS_CHANGES. A data exibida em /terms é a
+// da ÚLTIMA revisão; a versão aceita (TERMS_VERSION em terms-record.ts) é a da
+// última revisão MATERIAL. Só revisão material pede novo aceite.
+// MATERIAL = cria ou amplia tratamento/compartilhamento de dados ou a licença
+// sobre o conteúdo; cria/muda obrigação, restrição, sanção ou direito do
+// usuário (denúncia, recurso, banimento); muda a parte contratante. NÃO
+// material = redação, erro de digitação, link, contato, data, reordenação, ou
+// retirar um tratamento sem criar outro. Na dúvida: material.
+// ---------------------------------------------------------------------------
+
+export type TermsChange = {
+  /** AAAA-MM-DD — vira a "Última atualização" de /terms. */
+  date: string;
+  /** true = pede novo aceite (versão de consentimento passa a ser esta data). */
+  material: boolean;
+  resumo: string;
+};
+
+/** Histórico publicado dos Termos com a IA ligada. */
+export const AI_TERMS_CHANGES: readonly TermsChange[] = [
+  { date: "2026-05-18", material: true, resumo: "primeira versão" },
+  {
+    date: AI_TERMS_VERSION,
+    material: true,
+    resumo:
+      "conteúdo proibido completo, denúncia de jogador, moderação, IA e licença",
+  },
+];
+
+/**
+ * Pacote ÚNICO de reaceite do modo sem IA: textos sem IA externa (#63), nome
+ * legal do desenvolvedor (parte contratante) e o fluxo de denúncia com
+ * retorno, aviso ao autor e recurso da página /denuncias (#65, ECA Digital
+ * arts. 28–30). Material (muda a parte contratante e os direitos de denúncia
+ * e recurso) → UM novo aceite, na data da ativação. A ativação exige
+ * /denuncias no repositório (build/legal-guard.ts): sem ela, os dois textos
+ * pediriam dois aceites.
+ */
+export const NO_AI_TERMS_CHANGE: TermsChange = {
+  date: NO_AI_TERMS_VERSION,
+  material: true,
+  resumo:
+    "sem IA externa, nome legal do desenvolvedor e denúncia com retorno, aviso ao autor e recurso (/denuncias)",
+};
+
+/** Data exibida e versão de consentimento de um histórico (puro, testado). */
+export function termsVersionsOf(changes: readonly TermsChange[]): {
+  display: string;
+  consent: string;
+} {
+  if (changes.length === 0) throw new Error("TERMS_CHANGES vazio");
+  const display = changes[changes.length - 1]!.date;
+  const material = changes.filter((c) => c.material);
+  if (material.length === 0) throw new Error("nenhuma revisão material");
+  return { display, consent: material[material.length - 1]!.date };
+}
+
 export type NoAiLegal = {
   /** Nome legal do desenvolvedor exibido em /privacy e /terms. */
   developerName: string;
@@ -120,6 +179,17 @@ export const NO_AI_LEGAL: NoAiLegal | null =
   EXTERNAL_AI_MODE === "desligada"
     ? { developerName: DEVELOPER_LEGAL_NAME, termsVersion: NO_AI_TERMS_VERSION }
     : null;
+
+/** Histórico vigente: com a IA ligada, exatamente o publicado. */
+export const TERMS_CHANGES: readonly TermsChange[] = NO_AI_LEGAL
+  ? [...AI_TERMS_CHANGES, NO_AI_TERMS_CHANGE]
+  : AI_TERMS_CHANGES;
+
+const TERMS_VERSIONS = termsVersionsOf(TERMS_CHANGES);
+/** "Última atualização" de /terms. */
+export const TERMS_DISPLAY_DATE = TERMS_VERSIONS.display;
+/** Versão aceita (= TERMS_VERSION em terms-record.ts). */
+export const TERMS_CONSENT_VERSION = TERMS_VERSIONS.consent;
 
 /**
  * O que ainda falta para publicar o modo sem IA (vazio = pronto). Com a IA

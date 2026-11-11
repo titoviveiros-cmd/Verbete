@@ -46,6 +46,17 @@ Travas (qualquer uma reprova):
   aceites. Se o parecer jurídico (ECA Digital) pedir mudança nos Termos,
   incluir **antes** da ativação, no mesmo pacote.
 - A `/privacy` não tem aceite: só a data muda.
+- **Data exibida × versão de consentimento (11/11/2026, `legal.ts`
+  `TERMS_CHANGES`).** Cada revisão dos Termos entra no histórico com
+  `material: true|false`. A "Última atualização" é a da última revisão; a
+  versão aceita (`TERMS_VERSION`) é a da última revisão **material**. Ajuste
+  de redação = só a data muda, sem novo aceite. Critério de material no
+  comentário de `legal.ts` (na dúvida, material).
+- **Reaceite único com o #65:** a revisão do modo sem IA
+  (`NO_AI_TERMS_CHANGE`) já inclui o fluxo de denúncia com retorno, aviso ao
+  autor e recurso (§4 dos Termos aponta `/denuncias`). O build sem IA
+  **falha** se `src/routes/denuncias.tsx` não existir (`build/legal-guard.ts`):
+  ativar antes do #65 daria link quebrado e, depois, um segundo aceite.
 
 ## 4. Ordem obrigatória (cada passo com autorização própria do dono)
 
@@ -81,6 +92,16 @@ chave presente). Ordem: portão verde → `ai_mode suspenso` (≤ 30 s por
 isolate) → `AI_FORCE_SUSPEND=1` → edges com este código → Worker (Version
 sem tráfego → smoke → 100%). Detalhe, segundos de exposição e smoke: notas de
 lançamento (PR63-CAMINHO-SEM-IA-11-11).
+
+**Portões por fase (só leitura, `--fase`).** Antes de cada troca:
+`DB_URL=... node scripts/check-sem-ia-prontidao.mjs --fase <f>` tem de sair 0.
+
+| Fase | Antes de | O banco prova | Conferir à mão (☐) |
+|---|---|---|---|
+| `escolha` | `daily_mode escolha` | ≥ 168 aprovados jogáveis | — |
+| `suspender` | `ai_mode suspenso` | escolha há ≥ 24 h, ≥ 1 jogada concluída e 0 `sem_estoque` em 24 h, ≥ 168 | `BOTS_OFFLINE_GENERATOR` e edges do #62 no ar |
+| `textos` | deploy das edges e do Worker sem IA | `suspenso` há ≥ 5 min e **0** eventos de chamada à IA depois da troca (+ o acima) | `AI_FORCE_SUSPEND`; anotar Version/SHA |
+| `revogar` | remover/revogar `GEMINI_API_KEY` | `suspenso` há ≥ 24 h e 0 eventos de IA em 24 h | Worker/edges sem IA com smoke verde |
 
 Rollback por passo: ver as notas de lançamento (FRENTE3-13PLUS-RUNTIME).
 Rollback do passo 3 = Worker anterior (os aceites da versão nova ficam no
