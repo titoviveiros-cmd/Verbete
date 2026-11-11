@@ -9,8 +9,10 @@
 --    (pública no site) podia encher public.ops_events (retenção de 30 dias)
 --    sem sessão. Produção 10/11: ~1.800 linhas vivas, 16 MB no total.
 --    Agora (mesmo contrato: RETURNS void, descarte silencioso):
---      • payload acima de 2 kB vira {"truncated": true, "bytes": n} (o client
---        manda mensagem ≤300 + stack ≤900 + rota — cabe com folga);
+--      • payload acima de 2 kB vira {"truncated": true, "bytes": n, "message":
+--        ≤300, "route": ≤200} — sem as pilhas (client_error ≈ 1,4 kB cabe;
+--        boundary_crash com component_stack chega a ≈ 1,97 kB, então o resumo
+--        guarda o que diagnostica em vez de descartar tudo);
 --      • sem session_key: 60 eventos/min no total desse balde;
 --      • teto GLOBAL: 300 eventos/min, 1.000/hora e 2.000/dia (qualquer chave;
 --        produção 10/11 ≈ 60 eventos/dia). Pior caso sob ataque: 2.000 × 2 kB
@@ -53,10 +55,17 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Tamanho: o client real manda ~1,3 kB no máximo.
+  -- Tamanho: client_error real ≈ 1,4 kB; boundary_crash (com component_stack)
+  -- chega a ≈ 1,97 kB com acentos e aspas — perto do teto. Acima de 2 kB, fica
+  -- um resumo que ainda diagnostica: mensagem (300) e rota (200), sem as pilhas.
   v_bytes := octet_length(v_payload::text);
   IF v_bytes > 2048 THEN
-    v_payload := jsonb_build_object('truncated', true, 'bytes', v_bytes);
+    v_payload := jsonb_strip_nulls(jsonb_build_object(
+      'truncated', true,
+      'bytes', v_bytes,
+      'message', left(CASE WHEN jsonb_typeof(v_payload) = 'object' THEN v_payload ->> 'message' END, 300),
+      'route', left(CASE WHEN jsonb_typeof(v_payload) = 'object' THEN v_payload ->> 'route' END, 200)
+    ));
   END IF;
 
   -- Por sessão (como antes) ou, sem sessão, um balde comum.

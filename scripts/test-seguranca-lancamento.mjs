@@ -293,10 +293,25 @@ const errCode = (e) => String(e?.message ?? e);
 if (!antes) {
   await db.query("BEGIN");
   try {
-    const big = { message: "x".repeat(5000) };
+    const big = { message: "x".repeat(5000), stack: "at y\n".repeat(1000), route: "/sala/1234" };
     await db.query(`SELECT public.log_ops_event('client_error', $1::jsonb, $2, NULL, 'teste')`, [JSON.stringify(big), `ops_${tag}_big`]);
-    const [b] = await q(`SELECT payload FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_big`]);
-    check("payload > 2 kB vira resumo (truncated)", b?.payload?.truncated === true && !b?.payload?.message, JSON.stringify(b?.payload ?? null).slice(0, 80));
+    const [b] = await q(`SELECT payload, octet_length(payload::text) AS n FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_big`]);
+    check(
+      "payload > 2 kB vira resumo (truncated) que guarda mensagem ≤300 e rota, sem pilha",
+      b?.payload?.truncated === true && b?.payload?.message?.length === 300 && b?.payload?.route === "/sala/1234" && !("stack" in (b?.payload ?? {})) && b.n < 1024,
+      `${b?.n} B: ${JSON.stringify(b?.payload ?? null).slice(0, 60)}`,
+    );
+    // payload que não é objeto (array enorme): só o resumo, sem erro
+    await db.query(`SELECT public.log_ops_event('client_error', $1::jsonb, $2, NULL, 'teste')`, [JSON.stringify(Array(3000).fill("z")), `ops_${tag}_arr`]);
+    const [a] = await q(`SELECT payload FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_arr`]);
+    check("payload grande que não é objeto vira {truncated, bytes}", a?.payload?.truncated === true && Object.keys(a.payload).sort().join() === "bytes,truncated", JSON.stringify(a?.payload ?? null));
+    // boundary_crash realista no limite (acentos, aspas, component_stack): cabe inteiro
+    const frames = "    at RoomPage (https://verbete.app/assets/index-AbC123xy.js:12:3456)\n".repeat(20);
+    const msg = 'Não foi possível ação "sala" '.repeat(20).slice(0, 300);
+    const crash = { message: msg, stack: ("Error: " + msg + "\n" + frames).slice(0, 900), component_stack: ("\n" + frames).slice(0, 500), route: "/sala/1234" };
+    await db.query(`SELECT public.log_ops_event('boundary_crash', $1::jsonb, $2, NULL, 'teste')`, [JSON.stringify(crash), `ops_${tag}_crash`]);
+    const [cr] = await q(`SELECT payload, octet_length(payload::text) AS n FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_crash`]);
+    check("boundary_crash realista (≈1,97 kB) fica inteiro", cr?.payload?.component_stack?.length === 500 && !cr?.payload?.truncated, `${cr?.n} B`);
     const small = { message: "erro real", stack: "at x".repeat(200), route: "/sala" };
     await db.query(`SELECT public.log_ops_event('client_error', $1::jsonb, $2, NULL, 'teste')`, [JSON.stringify(small), `ops_${tag}_ok`]);
     const [s] = await q(`SELECT payload FROM public.ops_events WHERE session_key = $1`, [`ops_${tag}_ok`]);
