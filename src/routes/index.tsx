@@ -548,6 +548,11 @@ function HomePage() {
           <Link to="/terms" className="underline hover:text-foreground">
             Termos
           </Link>
+          <span aria-hidden>·</span>
+          {/* ECA Digital art. 29 §3º: canal de denúncia público e fácil. */}
+          <Link to="/denuncias" className="underline hover:text-foreground">
+            Denúncias
+          </Link>
         </p>
         {/* Versão discreta (decisão do Tito, 26/10), só na Home: o texto vem
             pronto do build (lib/version-label) — produção só
