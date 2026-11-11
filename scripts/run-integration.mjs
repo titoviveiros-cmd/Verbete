@@ -28,6 +28,7 @@ const SUITES = [
   "test-player-id.mjs",
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
+  "test-sala-trancada.mjs", // ECA Digital B4: sala trancada pelo dono, expulso não volta, partida rápida fechada (11/11/2026)
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
   "test-definition-filter.mjs",
