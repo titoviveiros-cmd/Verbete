@@ -121,6 +121,19 @@ describe("estado do repositório — backend e textos sempre juntos", () => {
       "processá-lo — inclusive pela inteligência artificial, como descrito acima — e usá-lo",
     );
     expect(t).not.toMatch(/Estes Termos valem entre/);
+    const termsMod = (await ROUTES.terms()) as unknown as {
+      Route: {
+        options: {
+          head: () => { meta: Array<{ name?: string; content?: string }> };
+        };
+      };
+    };
+    expect(
+      termsMod.Route.options.head().meta.find((m) => m.name === "description")
+        ?.content,
+    ).toBe(
+      "Termos de uso do Verbete: aceite, conteúdo proibido, denúncia e moderação, inteligência artificial e limites de responsabilidade.",
+    );
     cleanup();
     const s = flat(await page("support"));
     expect(s).toMatch(/ganha o bônus 🧠/);
@@ -185,6 +198,19 @@ describe("modo 'desligada': textos legais e de jogo", () => {
       "licença gratuita e não exclusiva",
     ])
       expect(t).toContain(keep);
+    // 11/11: a descrição da página (busca/compartilhamento) também sem IA
+    const mod = (await ROUTES.terms()) as unknown as {
+      Route: {
+        options: {
+          head: () => { meta: Array<{ name?: string; content?: string }> };
+        };
+      };
+    };
+    const desc =
+      mod.Route.options.head().meta.find((m) => m.name === "description")
+        ?.content ?? "";
+    expect(desc).toMatch(/^Termos de uso do Verbete/);
+    expect(desc).not.toMatch(/inteligência artificial/i);
   });
 
   it("Privacidade: sem envio à IA, provedor fora de 'Quem processa', nome legal, histórico transparente", async () => {

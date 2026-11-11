@@ -63,6 +63,25 @@ Travas (qualquer uma reprova):
    `docs/google-play-data-safety-draft.md` §7), ficha sem menção a IA → AAB
    com o modo sem IA.
 
+**Trava dos 168 (11/11/2026, `scripts/lib/sem-ia-prontidao.mjs`).** Portão só
+de leitura: `DB_URL=... node scripts/check-sem-ia-prontidao.mjs` (sai 0 só com
+`daily_mode='escolha'` **e** ≥ 168 aprovados jogáveis — mesmo critério do
+painel). `scripts/set-app-config.mjs` recusa (exit 3, nada gravado)
+`ai_mode suspenso` sem os dois e `daily_mode escolha` sem os 168; banco
+ilegível = recusa. Contenção de emergência (chave vazada, custo):
+`ai_mode suspenso --emergencia` (avisa que o Diário pausa se estiver em
+`juiz`). `AI_FORCE_SUSPEND`/remoção da chave/SQL à mão **não** passam pela
+trava: só depois do portão verde.
+
+**Janela única (sem indisponibilidade).** Os textos sem IA vão ao ar **por
+último**, quando a IA já está parada; o corte por código das edges não
+depende de `ai_mode` (teste em execução de 11/11: com `"desligada"` as 3
+edges respondem 200, sem chamar o provedor, com `ai_mode='ligado'` e com a
+chave presente). Ordem: portão verde → `ai_mode suspenso` (≤ 30 s por
+isolate) → `AI_FORCE_SUSPEND=1` → edges com este código → Worker (Version
+sem tráfego → smoke → 100%). Detalhe, segundos de exposição e smoke: notas de
+lançamento (PR63-CAMINHO-SEM-IA-11-11).
+
 Rollback por passo: ver as notas de lançamento (FRENTE3-13PLUS-RUNTIME).
 Rollback do passo 3 = Worker anterior (os aceites da versão nova ficam no
 aparelho; voltar à versão antiga pede o aceite antigo de novo).

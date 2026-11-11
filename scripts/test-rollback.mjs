@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SQL_PRONTIDAO_SEM_IA } from "./lib/sem-ia-prontidao.mjs";
 
 const db = new pg.Client({
   connectionString: process.env.DB_URL,
@@ -169,6 +170,57 @@ const denied = [
   node(["scripts/set-app-config.mjs", "ops_alert_webhook_url", "http://inseguro"]).status,
 ];
 check("set-app-config recusa chave fora da lista e valor inválido", denied.every((s) => s === 2), JSON.stringify(denied));
+
+// Trava dos 168 (11/11/2026, scripts/lib/sem-ia-prontidao.mjs): a consulta
+// REAL contra o banco migrado e o set-app-config REAL recusando sem estoque.
+const cfgVal = async (k) => (await one(`SELECT value FROM public.app_config WHERE key = $1`, [k]))?.value;
+const restoreCfg = async (k, v) =>
+  v === undefined
+    ? db.query(`DELETE FROM public.app_config WHERE key = $1`, [k])
+    : db.query(
+        `INSERT INTO public.app_config (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [k, v],
+      );
+const aiOrig = await cfgVal("ai_mode");
+const dmOrig = await cfgVal("daily_mode");
+const pront = await one(SQL_PRONTIDAO_SEM_IA);
+check(
+  "trava 168: a consulta de prontidão roda no banco migrado (mesmo critério do painel)",
+  Number.isInteger(pront?.aprovado_jogavel),
+  JSON.stringify(pront),
+);
+if (pront.aprovado_jogavel < 168) {
+  const aiTry = node(["scripts/set-app-config.mjs", "ai_mode", "suspenso"]);
+  check(
+    "trava 168: ai_mode=suspenso RECUSADO sem estoque (exit 3, nada gravado)",
+    aiTry.status === 3 && (await cfgVal("ai_mode")) === aiOrig,
+    `exit=${aiTry.status} ${aiTry.stderr.trim().slice(0, 140)}`,
+  );
+  const dmTry = node(["scripts/set-app-config.mjs", "daily_mode", "escolha"]);
+  check(
+    "trava 168: daily_mode=escolha RECUSADO sem estoque (exit 3, nada gravado)",
+    dmTry.status === 3 && (await cfgVal("daily_mode")) === dmOrig,
+    `exit=${dmTry.status} ${dmTry.stderr.trim().slice(0, 140)}`,
+  );
+  const gate = node(["scripts/check-sem-ia-prontidao.mjs"]);
+  check("trava 168: portão só de leitura sai 1 (não pronto)", gate.status === 1, `exit=${gate.status}`);
+  const emer = node(["scripts/set-app-config.mjs", "ai_mode", "suspenso", "--emergencia"]);
+  const emerVal = await cfgVal("ai_mode");
+  await restoreCfg("ai_mode", aiOrig);
+  check(
+    "trava 168: contenção de emergência (--emergencia) continua possível e avisa",
+    emer.status === 0 && emerVal === "suspenso" && /EMERGÊNCIA/.test(emer.stderr),
+    `exit=${emer.status} valor=${emerVal}`,
+  );
+  const back = node(["scripts/set-app-config.mjs", "ai_mode", "ligado"]);
+  await restoreCfg("ai_mode", aiOrig);
+  check("trava 168: rollback ai_mode=ligado nunca é barrado", back.status === 0, `exit=${back.status}`);
+} else {
+  check("trava 168: banco do CI já tem ≥ 168 aprovados — casos negativos pulados", true);
+}
+await restoreCfg("ai_mode", aiOrig);
+await restoreCfg("daily_mode", dmOrig);
 
 const after = await one(`SELECT to_regprocedure('public.migrate_host(uuid)') IS NOT NULL AS m1`);
 check("banco do CI segue no M1 após os testes (transações desfeitas)", after.m1);

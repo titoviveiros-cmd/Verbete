@@ -25,8 +25,10 @@ export const Route = createFileRoute("/terms")({
       READING_VIEWPORT,
       {
         name: "description",
-        content:
-          "Termos de uso do Verbete: aceite, conteúdo proibido, denúncia e moderação, inteligência artificial e limites de responsabilidade.",
+        // modo sem IA: a descrição (busca/compartilhamento) não cita IA
+        content: NO_AI_LEGAL
+          ? "Termos de uso do Verbete: aceite, conteúdo proibido, denúncia e moderação, seu conteúdo e limites de responsabilidade."
+          : "Termos de uso do Verbete: aceite, conteúdo proibido, denúncia e moderação, inteligência artificial e limites de responsabilidade.",
       },
       { name: "robots", content: "index,follow" },
     ],
