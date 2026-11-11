@@ -541,6 +541,11 @@ function HomePage() {
 
       <div className="relative z-10 text-center text-[11px] text-muted-foreground py-2 px-5">
         <p className="flex justify-center gap-3">
+          {/* B7 ECA Digital: página para pais e responsáveis. */}
+          <Link to="/pais" className="underline hover:text-foreground">
+            Para pais
+          </Link>
+          <span aria-hidden>·</span>
           <Link to="/privacy" className="underline hover:text-foreground">
             Privacidade
           </Link>
