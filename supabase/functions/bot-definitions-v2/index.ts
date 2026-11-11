@@ -62,7 +62,10 @@ import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
 import {
   generateOfflineDefinitions,
+  OFFLINE_RESERVE_EXTRA,
   offlineGeneratorEnabled,
+  offlineServeBatch,
+  keepClaimed,
 } from "../bot-definitions/offline.ts";
 
 const corsHeaders = {
@@ -264,7 +267,11 @@ Deno.serve(async (req) => {
           // partida = evitada (relaxável se o banco acabar); rodada = sempre
           avoid: previous,
           avoidRound: servedNorms,
-          count: RESERVE_COUNT,
+          // G3: faixa por tipo de chamada (count 1 = 🤖; sala de 1 bot cai junto)
+          lane: count === 1 ? "robo" : "bots",
+          // só o necessário (+3 de folga para os filtros): a edge devolve
+          // count + OFFLINE_RESERVE_EXTRA; as fixas completam a fila de 12
+          count: Math.min(RESERVE_COUNT, count + OFFLINE_RESERVE_EXTRA + 3),
           seed: `${roomId}:${round}:${crypto.randomUUID()}`,
         }),
         ...fallbacksIn,
@@ -281,15 +288,44 @@ Deno.serve(async (req) => {
         previous,
         servedNorms,
       });
-      // gerador sem IA: as primeiras (as que o cliente usa) entram na memória
-      // da rodada — 💡, 🤖 e bots da mesma rodada não repetem o mesmo texto
-      if (offlineGen && vetted.length > 0) {
-        await admin
+      // Gerador sem IA (G3, 11/11): devolve só count + OFFLINE_RESERVE_EXTRA
+      // reservas e grava TODAS na memória da rodada. Antes gravava só as
+      // `count` primeiras e devolvia 12 — o 🤖 (count 1) sorteia entre as
+      // `fallbacks` e em 91% das vezes escolhia um texto fora da memória
+      // (repetia cédula de bot/💡 da mesma rodada). Memória RELIDA antes de
+      // gravar (pedidos simultâneos de bots, 🤖 e 💡). Mesmos campos.
+      if (offlineGen) {
+        const { data: servedNow } = await admin
           .from("ai_served_defs")
-          .upsert(servedRows(vetted.slice(0, count), roomId, round), {
-            onConflict: "room_id,round,norm_text",
-            ignoreDuplicates: true,
-          });
+          .select("norm_text")
+          .eq("room_id", roomId)
+          .eq("round", round);
+        let batch = offlineServeBatch(
+          vetted,
+          count + OFFLINE_RESERVE_EXTRA,
+          [
+            ...servedNorms,
+            ...(servedNow ?? []).map((r: { norm_text: string }) => r.norm_text),
+          ],
+        );
+        if (batch.length > 0) {
+          // ON CONFLICT DO NOTHING + select = só as linhas que ESTA chamada
+          // gravou: texto igual servido por uma chamada simultânea sai daqui
+          const { data: claimed } = await admin
+            .from("ai_served_defs")
+            .upsert(servedRows(batch, roomId, round), {
+              onConflict: "room_id,round,norm_text",
+              ignoreDuplicates: true,
+            })
+            .select("norm_text");
+          batch = keepClaimed(batch, claimed);
+        }
+        return json({
+          definitions: [],
+          fallbacks: batch,
+          personas: choosePersonas(count, body?.personas),
+          gate: "skipped",
+        });
       }
       return json({
         definitions: [],

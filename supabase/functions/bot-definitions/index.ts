@@ -25,7 +25,13 @@ import {
   parseDefinitions,
   servedRows,
 } from "./logic.ts";
-import { generateOfflineDefinitions, offlineGeneratorEnabled } from "./offline.ts";
+import {
+  generateOfflineDefinitions,
+  OFFLINE_RESERVE_EXTRA,
+  offlineGeneratorEnabled,
+  offlineServeBatch,
+  keepClaimed,
+} from "./offline.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -199,18 +205,38 @@ Deno.serve(async (req) => {
           sinonimos,
           // a v1 só conhece a rodada: memória dura (nunca relaxada)
           avoidRound: servedNorms,
-          count,
+          // G3: faixa própria das 💡 (bots e 🤖 sorteiam em outras)
+          lane: "dica",
+          // 2 a mais: o lote final tira as parecidas entre si e com a rodada
+          count: count + OFFLINE_RESERVE_EXTRA,
           seed: `${memRoomId}:${memRound}:${crypto.randomUUID()}`,
         });
-        const offlineDefs = dropAlreadyServed(
+        const vetted = dropAlreadyServed(
           dropNearTruth(dropMalformed(gen, word).kept, meaning).kept,
           servedNorms,
         ).kept;
+        // memória RELIDA antes de gravar (G3, 11/11): bots, 🤖 e 💡 pedem ao
+        // mesmo tempo; o que outra chamada já serviu nesta rodada sai daqui
+        let servedNow: string[] = [];
+        if (memRoomId && memRound !== null && vetted.length > 0) {
+          const { data: again } = await admin
+            .from("ai_served_defs")
+            .select("norm_text")
+            .eq("room_id", memRoomId)
+            .eq("round", memRound);
+          servedNow = (again ?? []).map((r: { norm_text: string }) => r.norm_text);
+        }
+        let offlineDefs = offlineServeBatch(vetted, count, [...servedNorms, ...servedNow]);
         if (memRoomId && memRound !== null && offlineDefs.length > 0) {
-          await admin.from("ai_served_defs").upsert(servedRows(offlineDefs, memRoomId, memRound), {
-            onConflict: "room_id,round,norm_text",
-            ignoreDuplicates: true,
-          });
+          // só o que ESTA chamada gravou (texto igual de chamada simultânea sai)
+          const { data: claimed } = await admin
+            .from("ai_served_defs")
+            .upsert(servedRows(offlineDefs, memRoomId, memRound), {
+              onConflict: "room_id,round,norm_text",
+              ignoreDuplicates: true,
+            })
+            .select("norm_text");
+          offlineDefs = keepClaimed(offlineDefs, claimed);
         }
         return new Response(JSON.stringify({ definitions: offlineDefs }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

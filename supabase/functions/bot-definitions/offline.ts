@@ -26,6 +26,7 @@
 import {
   definitionShapeIssue,
   dice,
+  dropAlreadyServed,
   LEAK_THRESHOLD,
   MATCH_REPEAT_THRESHOLD,
   normTxt,
@@ -36,7 +37,10 @@ import {
   ACTS,
   ADJ_CHEIO,
   ADJ_DIZSE,
+  ADJ_MUDA,
   ADJ_PAIRS,
+  ADJ_PARTE_QUALS,
+  ADJ_PARTES,
   ADJ_PODE,
   ADJ_PROPRIO,
   ADJ_QUE,
@@ -323,30 +327,86 @@ function adjectiveCandidate(word: string, rng: () => number): Candidate {
     const c = pick(rng, ADJ_PODE);
     return { text: `que pode ser ${c}`, parts: [c], via: "adj-pode" };
   }
-  const r = rng();
-  if (r < 0.3) {
-    const q = pick(rng, ADJ_QUE);
-    return { text: `que ${q}`, parts: [q], via: "adj-que" };
+  // G7 (11/11): molde sorteado na PROPORÇÃO do tamanho da lista (≈ cada
+  // definição possível com a mesma chance). Com pesos fixos, os 22 pares
+  // saíam em 25% das vezes e se repetiam entre partidas (estresse: 77,6%).
+  let r = rng() * ADJ_MOLD_TOTAL;
+  for (const m of ADJ_MOLDS) {
+    if (r < m.w) return m.make(rng);
+    r -= m.w;
   }
-  if (r < 0.45) {
-    const q = pick(rng, ADJ_PROPRIO);
-    return { text: `${pick(rng, ["próprio", "típico"])} ${q}`, parts: [q], via: "adj-proprio" };
-  }
-  if (r < 0.58) {
-    const q = pick(rng, ADJ_RELATIVO);
-    return { text: `relativo ${q}`, parts: [q], via: "adj-relativo" };
-  }
-  if (r < 0.75) {
-    if (rng() < 0.5) {
+  return ADJ_MOLDS[ADJ_MOLDS.length - 1]!.make(rng);
+}
+
+type AdjMold = { w: number; make: (rng: () => number) => Candidate };
+const ADJ_MOLDS: readonly AdjMold[] = [
+  {
+    w: ADJ_QUE.length,
+    make: (rng) => {
+      const q = pick(rng, ADJ_QUE);
+      return { text: `que ${q}`, parts: [q], via: "adj-que" };
+    },
+  },
+  {
+    // "que racha no frio": a circunstância vem da lista do próprio verbo
+    w: ADJ_MUDA.reduce((a, m) => a + m[1].length, 0),
+    make: (rng) => {
+      const [verb, when] = pick(rng, ADJ_MUDA);
+      return { text: `que ${verb} ${pick(rng, when)}`, parts: [verb], via: "adj-que" };
+    },
+  },
+  {
+    w: ADJ_PARTES.length * ADJ_PARTE_QUALS.length,
+    make: (rng) => {
+      const part = pick(rng, ADJ_PARTES);
+      const q = agree(pick(rng, ADJ_PARTE_QUALS), part[1]);
+      return { text: `que tem ${part[0]} ${q}`, parts: [part[0]], via: "adj-que" };
+    },
+  },
+  {
+    w: 2 * ADJ_PROPRIO.length,
+    make: (rng) => {
+      const q = pick(rng, ADJ_PROPRIO);
+      return { text: `${pick(rng, ["próprio", "típico"])} ${q}`, parts: [q], via: "adj-proprio" };
+    },
+  },
+  {
+    w: 2 * QUEM.length,
+    make: (rng) => {
+      const q = pick(rng, QUEM);
+      return { text: `${pick(rng, ["próprio", "típico"])} de quem ${q}`, parts: [q], via: "adj-proprio" };
+    },
+  },
+  {
+    w: ADJ_RELATIVO.length,
+    make: (rng) => {
+      const q = pick(rng, ADJ_RELATIVO);
+      return { text: `relativo ${q}`, parts: [q], via: "adj-relativo" };
+    },
+  },
+  {
+    w: QUEM.length,
+    make: (rng) => {
       const q = pick(rng, QUEM);
       return { text: `diz-se de quem ${q}`, parts: [q], via: "adj-dizse" };
-    }
-    const q = pick(rng, ADJ_DIZSE);
-    return { text: `diz-se de ${q}`, parts: [q], via: "adj-dizse" };
-  }
-  const p = pick(rng, ADJ_PAIRS);
-  return { text: p, parts: [p], via: "adj-par" };
-}
+    },
+  },
+  {
+    w: ADJ_DIZSE.length,
+    make: (rng) => {
+      const q = pick(rng, ADJ_DIZSE);
+      return { text: `diz-se de ${q}`, parts: [q], via: "adj-dizse" };
+    },
+  },
+  {
+    w: ADJ_PAIRS.length,
+    make: (rng) => {
+      const p = pick(rng, ADJ_PAIRS);
+      return { text: p, parts: [p], via: "adj-par" };
+    },
+  },
+];
+const ADJ_MOLD_TOTAL = ADJ_MOLDS.reduce((a, m) => a + m.w, 0);
 
 function verbCandidate(word: string, rng: () => number): Candidate {
   const w = normTxt(word);
@@ -472,9 +532,23 @@ export type OfflineInput = {
   avoid?: readonly string[];
   /** O que a RODADA atual já serviu (💡, 🤖, bots): evitado SEMPRE. */
   avoidRound?: readonly string[];
+  /**
+   * G3 (11/11): faixa do banco por TIPO de chamada. Bots, 🤖 e 💡 da mesma
+   * rodada pedem ao mesmo tempo (nenhum vê a gravação do outro); com faixas
+   * disjuntas pelo trecho principal, não sorteiam a mesma frase. Ausente =
+   * banco inteiro (como antes). Esgotada a faixa, o nível 4 usa o banco todo.
+   */
+  lane?: OfflineLane;
   count: number;
   seed: string;
 };
+
+export type OfflineLane = "bots" | "robo" | "dica";
+/** Faixa do trecho principal: 10% 🤖, 10% 💡, 80% bots (estável por texto). */
+export function laneOf(mainPart: string): OfflineLane {
+  const h = hashSeed(normTxt(mainPart)) % 10;
+  return h === 0 ? "robo" : h === 1 ? "dica" : "bots";
+}
 
 /**
  * Até `count` definições falsas, distintas, coerentes com a classe e longe
@@ -510,14 +584,17 @@ export function generateOfflineCandidates(input: OfflineInput): Candidate[] {
   const containsPart = (p: string, ns: string[]) =>
     p.length >= 10 && ns.some((a) => a.includes(p));
   // nível 0 = estrito (o de sempre); 1 = variedade no pedido; 2 = trecho da
-  // partida; 3 = Dice contra a partida (com teto). Cada nível só roda se faltar.
-  for (let level = 0; level <= 3 && out.length < want; level++) {
+  // partida; 3 = Dice contra a partida (com teto); 4 = sem a faixa (só com
+  // `lane`). Cada nível só roda se faltar.
+  const lastLevel = input.lane ? 4 : 3;
+  for (let level = 0; level <= lastLevel && out.length < want; level++) {
     const attempts = level === 0 ? MAX_ATTEMPTS : RELAX_ATTEMPTS;
     const cap = level === 3 ? Math.min(want, out.length + PARTIDA_RELAX_MAX) : want;
     for (let i = 0; i < attempts && out.length < cap; i++) {
       const c = make();
       // checagens baratas primeiro; trigramas só no fim (perfil: 1/3 do tempo)
       if (tooLong(c.text)) continue;
+      if (input.lane && level < 4 && laneOf(c.parts[0] ?? c.text) !== input.lane) continue;
       // o mesmo núcleo duas vezes no pedido só depois de metade das tentativas
       if (level === 0 && c.head && usedHeads.has(c.head) && i < MAX_ATTEMPTS / 2) continue;
       const partNorms = c.parts.map(normTxt);
@@ -537,7 +614,7 @@ export function generateOfflineCandidates(input: OfflineInput): Candidate[] {
       if (truthIssue(c.text, guard)) continue;
       const g = grams(n);
       if (repeats(n, g, roundNorms, roundGrams)) continue;
-      if (level <= 2 && repeats(n, g, partidaNorms, partidaGrams)) continue;
+      if ((level <= 2 || level === 4) && repeats(n, g, partidaNorms, partidaGrams)) continue;
       if (outGrams.some((o) => diceSets(o, g) > SELF_SIMILAR_THRESHOLD)) continue;
       out.push(c);
       outNorms.add(n);
@@ -547,6 +624,52 @@ export function generateOfflineCandidates(input: OfflineInput): Candidate[] {
     }
   }
   return out;
+}
+
+/**
+ * G3 (11/11): reservas extras por pedido no ramo sem IA da v2. O cliente dos
+ * bots pula a que colidir com a partida (assembleBotRows) e o 🤖 sorteia
+ * entre as devolvidas — por isso TODAS as devolvidas vão à memória da rodada.
+ */
+export const OFFLINE_RESERVE_EXTRA = 2;
+
+/**
+ * O que a edge devolve E grava na memória da rodada: no máximo `want`, sem
+ * nada parecido (Dice > MATCH_REPEAT_THRESHOLD, o mesmo critério da partida)
+ * com o que outra chamada já serviu (memória relida no fim, `servedNow`) nem
+ * entre si — o mesmo jogador vê 🤖 e as duas 💡 lado a lado.
+ */
+export function offlineServeBatch(
+  defs: readonly string[],
+  want: number,
+  servedNow: readonly string[],
+): string[] {
+  const max = Math.max(0, Math.floor(want));
+  const fresh = dropAlreadyServed([...defs], [...servedNow]).kept;
+  const seen = servedNow.map((x) => normTxt(String(x ?? ""))).filter(Boolean);
+  const out: string[] = [];
+  for (const d of fresh) {
+    if (out.length >= max) break;
+    const n = normTxt(d);
+    if (!n || seen.some((x) => x === n || dice(x, n) > MATCH_REPEAT_THRESHOLD)) continue;
+    out.push(d);
+    seen.push(n);
+  }
+  return out;
+}
+
+/**
+ * G3 (11/11): depois do upsert com ON CONFLICT DO NOTHING + select, fica só
+ * o que ESTA chamada gravou — o texto IGUAL que uma chamada simultânea já
+ * serviu sai do lote (a gravação no banco é atômica). Retorno inútil (erro,
+ * null, vazio) = lote inteiro, exatamente como antes: nunca piora.
+ */
+export function keepClaimed(batch: readonly string[], claimed: unknown): string[] {
+  if (!Array.isArray(claimed) || claimed.length === 0) return [...batch];
+  const ok = new Set(
+    claimed.map((r) => normTxt(String((r as { norm_text?: unknown } | null)?.norm_text ?? ""))),
+  );
+  return batch.filter((t) => ok.has(normTxt(t)));
 }
 
 export function generateOfflineDefinitions(input: OfflineInput): string[] {
