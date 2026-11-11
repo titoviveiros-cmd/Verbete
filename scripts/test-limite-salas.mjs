@@ -254,11 +254,70 @@ try {
     // não libera: limpeza há 5 min (folga) nem partida que terminou de verdade
     await db.query(`UPDATE public.rooms SET finished_at = now() - interval '5 minutes' WHERE host_id LIKE $1 AND code NOT LIKE 'arq-%'`, [`${tag}f%`]);
     r = await tryCall(() => create(db, newUid()));
-    check("salas limpas há só 5 min NÃO liberam (folga de 30 min)", !r.ok && /could not generate unique room code/.test(r.e), r.e ?? `criou ${r.r?.code}`);
+    check("salas limpas há só 5 min NÃO liberam (folga de 30 min)", alheias > 0 || (!r.ok && /could not generate unique room code/.test(r.e)), r.e ?? `criou ${r.r?.code}`);
     await db.query(`UPDATE public.rooms SET finished_at = now() - interval '1 day', finish_reason = NULL WHERE host_id LIKE $1 AND code NOT LIKE 'arq-%'`, [`${tag}f%`]);
     r = await tryCall(() => create(db, newUid()));
-    check("partida terminada de verdade (sem finish_reason) NUNCA libera o código", !r.ok && /could not generate unique room code/.test(r.e), r.e ?? `criou ${r.r?.code}`);
+    check("partida terminada de verdade (sem finish_reason) NUNCA libera o código", alheias > 0 || (!r.ok && /could not generate unique room code/.test(r.e)), r.e ?? `criou ${r.r?.code}`);
+    // com partida real (cleanup_paused/idle/stale): folga de 6 h (pós Red Team #67)
+    await db.query(`UPDATE public.rooms SET finish_reason = 'cleanup_paused', finished_at = now() - interval '3 hours' WHERE host_id LIKE $1 AND code NOT LIKE 'arq-%'`, [`${tag}f%`]);
+    r = await tryCall(() => create(db, newUid()));
+    check("partida pausada e limpa há 3 h NÃO libera (folga de 6 h)", alheias > 0 || (!r.ok && /could not generate unique room code/.test(r.e)), r.e ?? `criou ${r.r?.code}`);
+    await db.query(`UPDATE public.rooms SET finished_at = now() - interval '7 hours' WHERE host_id LIKE $1 AND code NOT LIKE 'arq-%'`, [`${tag}f%`]);
+    r = await tryCall(() => create(db, newUid()));
+    const [p7] = r.ok ? await q(`SELECT finish_reason FROM public.rooms WHERE code LIKE 'arq-%' AND host_id LIKE $1 AND finish_reason = 'cleanup_paused'`, [`${tag}f%`]) : [];
+    check("partida pausada e limpa há 7 h libera", r.ok && p7?.finish_reason === "cleanup_paused", r.e ?? r.r.code);
+    // matriz da regra (função pura)
+    const mat = (await q(`SELECT string_agg(m || '=' || public.room_code_releasable('finished', m, now() - d::interval)::text, ' ' ORDER BY m, d) s
+      FROM unnest(ARRAY['cleanup_lobby','cleanup_empty','cleanup_idle','cleanup_stale','cleanup_paused']) m,
+           unnest(ARRAY['29 minutes','31 minutes','5 hours 59 minutes','6 hours 1 minute']) d`))[0].s;
+    const esperado = ["cleanup_empty", "cleanup_idle", "cleanup_lobby", "cleanup_paused", "cleanup_stale"].map((m) => {
+      const curto = m === "cleanup_lobby" || m === "cleanup_empty";
+      // ordem de d como texto: '29 minutes','31 minutes','5 hours 59 minutes','6 hours 1 minute'
+      return [false, curto, curto, true].map((v) => `${m}=${v}`).join(" ");
+    }).join(" ");
+    check("regra: sem partida 30 min; com partida 6 h", mat === esperado, mat);
+    const [{ x: nunca }] = await q(`SELECT public.room_code_releasable('finished', NULL, now() - interval '29 days') OR public.room_code_releasable('lobby', 'cleanup_lobby', now() - interval '1 day') OR public.room_code_releasable('finished', 'cleanup_lobby', NULL) AS x`);
+    check("fim normal, sala viva ou sem finished_at: nunca", nunca === false);
     await db.query(`DELETE FROM public.rooms WHERE host_id LIKE $1`, [`${tag}f%`]);
+  }
+
+  // ---- 4b) código reciclado: o jogador ANTIGO não volta nem vê nada além do que qualquer um vê
+  {
+    const U_old = newUid();
+    const U_new = newUid();
+    const U_x = newUid();
+    const old = await create(db, U_old);
+    const pOld = old.host_id;
+    const X = old.code;
+    await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [old.id]);
+    await db.query(`UPDATE public.rooms SET finish_reason = 'cleanup_lobby', finished_at = now() - interval '1 hour' WHERE id = $1`, [old.id]);
+    // todos os outros códigos livres viram partidas normais (nunca liberáveis): o próximo código só pode ser X
+    await db.query(
+      `INSERT INTO public.rooms (code, host_id, status)
+       SELECT g::text, $1 || 'g' || g, 'finished' FROM generate_series(1000, 9999) g
+        WHERE NOT EXISTS (SELECT 1 FROM public.rooms r WHERE r.code = g::text)`,
+      [tag],
+    );
+    const nova = await create(db, U_new);
+    check("a sala nova recebeu o código reciclado X", nova.code === X && nova.id !== old.id, `X=${X} nova=${nova.code}`);
+    const [{ c: arqOld }] = await q(`SELECT code c FROM public.rooms WHERE id = $1`, [old.id]);
+    check("a sala antiga ficou com 'arq-<id>'", arqOld === `arq-${old.id}`, arqOld);
+
+    let r = await tryCall(() => asUser(db, U_old, `SELECT public.rejoin_room($1, $2, 'Velho', 'x', '#000') AS r`, [X, pOld]));
+    check("rejoin_room do jogador antigo com X → player_id_taken (não entra na sala nova)", !r.ok && /player_id_taken/.test(r.e), r.e ?? JSON.stringify(r.r).slice(0, 80));
+    const [{ room_id }] = await q(`SELECT room_id FROM public.players WHERE id = $1`, [pOld]);
+    const [{ n: dentro }] = await q(`SELECT count(*)::int n FROM public.players WHERE room_id = $1 AND (user_id = $2 OR id = $3)`, [nova.id, U_old, pOld]);
+    check("o jogador antigo continua na sala antiga e não aparece na nova", room_id === old.id && dentro === 0, `dentro=${dentro}`);
+
+    const sOld = (await asUser(db, U_old, `SELECT public.get_room_state($1) AS s`, [X])).s;
+    const sX = (await asUser(db, U_x, `SELECT public.get_room_state($1) AS s`, [X])).s;
+    check("get_room_state(X): o antigo vê exatamente o que um estranho vê", JSON.stringify(sOld) === JSON.stringify(sX));
+    check("get_room_state(X) é a sala NOVA, sem nada da antiga", sOld?.room?.id === nova.id && !sOld.players.some((p) => p.id === pOld) && sOld.definitions.length === 0 && sOld.votes.length === 0);
+
+    r = await tryCall(() => asUser(db, U_old, `SELECT public.record_match_result($1) AS r`, [X]));
+    const [{ n: hist }] = await q(`SELECT count(*)::int n FROM public.match_history WHERE user_id = $1`, [U_old]);
+    check("record_match_result(X) pelo antigo não credita nada", r.ok && r.r.r?.ok === false && hist === 0, JSON.stringify(r.r?.r ?? r.e));
+    await db.query(`DELETE FROM public.rooms WHERE host_id LIKE $1`, [`${tag}g%`]);
   }
 
   // --------------------------------------------- 5) privacidade e permissões
@@ -281,8 +340,8 @@ try {
       await db.query(RB);
       const md5 = Object.fromEntries((await q(`SELECT proname, md5(prosrc) m FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = ANY($1)`, [Object.keys(PR60_MD5)])).map((r) => [r.proname, r.m]));
       for (const [f, m] of Object.entries(PR60_MD5)) check(`rollback devolve o corpo do PR #60: ${f}`, md5[f] === m, md5[f]);
-      const [{ g, t }] = await q(`SELECT to_regprocedure('public.room_create_guard(uuid)') IS NULL g, to_regclass('public.room_create_log') IS NULL t`);
-      check("rollback remove guard e registro", g && t);
+      const [{ g, t, h }] = await q(`SELECT to_regprocedure('public.room_create_guard(uuid)') IS NULL g, to_regclass('public.room_create_log') IS NULL t, to_regprocedure('public.room_code_releasable(text,text,timestamptz)') IS NULL h`);
+      check("rollback remove guard, regra e registro", g && t && h);
       await db.query(MIG);
       await db.query(MIG); // idempotente
       const [{ ok }] = await q(`SELECT to_regprocedure('public.room_create_guard(uuid)') IS NOT NULL ok`);

@@ -24,8 +24,9 @@
 --      e a hora — nada de id, apelido, IP ou sala; apagado após 48 h; sem
 --      acesso pela API (RLS sem policy + REVOKE).
 --   3) Código liberado antes dos 30 dias SÓ das salas encerradas PELA
---      LIMPEZA (finish_reason ≠ NULL: lobby abandonado, sala vazia/parada)
---      há mais de 30 min. Essas salas não geram estatística nem histórico
+--      LIMPEZA (room_code_releasable): sem partida (cleanup_lobby/empty) após
+--      30 min; com partida real (cleanup_idle/stale/paused) após 6 h.
+--      Essas salas não geram estatística nem histórico
 --      (record_match_result recusa por finish_reason), então reusar o código
 --      não toca no dedup de match_history (que é por código). A sala antiga
 --      fica com code = 'arq-<id>' (fora do formato de 4 dígitos) e segue
@@ -47,6 +48,28 @@ REVOKE ALL ON SEQUENCE public.room_create_log_id_seq FROM PUBLIC, anon, authenti
 GRANT ALL ON public.room_create_log TO service_role;
 COMMENT ON TABLE public.room_create_log IS
   'Limite de criação de salas (20261111100000): sha256 da identidade + hora; 48 h; sem acesso pela API.';
+
+-- Quando o código de uma sala encerrada pode ser reusado (pós Red Team #67):
+--   • cleanup_lobby / cleanup_empty (sem partida: lobby abandonado ou rodada
+--     sem humanos): 30 min de folga;
+--   • cleanup_idle / cleanup_stale / cleanup_paused (houve partida real, gente
+--     pode voltar à aba/link): 6 h de folga;
+--   • fim normal (finish_reason NULL) ou motivo novo/desconhecido: NUNCA
+--     (segue preso os 30 dias da retenção, como hoje).
+CREATE OR REPLACE FUNCTION public.room_code_releasable(p_status text, p_reason text, p_finished_at timestamptz)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+-- sem SET: só now() e literais (nenhuma tabela) — e assim o planner a embute (inline)
+AS $function$
+  SELECT p_status = 'finished' AND p_finished_at IS NOT NULL AND CASE
+    WHEN p_reason IN ('cleanup_lobby', 'cleanup_empty') THEN p_finished_at < now() - interval '30 minutes'
+    WHEN p_reason IN ('cleanup_idle', 'cleanup_stale', 'cleanup_paused') THEN p_finished_at < now() - interval '6 hours'
+    ELSE false
+  END
+$function$;
+REVOKE ALL ON FUNCTION public.room_code_releasable(text, text, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.room_code_releasable(text, text, timestamptz) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.room_create_guard(p_uid uuid)
 RETURNS void
@@ -131,8 +154,8 @@ BEGIN
 
   -- Código de 4 dígitos (1000–9999), único em rooms (rooms_code_key).
   -- Até 12 sorteios, depois sorteio ENTRE OS LIVRES; colisão no INSERT
-  -- (corrida) tenta de novo. Código de sala encerrada PELA LIMPEZA há mais de
-  -- 30 min conta como livre: a sala antiga passa a 'arq-<id>' (20261111100000).
+  -- (corrida) tenta de novo. Código de sala encerrada PELA LIMPEZA (room_code_releasable:
+  -- 30 min sem partida, 6 h com partida) conta como livre: a sala antiga passa a 'arq-<id>' (20261111100000).
   -- Erro só com os 9.000 códigos ocupados (ou 40 voltas).
   LOOP
     v_attempts := v_attempts + 1;
@@ -148,8 +171,7 @@ BEGIN
        WHERE NOT EXISTS (
                SELECT 1 FROM public.rooms r
                 WHERE r.code = c::text
-                  AND NOT (r.status = 'finished' AND r.finish_reason IS NOT NULL
-                           AND r.finished_at < now() - interval '30 minutes'))
+                  AND NOT public.room_code_releasable(r.status, r.finish_reason, r.finished_at))
        ORDER BY random()
        LIMIT 1;
       IF v_code IS NULL THEN
@@ -158,8 +180,7 @@ BEGIN
     END IF;
     UPDATE public.rooms SET code = 'arq-' || id::text
      WHERE code = v_code
-       AND status = 'finished' AND finish_reason IS NOT NULL
-       AND finished_at < now() - interval '30 minutes';
+       AND public.room_code_releasable(status, finish_reason, finished_at);
     CONTINUE WHEN EXISTS (SELECT 1 FROM public.rooms WHERE code = v_code);
     BEGIN
       INSERT INTO public.rooms (code, host_id, status)
@@ -236,7 +257,7 @@ BEGIN
     -- Entrar num lobby existente NÃO conta no teto; criar conta (20261111100000).
     PERFORM public.room_create_guard(v_uid);
     -- Código: mesma regra da criação (sorteio, livres, corrida, liberação
-    -- das salas encerradas pela limpeza há mais de 30 min).
+    -- das salas encerradas pela limpeza — room_code_releasable).
     LOOP
       v_attempts := v_attempts + 1;
       IF v_attempts > 40 THEN
@@ -251,8 +272,7 @@ BEGIN
          WHERE NOT EXISTS (
                  SELECT 1 FROM public.rooms r
                   WHERE r.code = c::text
-                    AND NOT (r.status = 'finished' AND r.finish_reason IS NOT NULL
-                             AND r.finished_at < now() - interval '30 minutes'))
+                    AND NOT public.room_code_releasable(r.status, r.finish_reason, r.finished_at))
          ORDER BY random()
          LIMIT 1;
         IF v_code IS NULL THEN
@@ -261,8 +281,7 @@ BEGIN
       END IF;
       UPDATE public.rooms SET code = 'arq-' || id::text
        WHERE code = v_code
-         AND status = 'finished' AND finish_reason IS NOT NULL
-         AND finished_at < now() - interval '30 minutes';
+         AND public.room_code_releasable(status, finish_reason, finished_at);
       CONTINUE WHEN EXISTS (SELECT 1 FROM public.rooms WHERE code = v_code);
       BEGIN
         INSERT INTO public.rooms (code, host_id, status, visibility)

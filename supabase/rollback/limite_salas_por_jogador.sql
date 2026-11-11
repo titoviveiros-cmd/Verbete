@@ -182,4 +182,5 @@ END;
 $function$;
 
 DROP FUNCTION IF EXISTS public.room_create_guard(uuid);
+DROP FUNCTION IF EXISTS public.room_code_releasable(text, text, timestamptz);
 DROP TABLE IF EXISTS public.room_create_log;
