@@ -616,6 +616,7 @@ export type Database = {
           color: string;
           created_at: string;
           display_name: string;
+          ranking_opt_in: boolean;
           updated_at: string;
           user_id: string;
         };
@@ -625,6 +626,7 @@ export type Database = {
           color?: string;
           created_at?: string;
           display_name?: string;
+          ranking_opt_in?: boolean;
           updated_at?: string;
           user_id: string;
         };
@@ -633,6 +635,7 @@ export type Database = {
           color?: string;
           created_at?: string;
           display_name?: string;
+          ranking_opt_in?: boolean;
           updated_at?: string;
           user_id?: string;
         };
