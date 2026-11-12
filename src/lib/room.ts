@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
+import { rejoinRefusal } from "./entry-errors";
 import { assertTermsAccepted } from "./terms-consent";
 import { WRITING_BASE_SECS, writingPhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
@@ -234,14 +235,19 @@ export async function joinRoom(
   // outra aba pode ter trocado de conta nesse meio-tempo.
   await assertTermsAccepted();
   let effectiveId = playerId;
-  let { error: rpcErr } = await callRejoin(playerId);
+  let { data: rpcData, error: rpcErr } = await callRejoin(playerId);
   // S4: o id local pertence a outra identidade auth — gera um novo e
   // tenta 1x. O componente da sala relê getPlayerId() após a navegação.
   if (rpcErr && String(rpcErr.message ?? "").includes("player_id_taken")) {
     effectiveId = regeneratePlayerId();
-    ({ error: rpcErr } = await callRejoin(effectiveId));
+    ({ data: rpcData, error: rpcErr } = await callRejoin(effectiveId));
   }
   if (rpcErr) throw rpcErr;
+  // ECA R6 (20261112090000): código inexistente, sala trancada e excesso de
+  // tentativas voltam como {ok:false, reason} (não erro, para a contagem de
+  // falhas não ser desfeita no servidor).
+  const refused = rejoinRefusal(rpcData);
+  if (refused) throw new Error(refused);
   // Amarra a identidade auth ao jogador (idempotente; ignora sem sessão).
   supabase
     .rpc("claim_player_identity", {
