@@ -18,6 +18,15 @@ const KNOWN: ReadonlyArray<readonly [RegExp, string]> = [
   [/session_required|sessão de jogo/i, SESSION_REQUIRED_MESSAGE],
   [/aceite os Termos/i, "Para continuar, aceite os Termos de Uso."],
   [/sala pública/i, "Não foi possível encontrar uma sala pública."],
+  // ECA Digital B4 (11/11/2026): sala trancada pelo dono; partida rápida fechada.
+  [
+    /room_locked/i,
+    "Esta sala foi trancada por quem criou. Peça um novo convite.",
+  ],
+  [
+    /public_rooms_closed/i,
+    "A partida rápida está desligada. Jogue com amigos pelo código.",
+  ],
   [
     /failed to fetch|networkerror|network request failed|load failed/i,
     "Sem conexão. Confira a internet e tente de novo.",
