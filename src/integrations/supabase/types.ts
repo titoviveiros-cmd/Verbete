@@ -830,6 +830,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -854,6 +855,7 @@ export type Database = {
           finished_at?: string | null;
           host_id: string;
           id?: string;
+          locked?: boolean;
           mode?: string;
           nivel?: string;
           paused_at?: string | null;
@@ -877,6 +879,7 @@ export type Database = {
           finished_at?: string | null;
           host_id?: string;
           id?: string;
+          locked?: boolean;
           mode?: string;
           nivel?: string;
           paused_at?: string | null;
@@ -1734,6 +1737,10 @@ export type Database = {
       };
       send_room_message: {
         Args: { p_player_id: string; p_room_id: string; p_text: string };
+        Returns: Json;
+      };
+      set_room_locked: {
+        Args: { p_actor_id: string; p_locked: boolean; p_room_id: string };
         Returns: Json;
       };
       start_game: { Args: { p_room_id: string }; Returns: Json };

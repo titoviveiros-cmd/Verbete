@@ -45,6 +45,9 @@ import { TopBar } from "@/components/room/TopBar";
 import { MesaSidebar } from "@/components/room/MesaSidebar";
 import { JoinFlow } from "@/components/room/JoinFlow";
 import { TermsConsent } from "@/components/TermsConsent";
+import { useDeclaredAgeBand } from "@/hooks/use-age-band";
+import { botsOnly } from "@/lib/age";
+import { ageLockRequired, setRoomLocked } from "@/lib/room-access";
 import { useTermsGate } from "@/hooks/use-terms-gate";
 import { useTermsAccepted } from "@/lib/terms-consent";
 import {
@@ -125,6 +128,32 @@ function RoomPage() {
 
   const isHost = !!room && room.host_id === playerId;
   const me = players.find((p) => p.id === playerId && !p.kicked_at);
+  // ECA Digital B5: quem DECLAROU menos de 13 joga só com bots — nunca na
+  // sala de outra pessoa (autodeclaração; não comprova idade). Se entrou pelo
+  // código antes de declarar, sai da sala.
+  const ageBand = useDeclaredAgeBand();
+  const blockedByAge = !!room && botsOnly(ageBand) && !isHost;
+  const leftByAgeRef = useRef(false);
+  useEffect(() => {
+    if (!blockedByAge || !me || leftByAgeRef.current) return;
+    leftByAgeRef.current = true;
+    void leaveRoom(playerId);
+  }, [blockedByAge, me, playerId]);
+  // Integração B4 × B5 (12/11): dono que declarou < 13 → sala trancada (ninguém
+  // novo entra; bots entram). Se destrancar, tranca de novo.
+  const roomLocked =
+    (room as (typeof room & { locked?: boolean }) | null)?.locked === true;
+  const mustLockForAge = ageLockRequired({
+    isHost,
+    inRoom: !!me,
+    ageBand,
+    locked: roomLocked,
+  });
+  const roomIdForLock = room?.id;
+  useEffect(() => {
+    if (!mustLockForAge || !roomIdForLock) return;
+    void setRoomLocked(roomIdForLock, playerId, true).catch(() => {});
+  }, [mustLockForAge, roomIdForLock, playerId]);
   const currentCoordinator = room
     ? players.find((p) => p.id === room.current_coordinator)
     : undefined;
@@ -603,6 +632,22 @@ function RoomPage() {
     );
   }
 
+  if (blockedByAge) {
+    return (
+      <div className="mobile-shell items-center justify-center text-center gap-4">
+        <Mascot mood="idle" />
+        <h2 className="font-display text-2xl">Modo só com bots</h2>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Com menos de 13 anos, você joga só com bots, na sua própria sala.
+          Salas de outras pessoas ficam fechadas.
+        </p>
+        <button onClick={() => nav({ to: "/" })} className="btn-pop btn-gold">
+          Criar minha sala com bots
+        </button>
+      </div>
+    );
+  }
+
   if (!me) {
     if (isHost && !hostNeedsConsent) {
       return (
@@ -710,6 +755,8 @@ function RoomPage() {
                     teams={room.teams ?? []}
                     categories={room.categories ?? []}
                     nivel={room.nivel ?? "aleatorio"}
+                    locked={roomLocked}
+                    lockForced={isHost && botsOnly(ageBand)}
                   />
                 )}
                 {room.status === "choosing" && (
