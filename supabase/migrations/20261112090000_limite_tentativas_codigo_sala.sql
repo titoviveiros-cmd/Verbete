@@ -25,7 +25,8 @@
 --
 -- Registro PSEUDONIMIZADO e curto: public.room_code_failures guarda só
 -- sha256(sal || ':' || auth.uid()) e a hora; o sal fica em tabela separada,
--- fechada. Linhas com mais de 1 hora são apagadas a cada falha nova (a
+-- fechada. Linhas com mais de 1 hora são apagadas a cada falha nova e a cada
+-- 10 min pelo pg_cron (verbete-room-code-failures-cleanup) (a
 -- janela é de 15 min). Nada de código tentado, IP, apelido nem sala.
 -- Corrida: trava consultiva por identidade (pg_advisory_xact_lock) — N
 -- tentativas simultâneas da mesma identidade contam uma a uma.
@@ -233,7 +234,38 @@ BEGIN
 END;
 $function$;
 
+-- Retenção garantida também sem tráfego: limpeza a cada 10 min pelo pg_cron
+-- (além da limpeza a cada falha nova).
+CREATE OR REPLACE FUNCTION public.room_code_failures_cleanup()
+RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_ret int;
+  v_n int;
+BEGIN
+  SELECT l.retention_secs INTO v_ret FROM public.room_code_limit() l;
+  DELETE FROM public.room_code_failures
+   WHERE created_at < now() - make_interval(secs => v_ret);
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'verbete-room-code-failures-cleanup') THEN
+      PERFORM cron.unschedule('verbete-room-code-failures-cleanup');
+    END IF;
+    PERFORM cron.schedule('verbete-room-code-failures-cleanup', '*/10 * * * *', 'SELECT public.room_code_failures_cleanup();');
+  END IF;
+END $$;
+
 -- Internas: ninguém chama pela API.
+REVOKE ALL ON FUNCTION public.room_code_failures_cleanup() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.room_code_limit() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.room_code_uid_hash(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.room_code_retry_after(text) FROM PUBLIC, anon, authenticated;

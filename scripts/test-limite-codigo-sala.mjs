@@ -151,6 +151,19 @@ try {
   await join(U2, missing("v"), `lc_y_${tag}`);
   const old = await row(`SELECT count(*)::int n FROM public.room_code_failures WHERE created_at < now() - make_interval(secs => $1)`, [lim.retention_secs]);
   check("retenção: falha com mais de 1 hora é apagada na próxima gravação", old.n === 0, `restaram ${old.n}`);
+  await db.query(`INSERT INTO public.room_code_failures (uid_hash, created_at) VALUES ($1, now() - interval '61 minutes'), ($1, now())`, ["1".repeat(64)]);
+  const cl = (await row("SELECT public.room_code_failures_cleanup() n")).n;
+  const keep = await row(`SELECT count(*)::int n FROM public.room_code_failures WHERE uid_hash = $1`, ["1".repeat(64)]);
+  const cron = await row(
+    `SELECT (SELECT count(*)::int FROM pg_namespace WHERE nspname = 'cron') has_cron,
+            CASE WHEN to_regclass('cron.job') IS NULL THEN 0
+                 ELSE (SELECT count(*)::int FROM cron.job WHERE jobname = 'verbete-room-code-failures-cleanup') END job`,
+  ).catch(() => ({ has_cron: 0, job: 0 }));
+  check(
+    "retenção sem tráfego: limpeza agendada (pg_cron) apaga só o que passou de 1 hora",
+    cl >= 1 && keep.n === 1 && (cron.has_cron === 0 || cron.job === 1),
+    `apagadas=${cl} ficou=${keep.n} cron=${JSON.stringify(cron)}`,
+  );
 
   const before = await row(`SELECT count(*)::int n FROM public.room_code_failures`);
   await db.query("SAVEPOINT i");
@@ -183,7 +196,7 @@ try {
   );
   const f = await row(
     `SELECT count(*)::int n FROM pg_proc p JOIN pg_namespace s ON s.oid = p.pronamespace
-      WHERE s.nspname = 'public' AND p.proname IN ('room_code_limit','room_code_uid_hash','room_code_retry_after','room_code_record_failure')
+      WHERE s.nspname = 'public' AND p.proname IN ('room_code_limit','room_code_uid_hash','room_code_retry_after','room_code_record_failure','room_code_failures_cleanup')
         AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
   );
   const rj = await row(`SELECT has_function_privilege('authenticated', 'public.rejoin_room(text,text,text,text,text)', 'EXECUTE') x`);
@@ -196,12 +209,18 @@ try {
   const src = await row(`SELECT prosrc FROM pg_proc WHERE oid = 'public.rejoin_room(text,text,text,text,text)'::regprocedure`);
   const gone = await row(
     `SELECT to_regclass('public.room_code_failures') a, to_regclass('public.room_code_failure_salt') b,
-            to_regprocedure('public.room_code_retry_after(text)') c`,
+            to_regprocedure('public.room_code_retry_after(text)') c,
+            to_regprocedure('public.room_code_failures_cleanup()') d`,
   );
   const rb = await join(U3, missing("r"), `lc_r_${tag}`);
+  const cronGone = await row(
+    `SELECT CASE WHEN to_regclass('cron.job') IS NULL THEN 0
+                 ELSE (SELECT count(*)::int FROM cron.job WHERE jobname = 'verbete-room-code-failures-cleanup') END n`,
+  ).catch(() => ({ n: 0 }));
+  check("rollback: agendamento da limpeza sai", cronGone.n === 0, String(cronGone.n));
   check(
     "rollback: rejoin_room anterior byte a byte; tabelas e funções saem; inexistente volta a ser erro",
-    src.prosrc === prevBody && !gone.a && !gone.b && !gone.c && !rb.ok && /room_not_found/.test(rb.error ?? ""),
+    src.prosrc === prevBody && !gone.a && !gone.b && !gone.c && !gone.d && !rb.ok && /room_not_found/.test(rb.error ?? ""),
     `${src.prosrc === prevBody} ${JSON.stringify(gone)} ${reason(rb)}`,
   );
 } catch (e) {

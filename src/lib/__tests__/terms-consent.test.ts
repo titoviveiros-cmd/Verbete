@@ -338,7 +338,7 @@ describe("aceite dos Termos — nenhum caminho cria conteúdo sem ele", () => {
     ).toHaveLength(3);
     // entrar na sala confere de novo colado na gravação (sala e banimento demoram)
     expect(lib).toMatch(
-      /await assertTermsAccepted\(\);\n\s*let effectiveId = playerId;\n\s*let \{ error: rpcErr \} = await callRejoin\(playerId\);/,
+      /await assertTermsAccepted\(\);\n\s*let effectiveId = playerId;\n\s*let \{ data: rpcData, error: rpcErr \} = await callRejoin\(playerId\);/,
     );
     // a volta automática do host espera a identidade e o aceite dela
     const sala = readFileSync(

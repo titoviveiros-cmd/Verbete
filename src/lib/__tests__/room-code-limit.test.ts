@@ -91,6 +91,7 @@ describe("migration (o servidor é quem garante)", () => {
       "room_code_uid_hash(uuid)",
       "room_code_retry_after(text)",
       "room_code_record_failure(text)",
+      "room_code_failures_cleanup()",
     ])
       expect(MIGRATION).toContain(
         `REVOKE ALL ON FUNCTION public.${f} FROM PUBLIC, anon, authenticated;`,
