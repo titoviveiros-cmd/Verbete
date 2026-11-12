@@ -27,6 +27,7 @@ const SUITES = [
   "test-r4-anti-loop.mjs",
   "test-p2-xp.mjs",
   "test-player-id.mjs",
+  "test-seguranca-lancamento.mjs", // código de sala sem colisão (corrida real) + teto do log_ops_event + chat dormente fechado (10/11/2026)
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
   "test-native-auth-callback.mjs",
