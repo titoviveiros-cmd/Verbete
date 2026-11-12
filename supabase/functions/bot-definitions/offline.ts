@@ -190,7 +190,24 @@ const bare = (t: Topic) => (t[0] ? `${t[0]} ${t[1]}` : t[1]);
 // Moldes. Cada candidata leva os TRECHOS do banco que usou (`parts`) e um
 // rótulo de molde (`via`) — para a anti-repetição e para os testes.
 
-export type Candidate = { text: string; parts: string[]; via: string; head?: string };
+export type Candidate = {
+  text: string;
+  parts: string[];
+  via: string;
+  head?: string;
+  /**
+   * G3 R5 (12/11): chave de DISTRIBUIÇÃO (faixa e sub-faixa) = o trecho do
+   * banco ANTES da concordância. Com o trecho concordado, "cantad{o} pelos
+   * trovadores" caía numa faixa como "cantado" e noutra como "cantada": dois
+   * jogadores recebiam quase a mesma frase (Dice > 0,5) em faixas "disjuntas".
+   * Ausente = `parts[0]` (como antes).
+   */
+  key?: string;
+  /** G3 R5: molde que só serve à faixa dos bots (ver `adverbCandidate`). */
+  botsOnly?: boolean;
+};
+/** Chave de distribuição da candidata (faixa e sub-faixa). */
+export const laneKeyOf = (c: Candidate): string => c.key ?? c.parts[0] ?? c.text;
 
 function kindsFor(category: string, rng: () => number): readonly string[] {
   const own = CATEGORY_KINDS[category] ?? DEFAULT_KINDS;
@@ -209,7 +226,8 @@ function nounFromKind(kind: NounKind, g: Gender, rng: () => number, diminutive: 
   // núcleo do mesmo gênero da palavra quando houver (soa como verbete)
   const same = kind.heads.filter((h) => h[1] === g);
   const head = pick(rng, same.length > 0 && rng() < 0.8 ? same : kind.heads);
-  const qual = agree(pick(rng, kind.quals), head[1]);
+  const rawQual = pick(rng, kind.quals);
+  const qual = agree(rawQual, head[1]);
   const pres = kind.pre ?? [];
   const pre =
     pres.length > 0 && (diminutive || rng() < 0.15)
@@ -222,7 +240,7 @@ function nounFromKind(kind: NounKind, g: Gender, rng: () => number, diminutive: 
     text = `${text}, ${tail}`;
     parts.push(tail);
   }
-  return { text, parts, via: "nucleo", head: head[0] };
+  return { text, parts, via: "nucleo", head: head[0], key: rawQual };
 }
 
 /** Regras de sufixo dos substantivos (null = a palavra não tem o sufixo). */
@@ -439,8 +457,13 @@ function adverbCandidate(rng: () => number): Candidate {
       // "de um jeito" (revisão 11/11: "de jeito solene" soava errado)
       ["de um jeito", "m"],
     ] as const);
-    const m = agree(pick(rng, ADV_MANNER), g);
-    return { text: `${lead} ${m}`, parts: [m], via: "adverbio" };
+    const raw = pick(rng, ADV_MANNER);
+    const m = agree(raw, g);
+    // G3 R5 (12/11): "de modo X" × "de modo Y" passa de Dice 0,5 em 16%
+    // dos pares (o molde pesa mais que a maneira). Só os bots usam este
+    // molde (o cliente já barra parecidas entre bots); 🤖 e 💡 ficam com as
+    // locuções de ADVERBS (4 pares parecidos em 3.916).
+    return { text: `${lead} ${m}`, parts: [m], via: "adverbio", key: raw, botsOnly: true };
   }
   const a = pick(rng, ADVERBS);
   return { text: a, parts: [a], via: "adverbio" };
@@ -555,8 +578,25 @@ export type OfflineInput = {
 };
 
 export type OfflineLane = "bots" | "robo" | "dica";
-/** Faixa do trecho principal: 10% 🤖, 10% 💡, 80% bots (estável por texto). */
-export function laneOf(mainPart: string): OfflineLane {
+/**
+ * G3 R5 (12/11): % do banco em CADA faixa 🤖/💡 quando a palavra é
+ * substantivo. Os substantivos dão 3/4 das rodadas com par parecido no
+ * pior caso simultâneo (poucos complementos por tipo: dois humanos sorteiam
+ * o mesmo). Faixas maiores = menos colisão entre humanos; o custo é a
+ * variedade dos bots, cujo gate (G7) é medido no estresse SÓ com
+ * adjetivo/verbo/advérbio — por isso só os substantivos mudam.
+ */
+export const NOUN_HELP_LANE_PCT = 20;
+
+/**
+ * Faixa do trecho principal (estável por texto): 10% 🤖, 10% 💡, 80% bots;
+ * com `klass` "substantivo", NOUN_HELP_LANE_PCT% em cada faixa de ajuda.
+ */
+export function laneOf(mainPart: string, klass?: WordClass): OfflineLane {
+  if (klass === "substantivo") {
+    const p = hashSeed(normTxt(mainPart)) % 100;
+    return p < NOUN_HELP_LANE_PCT ? "robo" : p < 2 * NOUN_HELP_LANE_PCT ? "dica" : "bots";
+  }
   const h = hashSeed(normTxt(mainPart)) % 10;
   return h === 0 ? "robo" : h === 1 ? "dica" : "bots";
 }
@@ -646,8 +686,9 @@ export function generateOfflineCandidates(input: OfflineInput): Candidate[] {
       const c = make();
       // checagens baratas primeiro; trigramas só no fim (perfil: 1/3 do tempo)
       if (tooLong(c.text)) continue;
-      if (input.lane && level < 4 && laneOf(c.parts[0] ?? c.text) !== input.lane) continue;
-      if (level === -1 && !slot!.includes(laneBucketOf(c.parts[0] ?? c.text))) continue;
+      const lk = laneKeyOf(c);
+      if (input.lane && level < 4 && (laneOf(lk, klass) !== input.lane || (c.botsOnly && input.lane !== "bots"))) continue;
+      if (level === -1 && !slot!.includes(laneBucketOf(lk))) continue;
       // o mesmo núcleo duas vezes no pedido só depois de metade das tentativas
       if (strict && c.head && usedHeads.has(c.head) && i < MAX_ATTEMPTS / 2) continue;
       const partNorms = c.parts.map(normTxt);

@@ -17,6 +17,7 @@ import {
   laneOf,
   laneSlotFor,
   laneBucketOf,
+  laneKeyOf,
   OFFLINE_LANE_BUCKETS,
   OFFLINE_LANE_SLOTS,
   slotBuckets,
@@ -578,7 +579,7 @@ describe("R4: sub-faixa por jogador nas faixas 🤖 e 💡", () => {
           const mineB = slotBuckets(s);
           for (const c of out) {
             total++;
-            if (mineB.includes(laneBucketOf(c.parts[0] ?? c.text))) own++;
+            if (mineB.includes(laneBucketOf(laneKeyOf(c)))) own++;
           }
         }
     console.info(`[R4 sub-faixa] saídas=${total} na própria=${own}`);
@@ -709,5 +710,102 @@ describe("G7: banco ampliado (adjetivos, verbos, advérbios)", () => {
     ];
     for (const t of texts)
       for (const re of BAD) expect(re.test(t), t).toBe(false);
+  });
+});
+
+// R5 (12/11, G3 pior caso, opção B): chave de distribuição sem concordância,
+// molde "de modo/de maneira…" só nos bots e banco de substantivos ampliado.
+describe("R5: distribuição pela chave do banco e banco maior", () => {
+  const AGREE = (s: string, g: "m" | "f") =>
+    s.replace(/\{o\}/g, g === "f" ? "a" : "o");
+
+  it("substantivo: a chave é o trecho ANTES da concordância (mesma faixa nos dois gêneros)", () => {
+    const quals = new Set(
+      Object.values(BANK.NOUN_KINDS).flatMap((k) => k.quals),
+    );
+    const nouns = WORDS.filter((w) => w.classe === "substantivo");
+    let nucleo = 0;
+    let comO = 0;
+    for (const [i, w] of nouns.entries())
+      for (const lane of ["robo", "dica", "bots"] as const) {
+        const out = generateOfflineCandidates({
+          ...w,
+          lane,
+          count: 6,
+          seed: `r5:chave:${i}:${lane}`,
+        });
+        for (const c of out) {
+          if (c.via !== "nucleo") continue;
+          nucleo++;
+          const k = laneKeyOf(c);
+          expect(quals.has(k), `${c.text} :: ${k}`).toBe(true);
+          // o trecho mostrado é a chave concordada com o núcleo
+          expect(
+            [AGREE(k, "m"), AGREE(k, "f")].includes(c.parts[0]!),
+            `${c.text} :: ${k}`,
+          ).toBe(true);
+          if (k.includes("{o}")) comO++;
+        }
+      }
+    expect(nucleo).toBeGreaterThan(500);
+    expect(comO).toBeGreaterThan(50);
+    // antes do R5 a faixa vinha do trecho CONCORDADO: "cantado"/"cantada"
+    // pelos trovadores caíam em faixas diferentes (Dice > 0,5 entre faixas)
+    let split = 0;
+    for (const q of quals)
+      if (q.includes("{o}") && laneOf(AGREE(q, "m")) !== laneOf(AGREE(q, "f")))
+        split++;
+    expect(split).toBeGreaterThan(0);
+  });
+
+  it("advérbio: 🤖 e 💡 não usam o molde 'de modo/de maneira/de um jeito' (só os bots)", () => {
+    const advs = WORDS.filter((w) => w.classe === "advérbio");
+    expect(advs.length).toBeGreaterThan(0);
+    const MOLDE = /^(de modo|de maneira|de um jeito) /;
+    let bots = 0;
+    let ajuda = 0;
+    for (const [i, w] of advs.entries())
+      for (let s = 0; s < 60; s++) {
+        for (const lane of ["robo", "dica"] as const)
+          for (const slot of [undefined, s % OFFLINE_LANE_SLOTS])
+            for (const d of generateOfflineDefinitions({
+              ...w,
+              lane,
+              laneSlot: slot,
+              count: lane === "robo" ? 6 : 4,
+              seed: `r5:adv:${i}:${s}`,
+            })) {
+              ajuda++;
+              expect(MOLDE.test(normTxt(d)), `${w.word} ${lane}: ${d}`).toBe(
+                false,
+              );
+            }
+        for (const d of generateOfflineDefinitions({
+          ...w,
+          lane: "bots",
+          count: 10,
+          seed: `r5:advb:${i}:${s}`,
+        }))
+          if (MOLDE.test(normTxt(d))) bots++;
+      }
+    expect(ajuda).toBeGreaterThan(1000);
+    // os bots continuam com o molde (variedade do G7)
+    expect(bots).toBeGreaterThan(100);
+  });
+
+  it("banco R5: cada tipo de substantivo tem pelo menos 8 complementos, sem repetidos", () => {
+    for (const [name, k] of Object.entries(BANK.NOUN_KINDS)) {
+      expect(k.quals.length, name).toBeGreaterThanOrEqual(8);
+      const ns = k.quals.map((q) => normTxt(AGREE(q, "m")));
+      expect(new Set(ns).size, name).toBe(ns.length);
+    }
+    const total = Object.values(BANK.NOUN_KINDS).reduce(
+      (a, k) => a + k.quals.length,
+      0,
+    );
+    // 496b455: 228 complementos; R5: +215 = 443
+    expect(total).toBeGreaterThanOrEqual(440);
+    // 496b455: 89 locuções; R5: +81 (🤖/💡 de advérbio só usam esta lista)
+    expect(BANK.ADVERBS.length).toBeGreaterThanOrEqual(170);
   });
 });
