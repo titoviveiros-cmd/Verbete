@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
 import { reportPlayer } from "@/lib/moderation.functions";
 import { expectOk } from "@/lib/server-fn-transport";
+import { ReportSent } from "@/components/room/ReportSent";
 import {
   PLAYER_REPORT_REASONS,
   type PlayerReportReason,
@@ -185,9 +186,7 @@ export function ReportPlayerButton({
                   </div>
                 </>
               ) : (
-                <p className="text-center text-mint text-sm py-2">
-                  ✅ Obrigado! Denúncia registrada.
-                </p>
+                <ReportSent />
               )}
             </div>
           </div>,

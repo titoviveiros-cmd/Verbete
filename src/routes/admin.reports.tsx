@@ -8,7 +8,20 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { listPendingReports, resolveReport } from "@/lib/moderation.functions";
+import {
+  decideAppeal,
+  listPendingAppeals,
+  listPendingReports,
+  resolveReport,
+} from "@/lib/moderation.functions";
+import {
+  DECISION_REASONS,
+  DECISION_REASON_KEYS,
+  REPORT_REVIEW_HOURS,
+  reviewDueAt,
+  type DecisionReason,
+} from "@/lib/moderation-policy";
+import type { AppealForReview } from "@/lib/report-feedback";
 import { isPlayerReport, playerReasonLabel } from "@/lib/report-player-reasons";
 import { Mascot } from "@/components/Mascot";
 
@@ -45,9 +58,15 @@ function AdminReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // ECA Digital art. 30: remoção/ban levam MOTIVO, que o autor vê no aviso.
+  const [motive, setMotive] = useState<Record<string, DecisionReason>>({});
+  const [appeals, setAppeals] = useState<AppealForReview[]>([]);
+  const [appealNote, setAppealNote] = useState<Record<string, string>>({});
 
   const runList = useServerFn(listPendingReports);
   const runResolve = useServerFn(resolveReport);
+  const runAppeals = useServerFn(listPendingAppeals);
+  const runDecide = useServerFn(decideAppeal);
 
   useEffect(() => {
     if (loading) return;
@@ -70,8 +89,9 @@ function AdminReportsPage() {
 
   const refresh = async () => {
     try {
-      const res = await runList();
+      const [res, ap] = await Promise.all([runList(), runAppeals()]);
       setReports(res.reports as Report[]);
+      setAppeals(ap.appeals);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar.");
@@ -80,15 +100,39 @@ function AdminReportsPage() {
 
   const handle = async (
     reportId: string,
-    action: "dismiss" | "ban",
+    action: "dismiss" | "remove_content" | "ban",
     banDays = 30,
   ) => {
     setBusy(reportId);
     try {
       await runResolve({
-        data: { reportId, action, banScope: "both", banDays },
+        data: {
+          reportId,
+          action,
+          banScope: "both",
+          banDays,
+          decisionReason:
+            action === "dismiss" ? undefined : (motive[reportId] ?? "ofensa"),
+        },
       });
       setReports((r) => r.filter((x) => x.id !== reportId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const decide = async (appealId: string, outcome: "upheld" | "reversed") => {
+    const note = (appealNote[appealId] ?? "").trim();
+    if (!note) {
+      setError("Escreva a resposta ao recurso (o autor vai ler).");
+      return;
+    }
+    setBusy(appealId);
+    try {
+      await runDecide({ data: { appealId, outcome, note } });
+      setAppeals((a) => a.filter((x) => x.id !== appealId));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro.");
     } finally {
@@ -173,8 +217,14 @@ function AdminReportsPage() {
                     👤 {r.offender_nickname ?? r.offender_player_id.slice(0, 8)}
                   </p>
                 </div>
-                <span className="text-[10px] text-muted-foreground shrink-0">
+                <span className="text-[10px] text-muted-foreground shrink-0 text-right">
                   {new Date(r.created_at).toLocaleString("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                  <br />
+                  prazo {REPORT_REVIEW_HOURS} h:{" "}
+                  {new Date(reviewDueAt(r.created_at)).toLocaleString("pt-BR", {
                     dateStyle: "short",
                     timeStyle: "short",
                   })}
@@ -185,6 +235,26 @@ function AdminReportsPage() {
                 "{r.definition_text}"
               </blockquote>
 
+              <label className="text-[11px] text-muted-foreground flex items-center gap-2">
+                Motivo (para remover/banir):
+                <select
+                  value={motive[r.id] ?? "ofensa"}
+                  onChange={(e) =>
+                    setMotive((m) => ({
+                      ...m,
+                      [r.id]: e.target.value as DecisionReason,
+                    }))
+                  }
+                  className="bg-input rounded-lg px-2 py-1 text-xs border border-white/10"
+                >
+                  {DECISION_REASON_KEYS.map((k) => (
+                    <option key={k} value={k}>
+                      {DECISION_REASONS[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="flex gap-1.5 flex-wrap">
                 <button
                   disabled={busy === r.id}
@@ -192,6 +262,13 @@ function AdminReportsPage() {
                   className="btn-pop btn-plain border border-white/10 text-xs py-1.5 px-2.5"
                 >
                   Descartar
+                </button>
+                <button
+                  disabled={busy === r.id}
+                  onClick={() => handle(r.id, "remove_content")}
+                  className="btn-pop bg-mint/20 border border-mint/40 text-xs py-1.5 px-2.5"
+                >
+                  Remover conteúdo
                 </button>
                 <button
                   disabled={busy === r.id}
@@ -219,6 +296,71 @@ function AdminReportsPage() {
           ))}
         </ul>
       )}
+
+      <section className="mt-4">
+        <h2 className="font-display text-xl">
+          Recursos pendentes ({appeals.length})
+        </h2>
+        {appeals.length === 0 ? (
+          <p className="text-xs text-muted-foreground mt-1">
+            Nenhum recurso aguardando resposta.
+          </p>
+        ) : (
+          <ul className="space-y-2 mt-2">
+            {appeals.map((a) => (
+              <li key={a.id} className="sticker p-3 flex flex-col gap-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {a.action ?? "?"} ·{" "}
+                  {a.decisionReason
+                    ? (DECISION_REASONS[a.decisionReason as DecisionReason] ??
+                      a.decisionReason)
+                    : "sem motivo"}{" "}
+                  · responder até{" "}
+                  {new Date(a.dueAt).toLocaleString("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                </p>
+                <p className="font-display text-sm">
+                  👤 {a.offenderNickname ?? "—"}
+                </p>
+                <blockquote className="rounded-xl bg-input/60 p-2 text-sm italic border-l-2 border-pink/50">
+                  "{a.content}"
+                </blockquote>
+                <p className="text-sm">
+                  <strong>Recurso:</strong> {a.text}
+                </p>
+                <textarea
+                  value={appealNote[a.id] ?? ""}
+                  onChange={(e) =>
+                    setAppealNote((n) => ({ ...n, [a.id]: e.target.value }))
+                  }
+                  maxLength={500}
+                  rows={2}
+                  placeholder="Resposta ao autor (ele vai ler)"
+                  className="bg-input rounded-xl px-3 py-2 border border-white/10 text-sm"
+                />
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    disabled={busy === a.id}
+                    onClick={() => decide(a.id, "upheld")}
+                    className="btn-pop btn-plain border border-white/10 text-xs py-1.5 px-2.5"
+                  >
+                    Manter medida
+                  </button>
+                  <button
+                    disabled={busy === a.id}
+                    onClick={() => decide(a.id, "reversed")}
+                    className="btn-pop bg-mint/20 border border-mint/40 text-xs py-1.5 px-2.5"
+                  >
+                    Reverter
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
