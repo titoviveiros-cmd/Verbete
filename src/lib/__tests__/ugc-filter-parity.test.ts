@@ -118,3 +118,31 @@ describe("ugcRejectedReason (erro do gatilho do servidor)", () => {
     expect(ugcRejectedReason({ message: "ugc_rejected:outro" })).toBeNull();
   });
 });
+
+// R6 (12/11/2026): categorias e times da sala são LISTA FECHADA no servidor
+// (public.room_config_issue). A lista tem de ser exatamente a que o app
+// oferece — se o app ganhar uma categoria ou preset, a migration muda junto.
+describe("paridade cliente × servidor (configuração da sala)", () => {
+  it("categorias: mesmas chaves de CATEGORY_META, mesma ordem", () => {
+    const lobby = readFileSync("src/components/room/phases/Lobby.tsx", "utf8");
+    const block = /CATEGORY_META[^=]*= \{([\s\S]*?)\n\};/.exec(lobby);
+    expect(block, "CATEGORY_META não encontrado no Lobby").not.toBeNull();
+    const appKeys = [...block![1]!.matchAll(/^\s+([a-z]+): \{ emoji/gm)].map(
+      (m) => m[1]!,
+    );
+    expect(appKeys.length).toBeGreaterThan(0);
+    expect(sqlArray("v_categories")).toEqual(appKeys);
+  });
+  it("times: os presets do servidor são exatamente TEAM_PRESETS", async () => {
+    const { TEAM_PRESETS } = await import("@/lib/room");
+    const m = /v_team_presets jsonb := '([\s\S]*?)'::jsonb;/.exec(MIGRATION);
+    expect(m, "v_team_presets não encontrado na migration").not.toBeNull();
+    expect(JSON.parse(m![1]!)).toEqual(Object.values(TEAM_PRESETS));
+  });
+  it("gatilho cobre categorias e times e recusa com ugc_rejected", () => {
+    expect(MIGRATION).toMatch(
+      /BEFORE INSERT OR UPDATE OF categories, teams ON public\.rooms/,
+    );
+    expect(MIGRATION).toMatch(/RAISE EXCEPTION 'ugc_rejected:%', v_issue/);
+  });
+});

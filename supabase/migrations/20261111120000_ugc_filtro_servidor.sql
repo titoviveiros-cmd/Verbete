@@ -175,6 +175,79 @@ CREATE TRIGGER profiles_display_name_ugc_guard
   BEFORE INSERT OR UPDATE OF display_name, avatar ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.profiles_display_name_ugc_guard();
 
+-- rooms.categories e rooms.teams (R6, 12/11/2026): texto do DONO visível aos
+-- outros jogadores (lobby, placar, página pública do resultado) que entrava
+-- por host_update_room_config pela API sem filtro nenhum (categorias: qualquer
+-- texto até 40 caracteres, sem limite de quantidade; times: qualquer JSON até
+-- 8 itens). O app só oferece OPÇÕES PRONTAS, então vale a regra mais
+-- restritiva que não quebra o fluxo legítimo: LISTA FECHADA.
+--   * categories: só as chaves de CATEGORY_META
+--     (src/components/room/phases/Lobby.tsx), sem repetição; vazio = "Todas";
+--   * teams: '[]' ou EXATAMENTE um dos presets de TEAM_PRESETS
+--     (src/lib/room.ts) — id, nome, cor e emoji.
+-- Listas conferidas contra o app por src/lib/__tests__/ugc-filter-parity.test.ts.
+-- Por GATILHO: cobre a RPC e qualquer outro caminho de escrita; recusa com
+-- "ugc_rejected:categories" / "ugc_rejected:teams" (a chamada inteira é
+-- desfeita; o app recarrega a sala). Linhas já gravadas só são conferidas se
+-- o campo mudar.
+CREATE OR REPLACE FUNCTION public.room_config_issue(p_categories text[], p_teams jsonb)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  v_categories text[] := ARRAY['infantil', 'gastronomia', 'ciencia', 'planta', 'animal', 'corpo', 'sentimento', 'lugar', 'qualidade', 'adjetivo', 'verbo', 'direito', 'medicina', 'literatura', 'nautica'];
+  v_team_presets jsonb := '[
+    [{"id": "men", "name": "Homens", "color": "#3B82F6", "emoji": "👨"}, {"id": "women", "name": "Mulheres", "color": "#EC4899", "emoji": "👩"}],
+    [{"id": "a", "name": "Time A", "color": "#FFD166", "emoji": "🅰️"}, {"id": "b", "name": "Time B", "color": "#06D6A0", "emoji": "🅱️"}],
+    [{"id": "a", "name": "Time A", "color": "#FFD166", "emoji": "🅐"}, {"id": "b", "name": "Time B", "color": "#06D6A0", "emoji": "🅑"}, {"id": "c", "name": "Time C", "color": "#EF476F", "emoji": "🅒"}]
+  ]'::jsonb;
+BEGIN
+  IF p_categories IS NOT NULL AND (
+       EXISTS (SELECT 1 FROM unnest(p_categories) AS u(c)
+                WHERE u.c IS NULL OR NOT (u.c = ANY (v_categories)))
+       OR cardinality(p_categories)
+          <> (SELECT count(DISTINCT u.c) FROM unnest(p_categories) AS u(c))
+     ) THEN
+    RETURN 'categories';
+  END IF;
+  IF p_teams IS NOT NULL AND p_teams <> '[]'::jsonb AND NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(v_team_presets) AS t(preset)
+        WHERE t.preset = p_teams
+     ) THEN
+    RETURN 'teams';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rooms_config_ugc_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_issue text;
+BEGIN
+  v_issue := public.room_config_issue(
+    CASE WHEN TG_OP = 'INSERT' OR NEW.categories IS DISTINCT FROM OLD.categories
+         THEN NEW.categories END,
+    CASE WHEN TG_OP = 'INSERT' OR NEW.teams IS DISTINCT FROM OLD.teams
+         THEN NEW.teams END);
+  IF v_issue IS NOT NULL THEN
+    RAISE EXCEPTION 'ugc_rejected:%', v_issue
+      USING ERRCODE = 'P0001', HINT = 'room_config';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS rooms_config_ugc_guard ON public.rooms;
+CREATE TRIGGER rooms_config_ugc_guard
+  BEFORE INSERT OR UPDATE OF categories, teams ON public.rooms
+  FOR EACH ROW EXECUTE FUNCTION public.rooms_config_ugc_guard();
+
 -- Internas: ninguém chama pela API.
 REVOKE ALL ON FUNCTION public.ugc_text_issue(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.ugc_symbol_issue(text) FROM PUBLIC, anon, authenticated;
@@ -182,8 +255,12 @@ REVOKE ALL ON FUNCTION public.reactions_ugc_guard() FROM PUBLIC, anon, authentic
 REVOKE ALL ON FUNCTION public.definitions_ugc_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.players_nickname_ugc_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.profiles_display_name_ugc_guard() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.room_config_issue(text[], jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rooms_config_ugc_guard() FROM PUBLIC, anon, authenticated;
 
 -- Diagnóstico (NÃO executado aqui; só leitura, para o dono decidir uma
 -- limpeza à parte):
 --   SELECT user_id, display_name FROM public.profiles
 --    WHERE public.ugc_text_issue(display_name) IS NOT NULL;
+--   SELECT id, status FROM public.rooms
+--    WHERE public.room_config_issue(categories, teams) IS NOT NULL;
