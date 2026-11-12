@@ -84,6 +84,15 @@ BEGIN
 END;
 $function$;
 
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'verbete-room-code-failures-cleanup') THEN
+      PERFORM cron.unschedule('verbete-room-code-failures-cleanup');
+    END IF;
+  END IF;
+END $$;
+DROP FUNCTION IF EXISTS public.room_code_failures_cleanup();
 DROP FUNCTION IF EXISTS public.room_code_record_failure(text);
 DROP FUNCTION IF EXISTS public.room_code_retry_after(text);
 DROP FUNCTION IF EXISTS public.room_code_uid_hash(uuid);
