@@ -210,6 +210,57 @@ describe("R6: claimOfflineBatch (cliente da RPC)", () => {
     );
     expect(f.calls[0]!.args.p_want).toBe(20);
   });
+
+  // R7 (12/11, staging isolado): só a espera da trava tinha limite
+  // (lock_timeout 1,5 s no banco). RPC lenta por outro motivo (PostgREST,
+  // rede, banco) segurava a edge pelo tempo todo — 3 s medidos — sem cair no
+  // caminho B. Agora: prazo na edge, aborta o pedido e devolve null.
+  it("RPC lenta (3 s) = null no prazo da edge (2 s) e o pedido é abortado → caminho B", async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      const db = {
+        rpc: () => {
+          const p = new Promise<{ data: unknown; error: unknown }>((r) =>
+            setTimeout(() => r({ data: [1], error: null }), 3000),
+          );
+          return Object.assign(p, {
+            abortSignal(s: AbortSignal) {
+              s.addEventListener("abort", () => {
+                aborted = true;
+              });
+              return p;
+            },
+          });
+        },
+      };
+      let settled: unknown = "pendente";
+      void claimOfflineBatch(db, defs, 2, room, 4).then((v) => {
+        settled = v;
+      });
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(settled).toBe("pendente");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBeNull();
+      expect(aborted).toBe(true);
+      // dentro do prazo continua valendo a resposta do banco
+      let fast: unknown = "pendente";
+      const quick = {
+        rpc: () =>
+          new Promise<{ data: unknown; error: unknown }>((r) =>
+            setTimeout(() => r({ data: [2], error: null }), 1500),
+          ),
+      };
+      void claimOfflineBatch(quick, defs, 2, room, 4).then((v) => {
+        fast = v;
+      });
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(fast).toEqual(["Roda de viola"]);
+      expect(vi.getTimerCount()).toBe(0); // prazo limpo, sem timer pendurado
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("R6: edges e migration (estrutura)", () => {

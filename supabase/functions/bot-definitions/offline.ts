@@ -790,6 +790,15 @@ export const OFFLINE_CLAIM_MAX = 24;
  * perdedora de uma disputa precisa de uma próxima. Medido no simulador (R6).
  */
 export const OFFLINE_CLAIM_SPARE = 4;
+/**
+ * Prazo da RPC na edge (R7, staging isolado). O banco só limita a ESPERA da
+ * trava (lock_timeout 1,5 s → 55P03 → null); RPC lenta por outro motivo
+ * (PostgREST, rede, banco) segurava a edge pelo tempo todo (3 s medidos) sem
+ * cair no caminho B. Acima do lock_timeout para não cortar quem só esperou a
+ * fila da sala. Estourou: aborta o pedido e devolve null (caminho B). Se o
+ * banco ainda gravar depois, o B relê a memória da rodada e evita esses textos.
+ */
+export const OFFLINE_CLAIM_TIMEOUT_MS = 2000;
 
 /** Texto normalizado aceito pela função do banco (só [a-z0-9] e espaço simples). */
 const CLAIM_NORM_RE = /^[a-z0-9]+( [a-z0-9]+)*$/;
@@ -832,15 +841,20 @@ export function claimSerial(
 }
 
 /** Cliente mínimo (o `admin` do supabase-js nas edges; um falso nos testes). */
+/** Resposta da RPC; no supabase-js ela também aceita `abortSignal` (cancelar o fetch). */
+export type ClaimReply = PromiseLike<{ data: unknown; error: unknown }> & {
+  abortSignal?: (signal: AbortSignal) => ClaimReply;
+};
 export type ClaimDb = {
-  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
+  rpc: (fn: string, args: Record<string, unknown>) => ClaimReply;
 };
 
 /**
  * Reserva atômica do lote (opção C). Devolve as definições ACEITAS pela
  * função do banco, na ordem da lista (pode ser vazia: tudo já servido), ou
  * `null` quando a reserva não está disponível (erro, função ausente, retorno
- * inválido) — aí a edge segue o caminho de antes.
+ * inválido, ou mais de OFFLINE_CLAIM_TIMEOUT_MS) — aí a edge segue o
+ * caminho de antes.
  */
 export async function claimOfflineBatch(
   db: ClaimDb,
@@ -852,13 +866,26 @@ export async function claimOfflineBatch(
   const list = defs.slice(0, OFFLINE_CLAIM_MAX);
   if (!roomId || !Number.isInteger(round) || round < 0 || list.length === 0) return null;
   const max = Math.max(0, Math.min(20, Math.floor(want)));
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const { data, error } = await db.rpc(OFFLINE_CLAIM_RPC, {
+    const ctrl = new AbortController();
+    let req: ClaimReply = db.rpc(OFFLINE_CLAIM_RPC, {
       p_room: roomId,
       p_round: round,
       p_norms: list.map((d) => normTxt(String(d ?? ""))),
       p_want: max,
     });
+    // supabase-js: cancela o fetch de verdade (o falso dos testes pode não ter)
+    if (typeof req.abortSignal === "function") req = req.abortSignal(ctrl.signal);
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        ctrl.abort();
+        resolve(null);
+      }, OFFLINE_CLAIM_TIMEOUT_MS);
+    });
+    const res = await Promise.race([Promise.resolve(req), late]);
+    if (res === null) return null;
+    const { data, error } = res;
     if (error || !Array.isArray(data)) return null;
     const out: string[] = [];
     const seen = new Set<number>();
@@ -871,6 +898,8 @@ export async function claimOfflineBatch(
     return out.length > max ? null : out;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
