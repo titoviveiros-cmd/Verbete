@@ -192,16 +192,13 @@ export async function joinRoom(
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   // Toda entrada (Home, convite, volta do host, volta após remoção) passa aqui.
   await assertTermsAccepted();
-  // Leituras com "segunda via" (hedged): na medição de 2026-10-20 a
-  // checagem de banimento travou 19,8 s e o host só viu o convidado
-  // entrar 21,5 s depois. Mesma consulta, mesmo resultado.
-  const { data: room, error } = await hedged(() =>
-    supabase.from("rooms").select("*").eq("code", code).maybeSingle(),
-  );
-  if (error) throw error;
-  if (!room) throw new Error("Sala não encontrada");
+  // Sem leitura de `rooms` por código antes de entrar: desde 20261112110000
+  // só quem participa lê a sala. A própria rejoin_room devolve a sala (e
+  // "room_not_found" quando o código não existe).
 
-  // Bloqueia jogadores banidos antes de inserir na sala
+  // Bloqueia jogadores banidos antes de inserir na sala. Com "segunda via"
+  // (hedged): na medição de 2026-10-20 esta checagem travou 19,8 s e o host
+  // só viu o convidado entrar 21,5 s depois. Mesma consulta, mesmo resultado.
   const { data: authData } = await supabase.auth.getUser();
   const authUserId = authData?.user?.id ?? null;
   const { data: banned } = await hedged(() =>
@@ -222,14 +219,19 @@ export async function joinRoom(
 
   // Usa rejoin_room: se o jogador existir (mesmo kicked_at), preserva
   // a pontuação acumulada e zera apenas os contadores de penalidade.
-  const callRejoin = (pid: string) =>
-    supabase.rpc("rejoin_room", {
+  // A sala que ela devolve (to_jsonb da linha) é o retorno do joinRoom.
+  let joined: unknown = null;
+  const callRejoin = async (pid: string) => {
+    const res = await supabase.rpc("rejoin_room", {
       p_code: code,
       p_player_id: pid,
       p_nickname: cleanNick,
       p_avatar: avatar,
       p_color: color,
     });
+    joined = res.error ? null : res.data;
+    return res;
+  };
   // De novo, colado na gravação: sala e banimento podem levar segundos, e
   // outra aba pode ter trocado de conta nesse meio-tempo.
   await assertTermsAccepted();
@@ -251,7 +253,17 @@ export async function joinRoom(
       () => {},
       () => {},
     );
-  return room as unknown as Room;
+  // Quem chama só usa room.code (navegação); sem a linha, segue com o código
+  // e a tela da sala decide (get_room_state).
+  return joinedRoom(joined, code);
+}
+
+/** Sala devolvida pela rejoin_room, ou o mínimo para navegar até ela. */
+export function joinedRoom(data: unknown, code: string): Room {
+  const r = data as Partial<Room> | null;
+  if (r && typeof r === "object" && typeof r.id === "string" && r.code)
+    return r as Room;
+  return { code } as Room;
 }
 
 /** Reentra na sala após ser removido — preserva pontuação, zera advertências. */

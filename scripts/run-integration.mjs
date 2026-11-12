@@ -11,6 +11,7 @@ const SUITES = [
   "test-e2e-round.mjs",
   "test-match-sem-ia.mjs", // partida completa com ai_mode=suspenso, sem edges servidas (08/11/2026)
   "test-security-rest.mjs",
+  "test-rooms-leitura.mjs", // salas: leitura só de participantes; enumeração, código exato (vc8), Realtime, entradas simultâneas (12/11/2026)
   "test-shuffling-deadlock.mjs",
   "test-similarity-bonus.mjs",
   "test-daily-guard.mjs", // V2 Diário: reserva atômica antes da IA, com conexões REAIS independentes
