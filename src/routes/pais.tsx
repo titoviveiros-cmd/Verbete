@@ -18,10 +18,11 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 //    de build do PR #63 reprova o marcador no bundle de produção;
 //  * a página /denuncias é do PR #65: o link só aparece se a rota existir no
 //    build; sem ela, fica o texto com o caminho dentro do jogo.
-//  * integração 12/11 (integracao/eca-12-11): texto ajustado ao que os PRs
-//    #66 (filtro no servidor), #69 (sala privada/trancar/só bots), #70 (ano
-//    de nascimento declarado, < 13 só bots) e #68 (ranking opt-in) fazem —
-//    publicar só junto com eles; sem eles, voltar ao texto do #71.
+//  * 12/11 (L3): texto ajustado ao que os PRs #66 (filtro no servidor), #69
+//    (sala privada/trancar/só bots), #70 (ano de nascimento declarado, < 13
+//    só bots) e #68 (ranking opt-in) fazem. Este PR inclui os quatro por
+//    merge e é o ÚLTIMO da ordem; cada frase é amarrada por teste ao código
+//    (parents-page.test.tsx) — se o código sair, o teste cai.
 // Texto a validar com advogado(a) antes de publicar.
 export const Route = createFileRoute("/pais")({
   head: () => ({
