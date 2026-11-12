@@ -47,6 +47,7 @@ import { JoinFlow } from "@/components/room/JoinFlow";
 import { TermsConsent } from "@/components/TermsConsent";
 import { useDeclaredAgeBand } from "@/hooks/use-age-band";
 import { botsOnly } from "@/lib/age";
+import { ageLockRequired, setRoomLocked } from "@/lib/room-access";
 import { useTermsGate } from "@/hooks/use-terms-gate";
 import { useTermsAccepted } from "@/lib/terms-consent";
 import {
@@ -138,6 +139,21 @@ function RoomPage() {
     leftByAgeRef.current = true;
     void leaveRoom(playerId);
   }, [blockedByAge, me, playerId]);
+  // Integração B4 × B5 (12/11): dono que declarou < 13 → sala trancada (ninguém
+  // novo entra; bots entram). Se destrancar, tranca de novo.
+  const roomLocked =
+    (room as (typeof room & { locked?: boolean }) | null)?.locked === true;
+  const mustLockForAge = ageLockRequired({
+    isHost,
+    inRoom: !!me,
+    ageBand,
+    locked: roomLocked,
+  });
+  const roomIdForLock = room?.id;
+  useEffect(() => {
+    if (!mustLockForAge || !roomIdForLock) return;
+    void setRoomLocked(roomIdForLock, playerId, true).catch(() => {});
+  }, [mustLockForAge, roomIdForLock, playerId]);
   const currentCoordinator = room
     ? players.find((p) => p.id === room.current_coordinator)
     : undefined;
@@ -739,10 +755,8 @@ function RoomPage() {
                     teams={room.teams ?? []}
                     categories={room.categories ?? []}
                     nivel={room.nivel ?? "aleatorio"}
-                    locked={
-                      (room as typeof room & { locked?: boolean }).locked ===
-                      true
-                    }
+                    locked={roomLocked}
+                    lockForced={isHost && botsOnly(ageBand)}
                   />
                 )}
                 {room.status === "choosing" && (
