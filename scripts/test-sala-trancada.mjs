@@ -59,9 +59,17 @@ try {
     as(uid, `SELECT public.rejoin_room($1, $2, 'Amigo', 'x', '#000') v`, [room.code, pid]);
   const lock = (uid, pid, v) =>
     as(uid, `SELECT public.set_room_locked($1, $2, $3) v`, [room.id, pid, v]);
+  // A recusa pode vir como ERRO (gatilho deste PR) ou como RETORNO
+  // {ok:false, reason} (PR do limite de tentativas de código, 20261112090000,
+  // que precisa devolver normalmente para a contagem de falhas não ser desfeita).
+  const entered = (r) => r.ok && r.row?.v?.ok !== false;
+  const refused = (r, code) =>
+    (!r.ok && new RegExp(code).test(r.error ?? "")) ||
+    (r.ok && r.row?.v?.ok === false && r.row.v.reason === code);
+  const why = (r) => r.error ?? (r.row?.v?.ok === false ? JSON.stringify(r.row.v) : "");
 
   const a = await join(U2, P2);
-  check("amigo entra pelo código (convite)", a.ok, a.error);
+  check("amigo entra pelo código (convite)", entered(a), why(a));
 
   const notHost = await lock(U2, P2, true);
   check("quem não é dono não tranca", notHost.ok && notHost.row.v.reason === "not_host", JSON.stringify(notHost));
@@ -70,10 +78,10 @@ try {
   check("dono tranca", l.ok && l.row.v.ok === true, JSON.stringify(l));
 
   const b = await join(U3, P3);
-  check("sala trancada: ninguém novo entra (room_locked)", !b.ok && /room_locked/.test(b.error ?? ""), b.error);
+  check("sala trancada: ninguém novo entra (room_locked)", refused(b, "room_locked"), why(b));
 
   const back = await join(U2, P2);
-  check("sala trancada: quem já está reconecta", back.ok, back.error);
+  check("sala trancada: quem já está reconecta", entered(back), why(back));
 
   await db.query(`INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot) VALUES ($1, $2, 'Bot', 'x', '#000', true)`, [`st_bot_${tag}`, room.id]);
   check("sala trancada: bot entra", true);
@@ -81,12 +89,12 @@ try {
   await db.query(`UPDATE public.rooms SET status = 'writing' WHERE id = $1`, [room.id]);
   await db.query(`UPDATE public.players SET kicked_at = now() WHERE id = $1`, [P2]);
   const kicked = await join(U2, P2);
-  check("sala trancada: expulso não volta", !kicked.ok && /room_locked/.test(kicked.error ?? ""), kicked.error);
+  check("sala trancada: expulso não volta", refused(kicked, "room_locked"), why(kicked));
   await db.query(`UPDATE public.rooms SET status = 'lobby' WHERE id = $1`, [room.id]);
 
   const u = await lock(U1, P1, false);
   const c = await join(U3, P3);
-  check("destrancar reabre para o convite", u.ok && c.ok, c.error);
+  check("destrancar reabre para o convite", u.ok && entered(c), why(c));
 
   const q = await as(U4, `SELECT id FROM public.join_public_room($1, 'Quem', 'x', '#000')`, [P4]);
   check("partida rápida fechada para sessão do app (public_rooms_closed)", !q.ok && /public_rooms_closed/.test(q.error ?? ""), q.error);
