@@ -766,6 +766,114 @@ export function keepClaimed(batch: readonly string[], claimed: unknown): string[
   return batch.filter((t) => ok.has(normTxt(t)));
 }
 
+// ---------------------------------------------------------------------------
+// G3 opção C (12/11): RESERVA ATÔMICA na memória da rodada.
+//
+// No pior caso simultâneo nenhuma chamada vê a gravação da outra (a releitura
+// chega antes das gravações): dois humanos sorteiam o mesmo trecho e só o
+// texto IGUAL era barrado (upsert ON CONFLICT). A função do banco
+// `offline_claim_defs` (migration 20261112100000) faz, numa transação só:
+// trava sala+rodada (pg_advisory_xact_lock), recusa cada candidata IGUAL ou
+// PARECIDA (Dice de trigramas > MATCH_REPEAT_THRESHOLD, o MESMO critério de
+// `dice`) com o que a rodada já serviu ou com o que esta chamada já pegou, e
+// grava as aceitas em ai_served_defs. A perdedora de uma disputa pega a
+// próxima candidata da lista (laço limitado a OFFLINE_CLAIM_MAX, sem ida e
+// volta extra). Sem a função (migration ausente), com erro ou retorno
+// inválido: `null` = a edge segue o caminho de antes (opção B), nunca pior.
+
+/** Nome da função (RPC) da reserva atômica. */
+export const OFFLINE_CLAIM_RPC = "offline_claim_defs";
+/** Teto de candidatas por reserva (o mesmo da função no banco). */
+export const OFFLINE_CLAIM_MAX = 24;
+/**
+ * Candidatas a mais que a v1 (💡) gera quando a reserva está disponível: a
+ * perdedora de uma disputa precisa de uma próxima. Medido no simulador (R6).
+ */
+export const OFFLINE_CLAIM_SPARE = 4;
+
+/** Texto normalizado aceito pela função do banco (só [a-z0-9] e espaço simples). */
+const CLAIM_NORM_RE = /^[a-z0-9]+( [a-z0-9]+)*$/;
+
+/**
+ * Referência em JS da função `offline_claim_defs` (mesmas regras, mesma
+ * ordem): índices (base 1) das candidatas aceitas, no máximo `want`. Serve
+ * aos testes e ao simulador; a edge usa a do banco (atômica).
+ */
+export function claimSerial(
+  served: readonly string[],
+  norms: readonly string[],
+  want: number,
+): { picked: number[]; examined: number } {
+  const max = Math.max(0, Math.min(20, Math.floor(want)));
+  const have = served.map((s) => {
+    const n = normTxt(String(s ?? ""));
+    return { n, g: grams(n) };
+  });
+  const picked: number[] = [];
+  let examined = 0;
+  const list = norms.slice(0, OFFLINE_CLAIM_MAX);
+  for (let i = 0; i < list.length && picked.length < max; i++) {
+    examined++;
+    const n = String(list[i] ?? "");
+    if (n.length === 0 || n.length > 200 || !CLAIM_NORM_RE.test(n)) continue;
+    const g = grams(n);
+    // 4·inter > |A|+|B|  ⇔  Dice > 0,5 (inteiro, igual ao SQL)
+    const hit = have.some((h) => {
+      if (h.n === n) return true;
+      let inter = 0;
+      for (const x of g) if (h.g.has(x)) inter++;
+      return 4 * inter > h.g.size + g.size;
+    });
+    if (hit) continue;
+    picked.push(i + 1);
+    have.push({ n, g });
+  }
+  return { picked, examined };
+}
+
+/** Cliente mínimo (o `admin` do supabase-js nas edges; um falso nos testes). */
+export type ClaimDb = {
+  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
+};
+
+/**
+ * Reserva atômica do lote (opção C). Devolve as definições ACEITAS pela
+ * função do banco, na ordem da lista (pode ser vazia: tudo já servido), ou
+ * `null` quando a reserva não está disponível (erro, função ausente, retorno
+ * inválido) — aí a edge segue o caminho de antes.
+ */
+export async function claimOfflineBatch(
+  db: ClaimDb,
+  defs: readonly string[],
+  want: number,
+  roomId: string,
+  round: number,
+): Promise<string[] | null> {
+  const list = defs.slice(0, OFFLINE_CLAIM_MAX);
+  if (!roomId || !Number.isInteger(round) || round < 0 || list.length === 0) return null;
+  const max = Math.max(0, Math.min(20, Math.floor(want)));
+  try {
+    const { data, error } = await db.rpc(OFFLINE_CLAIM_RPC, {
+      p_room: roomId,
+      p_round: round,
+      p_norms: list.map((d) => normTxt(String(d ?? ""))),
+      p_want: max,
+    });
+    if (error || !Array.isArray(data)) return null;
+    const out: string[] = [];
+    const seen = new Set<number>();
+    for (const x of data) {
+      const i = Number(x);
+      if (!Number.isInteger(i) || i < 1 || i > list.length || seen.has(i)) return null;
+      seen.add(i);
+      out.push(list[i - 1]!);
+    }
+    return out.length > max ? null : out;
+  } catch {
+    return null;
+  }
+}
+
 export function generateOfflineDefinitions(input: OfflineInput): string[] {
   return generateOfflineCandidates(input).map((c) => c.text);
 }

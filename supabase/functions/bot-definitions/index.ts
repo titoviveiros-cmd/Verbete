@@ -26,8 +26,10 @@ import {
   servedRows,
 } from "./logic.ts";
 import {
+  claimOfflineBatch,
   generateOfflineDefinitions,
   laneSlotFor,
+  OFFLINE_CLAIM_SPARE,
   OFFLINE_RESERVE_EXTRA,
   offlineGeneratorEnabled,
   offlineServeBatch,
@@ -211,36 +213,48 @@ Deno.serve(async (req) => {
           // G3 pior caso (11/11 noite): sub-faixa do jogador (hash do token
           // da sessão; o valor não é gravado nem registrado)
           laneSlot: laneSlotFor(bearerToken(req.headers.get("authorization"))),
-          // 2 a mais: o lote final tira as parecidas entre si e com a rodada
-          count: count + OFFLINE_RESERVE_EXTRA,
+          // 2 a mais: o lote final tira as parecidas entre si e com a rodada;
+          // + OFFLINE_CLAIM_SPARE (opção C): a próxima para quem perde a disputa
+          count: count + OFFLINE_RESERVE_EXTRA + OFFLINE_CLAIM_SPARE,
           seed: `${memRoomId}:${memRound}:${crypto.randomUUID()}`,
         });
         const vetted = dropAlreadyServed(
           dropNearTruth(dropMalformed(gen, word).kept, meaning).kept,
           servedNorms,
         ).kept;
-        // memória RELIDA antes de gravar (G3, 11/11): bots, 🤖 e 💡 pedem ao
-        // mesmo tempo; o que outra chamada já serviu nesta rodada sai daqui
-        let servedNow: string[] = [];
-        if (memRoomId && memRound !== null && vetted.length > 0) {
-          const { data: again } = await admin
-            .from("ai_served_defs")
-            .select("norm_text")
-            .eq("room_id", memRoomId)
-            .eq("round", memRound);
-          servedNow = (again ?? []).map((r: { norm_text: string }) => r.norm_text);
-        }
-        let offlineDefs = offlineServeBatch(vetted, count, [...servedNorms, ...servedNow]);
-        if (memRoomId && memRound !== null && offlineDefs.length > 0) {
-          // só o que ESTA chamada gravou (texto igual de chamada simultânea sai)
-          const { data: claimed } = await admin
-            .from("ai_served_defs")
-            .upsert(servedRows(offlineDefs, memRoomId, memRound), {
-              onConflict: "room_id,round,norm_text",
-              ignoreDuplicates: true,
-            })
-            .select("norm_text");
-          offlineDefs = keepClaimed(offlineDefs, claimed);
+        // G3 opção C (12/11): reserva ATÔMICA (função offline_claim_defs: o
+        // banco serializa sala+rodada e recusa o igual/parecido com o que a
+        // rodada já gravou, inclusive por chamadas simultâneas; a perdedora
+        // pega a próxima candidata). null = função ausente ou erro (ou sem
+        // sala/rodada) → o caminho de antes, logo abaixo.
+        let offlineDefs =
+          memRoomId && memRound !== null && vetted.length > 0
+            ? await claimOfflineBatch(admin, vetted, count, memRoomId, memRound)
+            : null;
+        if (offlineDefs === null) {
+          // memória RELIDA antes de gravar (G3, 11/11): bots, 🤖 e 💡 pedem ao
+          // mesmo tempo; o que outra chamada já serviu nesta rodada sai daqui
+          let servedNow: string[] = [];
+          if (memRoomId && memRound !== null && vetted.length > 0) {
+            const { data: again } = await admin
+              .from("ai_served_defs")
+              .select("norm_text")
+              .eq("room_id", memRoomId)
+              .eq("round", memRound);
+            servedNow = (again ?? []).map((r: { norm_text: string }) => r.norm_text);
+          }
+          offlineDefs = offlineServeBatch(vetted, count, [...servedNorms, ...servedNow]);
+          if (memRoomId && memRound !== null && offlineDefs.length > 0) {
+            // só o que ESTA chamada gravou (texto igual de chamada simultânea sai)
+            const { data: claimed } = await admin
+              .from("ai_served_defs")
+              .upsert(servedRows(offlineDefs, memRoomId, memRound), {
+                onConflict: "room_id,round,norm_text",
+                ignoreDuplicates: true,
+              })
+              .select("norm_text");
+            offlineDefs = keepClaimed(offlineDefs, claimed);
+          }
         }
         return new Response(JSON.stringify({ definitions: offlineDefs }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

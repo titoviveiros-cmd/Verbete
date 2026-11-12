@@ -61,6 +61,7 @@ import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
 import {
+  claimOfflineBatch,
   generateOfflineDefinitions,
   laneSlotFor,
   OFFLINE_RESERVE_EXTRA,
@@ -302,30 +303,44 @@ Deno.serve(async (req) => {
       // (repetia cédula de bot/💡 da mesma rodada). Memória RELIDA antes de
       // gravar (pedidos simultâneos de bots, 🤖 e 💡). Mesmos campos.
       if (offlineGen) {
-        const { data: servedNow } = await admin
-          .from("ai_served_defs")
-          .select("norm_text")
-          .eq("room_id", roomId)
-          .eq("round", round);
-        let batch = offlineServeBatch(
+        // G3 opção C (12/11): reserva ATÔMICA (função offline_claim_defs: o
+        // banco serializa sala+rodada e recusa o igual/parecido com o que a
+        // rodada já gravou, inclusive por chamadas simultâneas; a perdedora
+        // pega a próxima candidata). null = função ausente ou erro → o
+        // caminho de antes (releitura + upsert + keepClaimed), logo abaixo.
+        let batch = await claimOfflineBatch(
+          admin,
           vetted,
           count + OFFLINE_RESERVE_EXTRA,
-          [
-            ...servedNorms,
-            ...(servedNow ?? []).map((r: { norm_text: string }) => r.norm_text),
-          ],
+          roomId,
+          round,
         );
-        if (batch.length > 0) {
-          // ON CONFLICT DO NOTHING + select = só as linhas que ESTA chamada
-          // gravou: texto igual servido por uma chamada simultânea sai daqui
-          const { data: claimed } = await admin
+        if (batch === null) {
+          const { data: servedNow } = await admin
             .from("ai_served_defs")
-            .upsert(servedRows(batch, roomId, round), {
-              onConflict: "room_id,round,norm_text",
-              ignoreDuplicates: true,
-            })
-            .select("norm_text");
-          batch = keepClaimed(batch, claimed);
+            .select("norm_text")
+            .eq("room_id", roomId)
+            .eq("round", round);
+          batch = offlineServeBatch(
+            vetted,
+            count + OFFLINE_RESERVE_EXTRA,
+            [
+              ...servedNorms,
+              ...(servedNow ?? []).map((r: { norm_text: string }) => r.norm_text),
+            ],
+          );
+          if (batch.length > 0) {
+            // ON CONFLICT DO NOTHING + select = só as linhas que ESTA chamada
+            // gravou: texto igual servido por uma chamada simultânea sai daqui
+            const { data: claimed } = await admin
+              .from("ai_served_defs")
+              .upsert(servedRows(batch, roomId, round), {
+                onConflict: "room_id,round,norm_text",
+                ignoreDuplicates: true,
+              })
+              .select("norm_text");
+            batch = keepClaimed(batch, claimed);
+          }
         }
         return json({
           definitions: [],
