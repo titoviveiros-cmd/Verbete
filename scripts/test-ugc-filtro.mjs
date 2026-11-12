@@ -7,6 +7,8 @@
 //   * apelido (players) e nome exibido (profiles, inclusive via cadastro)
 //     com problema viram 'Jogador'; avatar com texto vira 🦊; reação com
 //     texto é descartada;
+//   * categorias e times da sala (host_update_room_config e UPDATE direto):
+//     só a lista fechada do app (R6, 12/11);
 //   * funções internas fechadas para anon/authenticated;
 //   * rollback limpo.
 // Tudo numa transação desfeita no fim. Envs: DB_URL.
@@ -158,10 +160,89 @@ try {
   const p3 = await row("SELECT display_name FROM public.profiles WHERE user_id = $1", [uid]);
   check("nome exibido limpo fica como está", p3.display_name === "Leitora Voraz", p3.display_name);
 
+  // R6 (12/11): categorias e times da sala = LISTA FECHADA (o app só oferece
+  // opções prontas). Pela RPC do dono e por UPDATE direto.
+  const lobby = await row(
+    `INSERT INTO public.rooms (code, host_id, status) VALUES ($1, $2, 'lobby') RETURNING id`,
+    [`UL${tag}`, `ug_lh_${tag}`],
+  );
+  await db.query(
+    `INSERT INTO public.players (id, room_id, nickname, avatar, color) VALUES ($1, $2, 'Dona', 'x', '#000')`,
+    [`ug_lh_${tag}`, lobby.id],
+  );
+  const cfg = async (patch) => {
+    await db.query("SAVEPOINT c");
+    try {
+      const v = (
+        await row("SELECT public.host_update_room_config($1, $2, $3::jsonb) v", [
+          lobby.id,
+          `ug_lh_${tag}`,
+          JSON.stringify(patch),
+        ])
+      ).v;
+      await db.query("RELEASE SAVEPOINT c");
+      return { ok: v?.ok === true, v };
+    } catch (e) {
+      await db.query("ROLLBACK TO SAVEPOINT c");
+      return { ok: false, error: e.message };
+    }
+  };
+  const roomCfg = () => row("SELECT categories, teams FROM public.rooms WHERE id = $1", [lobby.id]);
+  const TEAMS_AB = [
+    { id: "a", name: "Time A", color: "#FFD166", emoji: "🅰️" },
+    { id: "b", name: "Time B", color: "#06D6A0", emoji: "🅱️" },
+  ];
+  const TEAMS_MW = [
+    { id: "men", name: "Homens", color: "#3B82F6", emoji: "👨" },
+    { id: "women", name: "Mulheres", color: "#EC4899", emoji: "👩" },
+  ];
+
+  const c1 = await cfg({ categories: ["animal", "nautica"] });
+  check("categorias da lista do app: aceitas", c1.ok && JSON.stringify((await roomCfg()).categories) === '["animal","nautica"]', JSON.stringify(c1));
+  const c2 = await cfg({ categories: ["animal", "me chama 11987654321"] });
+  check("categoria fora da lista (texto livre): recusada", !c2.ok && /ugc_rejected:categories/.test(c2.error ?? ""), JSON.stringify(c2));
+  const c3 = await cfg({ categories: ["Animal"] });
+  check("categoria com grafia diferente da chave: recusada", !c3.ok && /ugc_rejected:categories/.test(c3.error ?? ""), JSON.stringify(c3));
+  const c4 = await cfg({ categories: ["animal", "animal"] });
+  check("categoria repetida: recusada", !c4.ok && /ugc_rejected:categories/.test(c4.error ?? ""), JSON.stringify(c4));
+  check("recusa desfaz a chamada inteira (categorias anteriores ficam)", JSON.stringify((await roomCfg()).categories) === '["animal","nautica"]');
+  const c5 = await cfg({ categories: [] });
+  check("categorias vazias (= Todas): aceitas", c5.ok && (await roomCfg()).categories.length === 0, JSON.stringify(c5));
+
+  const t1 = await cfg({ mode: "teams", teams: TEAMS_MW });
+  check("times: preset Homens × Mulheres aceito", t1.ok, JSON.stringify(t1));
+  const t2 = await cfg({ teams: TEAMS_AB });
+  check("times: preset Time A × Time B aceito", t2.ok, JSON.stringify(t2));
+  const t3 = await cfg({ teams: [{ ...TEAMS_AB[0], name: "zap 11987654321" }, TEAMS_AB[1]] });
+  check("times: nome trocado pela API: recusado", !t3.ok && /ugc_rejected:teams/.test(t3.error ?? ""), JSON.stringify(t3));
+  const t4 = await cfg({ teams: [TEAMS_AB[0]] });
+  check("times: pedaço de preset: recusado", !t4.ok && /ugc_rejected:teams/.test(t4.error ?? ""), JSON.stringify(t4));
+  const t5 = await cfg({ teams: [{ ...TEAMS_AB[0], extra: "x" }, TEAMS_AB[1]] });
+  check("times: campo a mais: recusado", !t5.ok && /ugc_rejected:teams/.test(t5.error ?? ""), JSON.stringify(t5));
+  const t6 = await cfg({ mode: "individual", teams: [] });
+  check("times: '[]' (modo individual) aceito", t6.ok && JSON.stringify((await roomCfg()).teams) === "[]", JSON.stringify(t6));
+
+  await db.query("SAVEPOINT d");
+  let direct = null;
+  try {
+    await db.query("UPDATE public.rooms SET categories = ARRAY['instagram fulano'] WHERE id = $1", [lobby.id]);
+  } catch (e) {
+    direct = e.message;
+  }
+  await db.query("ROLLBACK TO SAVEPOINT d");
+  check("UPDATE direto também passa pelo gatilho", /ugc_rejected:categories/.test(direct ?? ""), direct);
+
+  // Linha antiga fora da lista só é conferida se o campo mudar.
+  await db.query("ALTER TABLE public.rooms DISABLE TRIGGER rooms_config_ugc_guard");
+  await db.query("UPDATE public.rooms SET categories = ARRAY['natureza'] WHERE id = $1", [lobby.id]);
+  await db.query("ALTER TABLE public.rooms ENABLE TRIGGER rooms_config_ugc_guard");
+  const old = await cfg({ nivel: "facil" });
+  check("sala antiga com categoria fora da lista: outro campo muda normalmente", old.ok, JSON.stringify(old));
+
   const open = await row(
     `SELECT count(*)::int n FROM pg_proc p JOIN pg_namespace s ON s.oid = p.pronamespace
       WHERE s.nspname = 'public'
-        AND p.proname IN ('ugc_text_issue', 'ugc_symbol_issue', 'definitions_ugc_guard', 'players_nickname_ugc_guard', 'profiles_display_name_ugc_guard', 'reactions_ugc_guard')
+        AND p.proname IN ('ugc_text_issue', 'ugc_symbol_issue', 'definitions_ugc_guard', 'players_nickname_ugc_guard', 'profiles_display_name_ugc_guard', 'reactions_ugc_guard', 'room_config_issue', 'rooms_config_ugc_guard')
         AND (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))`,
   );
   check("funções internas fechadas para anon/authenticated", open.n === 0, `${open.n} abertas`);
@@ -169,11 +250,16 @@ try {
   // Rollback (dentro da transação desfeita): o texto volta a passar.
   await db.query(readFileSync("supabase/rollback/ugc_filtro_servidor.sql", "utf8"));
   const rb = await submit("me chama no zapzap 11987654321");
+  const rbCfg = await cfg({ categories: ["texto livre"] });
   const gone = await row(
     `SELECT count(*)::int n FROM pg_proc p JOIN pg_namespace s ON s.oid = p.pronamespace
-      WHERE s.nspname = 'public' AND p.proname IN ('ugc_text_issue', 'ugc_symbol_issue', 'definitions_ugc_guard', 'players_nickname_ugc_guard', 'profiles_display_name_ugc_guard', 'reactions_ugc_guard')`,
+      WHERE s.nspname = 'public' AND p.proname IN ('ugc_text_issue', 'ugc_symbol_issue', 'definitions_ugc_guard', 'players_nickname_ugc_guard', 'profiles_display_name_ugc_guard', 'reactions_ugc_guard', 'room_config_issue', 'rooms_config_ugc_guard')`,
   );
-  check("rollback: gatilhos e funções saem; submit volta a aceitar", rb.ok === true && gone.n === 0, `${JSON.stringify(rb)} funções=${gone.n}`);
+  check(
+    "rollback: gatilhos e funções saem; submit e configuração voltam a aceitar",
+    rb.ok === true && rbCfg.ok === true && gone.n === 0,
+    `${JSON.stringify(rb)} ${JSON.stringify(rbCfg)} funções=${gone.n}`,
+  );
 } catch (e) {
   check("suíte rodou até o fim", false, e.message);
 } finally {
