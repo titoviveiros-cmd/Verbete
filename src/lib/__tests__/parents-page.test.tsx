@@ -136,11 +136,54 @@ describe("regras do texto", () => {
       /\bPIN\b/,
       /verificamos a idade/i,
       /Family Link/i,
-      /sala (trancada|privada|só por convite)/i,
-      /aparecer no ranking público/i, // opt-in é do PR do B6, não deste
+      /só por convite/i,
       /autoriza(ção|r) (dos|do) (pais|responsável)(?! para jogar\.)/i,
+      /verifica(mos)? a idade(?! para)/i,
     ])
       expect(page, String(proibido)).not.toMatch(proibido);
+  });
+
+  // Integração 12/11: o texto só pode citar o que os PRs integrados fazem.
+  // Cada frase é amarrada ao código que a sustenta (se o código sair, o teste
+  // cai e a frase tem de sair junto).
+  it("cada controle citado existe no código integrado", () => {
+    const amarras: Array<[RegExp, string, RegExp]> = [
+      [/trancar a sala/, "src/lib/room-access.ts", /set_room_locked/],
+      [
+        /Jogar só com bots/,
+        "src/components/room/phases/Lobby.tsx",
+        /Jogar só com bots/,
+      ],
+      [
+        /Não há sala aberta para desconhecidos/,
+        "supabase/migrations/20261111140000_sala_trancada_partida_rapida.sql",
+        /public_rooms_closed/,
+      ],
+      [
+        /Aparecer no ranking público/,
+        "src/components/RankingOptIn.tsx",
+        /Aparecer no ranking público/,
+      ],
+      [
+        /O servidor recusa definições com palavrão, links ou contatos/,
+        "supabase/migrations/20261111120000_ugc_filtro_servidor.sql",
+        /definitions/,
+      ],
+      [/ano de nascimento/, "src/lib/age.ts", /saveAgeDeclaration/],
+    ];
+    for (const [frase, arquivo, prova] of amarras) {
+      expect(page, String(frase)).toMatch(frase);
+      expect(read(arquivo), `${arquivo} ${prova}`).toMatch(prova);
+    }
+  });
+
+  it("idade: declaração, não comprovação; menor de 13 só bots", () => {
+    expect(page).toMatch(/é uma declaração: não comprova a idade/);
+    expect(page).toMatch(/menos de 13 anos joga só com bots/);
+  });
+
+  it("controles do jogador não são vendidos como controle dos pais", () => {
+    expect(page).toMatch(/nenhum deles é um controle dos pais/);
   });
 
   it("nenhum e-mail escrito à mão (só CONTACT_EMAIL)", () => {
