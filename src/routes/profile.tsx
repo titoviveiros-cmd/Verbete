@@ -10,6 +10,7 @@ import {
   fetchUnlockedCodes,
   type Achievement,
 } from "@/lib/daily";
+import { RankingOptIn } from "@/components/RankingOptIn";
 import { deleteAccount, resetMyStats } from "@/lib/account.functions";
 import { expectOk } from "@/lib/server-fn-transport";
 import { AvatarGrid } from "@/components/AvatarGrid";
@@ -376,6 +377,8 @@ function ProfilePage() {
           🏆 Ranking
         </Link>
       </div>
+      {/* B6 (ECA Digital): aparecer no ranking é escolha, desligada por padrão. */}
+      {user && <RankingOptIn userId={user.id} />}
 
       {isAdmin && (
         <Link
