@@ -51,6 +51,10 @@ async function asAnon(sql, params) {
 console.log("— Rollback de compatibilidade (web pré-M1 + banco M1)");
 await db.query("BEGIN");
 try {
+  // O client pré-M1 lê rooms sem sessão (e o UPDATE do migrateHost só acha a
+  // linha se ela for legível): com a 20261112110000 (leitura só de
+  // participantes) aplicada, o modo de emergência pré-M1 exige desfazê-la antes.
+  await db.query(readFileSync("supabase/rollback/rooms_leitura_restrita.sql", "utf8"));
   await db.query(readFileSync("supabase/rollback/m1_compat_old_client.sql", "utf8"));
   check("aplica sem erro", true);
   let r = await asAnon(
