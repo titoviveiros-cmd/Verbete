@@ -513,6 +513,8 @@ const DENY = [
   // resultado compartilhado (09/11/2026): retrato e limpeza são internos
   "match_share_snapshot", "match_share_participants", "match_share_store", "match_share_on_finish",
   "match_shares_forget_user", "match_shares_cleanup",
+  // chat da sala removido do app em 20/10; a RPC dormente fechou em 20261111090100
+  "send_room_message",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
@@ -523,7 +525,7 @@ const ALLOW_ANON = [
   "get_ranking_top", "get_room_definitions", "get_room_reveal", "get_room_state", "get_round_reveal",
   "get_round_sync", "get_word_reveal", "has_role", "host_update_room_config", "is_player_banned",
   "join_public_room", "kick_player", "leave_room", "log_ops_event", "migrate_host", "phase_secs",
-  "record_match_result", "rejoin_room", "reset_room", "send_reaction", "send_room_message", "start_game",
+  "record_match_result", "rejoin_room", "reset_room", "send_reaction", "start_game",
   "start_shuffling", "submit_bot_definitions_bulk", "submit_definition", "xp_to_level",
   // pausa de partida (2026-10-21): presença e "Continuar" — identidade checada
   "touch_presence", "resume_room",
