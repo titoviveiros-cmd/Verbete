@@ -55,10 +55,18 @@ const newUid = () => {
 const who = (u) => createHash("sha256").update(u).digest();
 const msg = (e) => String(e?.message ?? e);
 
+// ECA Digital B4 (PR #69, 20261111140000): partida rápida FECHADA por padrão
+// para sessão do app (public_rooms_closed). Com o gatilho instalado, o caso
+// público liga SET LOCAL verbete.public_rooms_open = 'on' (como o dono do banco
+// faria) e a seção 1 prova antes que, sem ele, a entrada é recusada sem gastar
+// cota. Sem o gatilho, nada muda. Os tetos 5/12/40 são medidos igual nos dois.
+let B4 = false;
+
 /** Uma chamada como a API faria: papel authenticated + claims da sessão. */
-async function asUser(c, uid, sql, params = []) {
+async function asUser(c, uid, sql, params = [], { open = false } = {}) {
   await c.query("BEGIN");
   try {
+    if (open && B4) await c.query(`SET LOCAL verbete.public_rooms_open = 'on'`);
     await c.query("SET LOCAL ROLE authenticated");
     await c.query(`SET LOCAL request.jwt.claims = '{"sub":"${uid}","role":"authenticated"}'`);
     const { rows } = await c.query(sql, params);
@@ -72,8 +80,8 @@ async function asUser(c, uid, sql, params = []) {
 let seq = 0;
 const create = (c, uid) =>
   asUser(c, uid, `SELECT id, code, host_id FROM public.create_room_with_host($1, 'Teste', 'x', '#000')`, [`${tag}_p${seq++}`]);
-const quick = (c, uid) =>
-  asUser(c, uid, `SELECT id, code, host_id FROM public.join_public_room($1, 'Teste', 'x', '#000')`, [`${tag}_p${seq++}`]);
+const quick = (c, uid, { open = true } = {}) =>
+  asUser(c, uid, `SELECT id, code, host_id FROM public.join_public_room($1, 'Teste', 'x', '#000')`, [`${tag}_p${seq++}`], { open });
 const tryCall = async (fn) => {
   try {
     return { ok: true, r: await fn() };
@@ -94,6 +102,8 @@ if (!aplicada) {
   console.error("✖ room_create_guard ausente: aplique a 20261111100000 antes.");
   process.exit(1);
 }
+[{ b4: B4 }] = await q(`SELECT to_regproc('public.public_rooms_open') IS NOT NULL AS b4`);
+if (B4) console.log("  (B4 do #69 presente: partida rápida fechada por padrão; o caso público liga verbete.public_rooms_open)");
 
 try {
   // ------------------------------------------------ 1) tetos de uma identidade
@@ -137,6 +147,15 @@ try {
     if (r.ok) await db.query(`UPDATE public.rooms SET status = 'finished' WHERE id = $1`, [r.r.id]);
     r = await tryCall(() => create(db, C));
     check("41ª do dia → room_rate_limited", !r.ok && /room_rate_limited/.test(r.e), r.e ?? "criou!");
+
+    // B4 (#69): sem verbete.public_rooms_open a partida rápida é recusada e a
+    // tentativa não gasta cota (a transação inteira, registro incluso, desfaz)
+    if (B4) {
+      const Z = newUid();
+      const t = await tryCall(() => quick(db, Z, { open: false }));
+      const [{ n: z }] = await q(`SELECT count(*)::int n FROM public.room_create_log WHERE who = $1`, [who(Z)]);
+      check("B4: partida rápida sem public_rooms_open → public_rooms_closed, sem gastar cota", !t.ok && /public_rooms_closed/.test(t.e) && z === 0, `${t.e ?? "entrou!"} log=${z}`);
+    }
 
     // entrar num lobby público existente NÃO conta
     const D = newUid();
