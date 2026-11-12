@@ -84,6 +84,7 @@ export function Lobby({
   categories,
   nivel = "aleatorio",
   locked = false,
+  lockForced = false,
 }: {
   roomId: string;
   hostId: string;
@@ -98,6 +99,8 @@ export function Lobby({
   nivel?: NivelFilter;
   /** Sala trancada pelo dono (rooms.locked — ECA Digital, proposta B4). */
   locked?: boolean;
+  /** Dono que declarou < 13 (B5): sala fica trancada, sem "Destrancar". */
+  lockForced?: boolean;
 }) {
   const slotsLeft = Math.max(0, 12 - players.length);
   // Mínimo de 4 participantes ativos (humanos + bots) — o servidor
@@ -241,7 +244,7 @@ export function Lobby({
             >
               {roomPrivacyLabel(locked)}
             </p>
-            {isHost && (
+            {isHost && !(lockForced && locked) && (
               <button
                 disabled={lockBusy}
                 onClick={() =>

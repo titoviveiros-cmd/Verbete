@@ -26,6 +26,7 @@ vi.mock("@/lib/room", () => ({
 
 import {
   RoomLockError,
+  ageLockRequired,
   playOnlyWithBots,
   publicMatchAllowed,
   roomPrivacyLabel,
@@ -169,6 +170,28 @@ describe("migration (o servidor é quem garante)", () => {
   it("partida rápida fechada por padrão", () => {
     expect(sql).toMatch(
       /current_setting\('verbete\.public_rooms_open', true\)/,
+    );
+  });
+});
+
+describe("ageLockRequired (integração B4 × B5: dono < 13 declarado → sala trancada)", () => {
+  const base = { isHost: true, inRoom: true, locked: false } as const;
+  it("tranca a sala do dono que declarou menos de 13", () => {
+    expect(ageLockRequired({ ...base, ageBand: "under13" })).toBe(true);
+  });
+  it("não mexe em quem declarou 13+ nem em quem não declarou", () => {
+    for (const ageBand of ["teen", "adult", "unknown"] as const)
+      expect(ageLockRequired({ ...base, ageBand })).toBe(false);
+  });
+  it("só o dono, já dentro da sala, e só se ainda não estiver trancada", () => {
+    expect(
+      ageLockRequired({ ...base, ageBand: "under13", isHost: false }),
+    ).toBe(false);
+    expect(
+      ageLockRequired({ ...base, ageBand: "under13", inRoom: false }),
+    ).toBe(false);
+    expect(ageLockRequired({ ...base, ageBand: "under13", locked: true })).toBe(
+      false,
     );
   });
 });

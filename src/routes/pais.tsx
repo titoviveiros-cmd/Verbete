@@ -18,6 +18,10 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 //    de build do PR #63 reprova o marcador no bundle de produção;
 //  * a página /denuncias é do PR #65: o link só aparece se a rota existir no
 //    build; sem ela, fica o texto com o caminho dentro do jogo.
+//  * integração 12/11 (integracao/eca-12-11): texto ajustado ao que os PRs
+//    #66 (filtro no servidor), #69 (sala privada/trancar/só bots), #70 (ano
+//    de nascimento declarado, < 13 só bots) e #68 (ranking opt-in) fazem —
+//    publicar só junto com eles; sem eles, voltar ao texto do #71.
 // Texto a validar com advogado(a) antes de publicar.
 export const Route = createFileRoute("/pais")({
   head: () => ({
@@ -103,10 +107,12 @@ function ParentsPage() {
           </h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              Só com quem está <strong>na mesma sala</strong>. Para entrar numa
-              sala é preciso o código de 4 dígitos que o dono da sala
-              compartilha. Quem tiver o código consegue entrar — por isso,
-              combine que o código só vai para pessoas conhecidas.
+              Só com quem está <strong>na mesma sala</strong>. Toda sala é
+              privada: só entra quem tem o código de 4 dígitos ou o link que o
+              dono da sala compartilha. Não há sala aberta para desconhecidos. O
+              dono pode <strong>trancar a sala</strong>, e aí ninguém novo
+              entra. Como o código é curto, combine que ele só vai para pessoas
+              conhecidas.
             </li>
             <li>
               Na sala, os outros veem o <strong>apelido</strong>, o avatar, a
@@ -114,16 +120,25 @@ function ParentsPage() {
               votação sem o nome de quem escreveu.
             </li>
             <li>
+              O servidor recusa definições com palavrão, links ou contatos
+              (telefone, e-mail, perfil de rede social) e troca apelidos assim
+              por “Jogador”; reações e avatares só aceitam emojis. O filtro usa
+              uma lista de palavras e não pega tudo: por isso existe a denúncia.
+            </li>
+            <li>
               Não há chat, mensagens privadas, áudio, vídeo, envio de fotos nem
               lista de amigos.
             </li>
             <li>
               Dá para jogar só com <strong>bots</strong> (jogadores
-              automáticos): o dono da sala completa a mesa com eles.
+              automáticos): o botão <strong>Jogar só com bots</strong> tranca a
+              sala e completa a mesa com eles.
             </li>
             <li>
-              Com conta, o nome exibido, o avatar e os pontos podem aparecer no
-              ranking do jogo, que outros jogadores veem.
+              O ranking público vem <strong>desligado</strong>. Só aparece nele
+              (com o nome exibido, o avatar e os pontos) quem tem conta e liga
+              “Aparecer no ranking público”; dá para desligar a qualquer
+              momento.
             </li>
           </ul>
         </section>
@@ -203,17 +218,29 @@ function ParentsPage() {
 
         <section>
           <h2 className="font-display text-lg mb-1">Controles disponíveis</h2>
-          <p>Hoje, no próprio Verbete, existem estes controles:</p>
+          <p>
+            Hoje, no próprio Verbete, existem estes controles. Quem usa é quem
+            joga, no aparelho dele; nenhum deles é um controle dos pais:
+          </p>
           <ul className="list-disc pl-5 space-y-1 mt-1">
             <li>Jogar sem conta e sem e-mail.</li>
             <li>
               Usar um apelido que não seja o nome verdadeiro; o nome exibido da
               conta pode ser trocado no Perfil.
             </li>
-            <li>Jogar só com bots ou só com pessoas conhecidas.</li>
+            <li>
+              Jogar só com bots ou só com pessoas conhecidas; como dono da sala,
+              trancar a sala.
+            </li>
+            <li>Ficar fora do ranking público (é o padrão).</li>
             <li>Denunciar e, como dono da sala, remover jogadores.</li>
             <li>Excluir a conta a qualquer momento.</li>
           </ul>
+          <p className="mt-2">
+            No primeiro acesso, o jogo pergunta o ano de nascimento. A resposta
+            fica só no aparelho e é uma declaração: não comprova a idade. Quem
+            declara menos de 13 anos joga só com bots, na própria sala.
+          </p>
           <p className="mt-2">
             <strong>
               O Verbete ainda não tem modo para pais, senha dos responsáveis,
