@@ -739,6 +739,10 @@ function RoomPage() {
                     teams={room.teams ?? []}
                     categories={room.categories ?? []}
                     nivel={room.nivel ?? "aleatorio"}
+                    locked={
+                      (room as typeof room & { locked?: boolean }).locked ===
+                      true
+                    }
                   />
                 )}
                 {room.status === "choosing" && (
