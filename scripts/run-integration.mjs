@@ -32,6 +32,7 @@ const SUITES = [
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
   "test-definition-filter.mjs",
+  "test-ugc-filtro.mjs", // ECA Digital: palavrão/link/contato barrados no servidor (definição, apelido, nome exibido) (11/11/2026)
   "test-near-miss.mjs",
   "test-rollback.mjs",
   "test-probe-local.mjs",
