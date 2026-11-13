@@ -6,6 +6,9 @@
 -- esses dois caminhos; todo o resto do endurecimento continua valendo
 -- (pontuação, definições, rounds, verdade, bônus seguem protegidos).
 -- Testado no CI dentro de uma transação (scripts/test-rollback.mjs).
+-- Desde 20261112110000 (rooms legível só por participantes): o client pré-M1
+-- lê rooms sem sessão — aplicar ANTES supabase/rollback/rooms_leitura_restrita.sql
+-- (reabre a listagem de códigos; só nesta emergência).
 -- =============================================================================
 
 -- Só as colunas do addBot antigo: score/user_id/kicked_at seguem fora do
