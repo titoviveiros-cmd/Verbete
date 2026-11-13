@@ -1,5 +1,8 @@
 -- =============================================================================
 -- M1 · ROLLBACK DE COMPATIBILIDADE — client pré-M1 (17bb348) com o banco novo
+-- Desde 20261113090000 (fase 3: RPCs de partida só de participantes com
+-- sessão): o client pré-M1 chama choose_word/advance_*/finish_reveal SEM
+-- sessão — aplicar ANTES supabase/rollback/autorizacao_fase3.sql.
 --
 -- Usar se o WEB for revertido para a versão pré-M1 e o banco ficar no M1: o
 -- client antigo adiciona bots e migra host por escrita direta. Reabre APENAS
