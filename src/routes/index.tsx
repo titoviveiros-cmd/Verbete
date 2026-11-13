@@ -8,7 +8,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { randomAvatar, randomColor } from "@/lib/avatars";
 import { AvatarGrid } from "@/components/AvatarGrid";
-import { sanitizeNickname } from "@/lib/text-filter";
+import { nicknameIssueMessage, sanitizeNickname } from "@/lib/text-filter";
 import { getPlayerId, getStored, setStored } from "@/lib/player-id";
 import { createRoom, joinRoom } from "@/lib/room";
 import { friendlyEntryError } from "@/lib/entry-errors";
@@ -122,6 +122,11 @@ function HomePage() {
       setError("Escolha um apelido");
       return;
     }
+    const nickIssue = nicknameIssueMessage(cleanNick);
+    if (nickIssue) {
+      setError(nickIssue);
+      return;
+    }
     if (!terms.confirm()) return;
     setBusy(true);
     try {
@@ -146,6 +151,11 @@ function HomePage() {
     const cleanNick = sanitizeNickname(nick);
     if (!cleanNick || cleanNick === "Anônimo") {
       setError("Escolha um apelido");
+      return;
+    }
+    const nickIssue = nicknameIssueMessage(cleanNick);
+    if (nickIssue) {
+      setError(nickIssue);
       return;
     }
     if (code.length !== 4) {
@@ -541,6 +551,11 @@ function HomePage() {
 
       <div className="relative z-10 text-center text-[11px] text-muted-foreground py-2 px-5">
         <p className="flex justify-center gap-3">
+          {/* B7 ECA Digital: página para pais e responsáveis. */}
+          <Link to="/pais" className="underline hover:text-foreground">
+            Para pais
+          </Link>
+          <span aria-hidden>·</span>
           <Link to="/privacy" className="underline hover:text-foreground">
             Privacidade
           </Link>

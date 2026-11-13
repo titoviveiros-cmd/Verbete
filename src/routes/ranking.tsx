@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Mascot } from "@/components/Mascot";
 import { useAuth } from "@/hooks/use-auth";
+import { RankingOptIn } from "@/components/RankingOptIn";
 
 export const Route = createFileRoute("/ranking")({
   head: () => ({
@@ -47,6 +48,11 @@ function RankingPage() {
   const { user, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  // B6 (ECA Digital): a lista só tem quem ativou "Aparecer no ranking
+  // público" (filtro no banco, get_ranking_top) + a própria linha, que só o
+  // dono vê. myOptIn decide o rótulo dela; reload busca de novo ao mudar.
+  const [myOptIn, setMyOptIn] = useState<boolean | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (authLoading) return;
@@ -79,7 +85,7 @@ function RankingPage() {
       }
       setLoading(false);
     })();
-  }, [user, authLoading, nav]);
+  }, [user, authLoading, nav, reload]);
 
   return (
     <div className="mobile-shell pt-4 gap-3 overflow-y-auto pb-8">
@@ -109,12 +115,22 @@ function RankingPage() {
           pontos totais acumulados
         </p>
         <p className="text-[11px] text-muted-foreground mt-2 max-w-xs mx-auto leading-snug">
-          ℹ️ Só jogadores com{" "}
-          <span className="font-display text-foreground">conta</span> aparecem
-          aqui. Quem joga como convidado pontua na partida, mas não acumula no
-          ranking global.
+          ℹ️ Só aparece aqui quem tem{" "}
+          <span className="font-display text-foreground">conta</span> e ativou
+          “Aparecer no ranking público”. Quem joga como convidado pontua na
+          partida, mas não acumula no ranking global.
         </p>
       </div>
+
+      {user && (
+        <RankingOptIn
+          userId={user.id}
+          onValue={(v, source) => {
+            setMyOptIn(v);
+            if (source === "save") setReload((n) => n + 1);
+          }}
+        />
+      )}
 
       {loading ? (
         <div className="flex justify-center pt-8">
@@ -122,7 +138,7 @@ function RankingPage() {
         </div>
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">
-          Ninguém pontuou ainda. Seja o primeiro!
+          Ninguém no ranking público ainda.
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -137,6 +153,11 @@ function RankingPage() {
               <span className="text-xl">{r.profile?.avatar ?? "🦊"}</span>
               <span className="font-display flex-1 truncate">
                 {r.profile?.display_name ?? "Jogador"}
+                {r.user_id === user?.id ? (
+                  <span className="text-muted-foreground">
+                    {myOptIn === false ? " (você · só você vê)" : " (você)"}
+                  </span>
+                ) : null}
               </span>
               <div className="text-right">
                 <div className="font-display text-primary">

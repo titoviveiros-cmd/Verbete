@@ -27,6 +27,11 @@ import { shareInvite } from "@/lib/share";
 import { playJoin, playBotJoin, playKick, playUITap } from "@/lib/sound";
 import { scrollbarClip } from "@/lib/utils";
 import {
+  playOnlyWithBots,
+  roomPrivacyLabel,
+  setRoomLocked,
+} from "@/lib/room-access";
+import {
   activeCount,
   botsToMinimum,
   canStartGame,
@@ -78,6 +83,8 @@ export function Lobby({
   teams,
   categories,
   nivel = "aleatorio",
+  locked = false,
+  lockForced = false,
 }: {
   roomId: string;
   hostId: string;
@@ -90,6 +97,10 @@ export function Lobby({
   teams: Team[];
   categories: string[];
   nivel?: NivelFilter;
+  /** Sala trancada pelo dono (rooms.locked — ECA Digital, proposta B4). */
+  locked?: boolean;
+  /** Dono que declarou < 13 (B5): sala fica trancada, sem "Destrancar". */
+  lockForced?: boolean;
 }) {
   const slotsLeft = Math.max(0, 12 - players.length);
   // Mínimo de 4 participantes ativos (humanos + bots) — o servidor
@@ -99,7 +110,23 @@ export function Lobby({
   const botsNeeded = botsToMinimum(players);
   const [copied, setCopied] = useState(false);
   const [shareWarn, setShareWarn] = useState<string | null>(null);
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
   const code = location.pathname.split("/").pop() ?? "";
+
+  // ECA Digital art. 21 p.ú. / L14852 art. 16 VII: o dono limita quem entra
+  // (trancar) e pode desligar a interação com pessoas ("só com bots").
+  const runLock = async (fn: () => Promise<void>) => {
+    setLockBusy(true);
+    setLockError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setLockError(e instanceof Error ? e.message : "Erro ao trancar a sala.");
+    } finally {
+      setLockBusy(false);
+    }
+  };
 
   const prevIdsRef = useRef<Set<string> | null>(null);
   useEffect(() => {
@@ -210,6 +237,32 @@ export function Lobby({
             </p>
           )}
 
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <p
+              className="text-[11px] text-muted-foreground leading-tight"
+              data-testid="room-privacy"
+            >
+              {roomPrivacyLabel(locked)}
+            </p>
+            {isHost && !(lockForced && locked) && (
+              <button
+                disabled={lockBusy}
+                onClick={() =>
+                  runLock(() => setRoomLocked(roomId, playerId, !locked))
+                }
+                aria-pressed={locked}
+                className="btn-pop btn-plain border border-white/10 text-[11px] py-1 px-2.5"
+              >
+                {locked ? "🔓 Destrancar" : "🔒 Trancar sala"}
+              </button>
+            )}
+          </div>
+          {lockError && (
+            <p role="alert" className="text-[11px] text-pink text-center">
+              {lockError}
+            </p>
+          )}
+
           <div className="panel p-3 flex flex-col shrink-0">
             <div className="flex items-center justify-between gap-2 mb-2 px-1">
               <h3 className="eyebrow">Jogadores ({players.length}/12)</h3>
@@ -302,6 +355,24 @@ export function Lobby({
                 <p className="text-[11px] text-muted-foreground leading-tight">
                   Dica: convide amigos pelo botão acima 👆
                 </p>
+              )}
+              {isHost && humans === 1 && !locked && (
+                <button
+                  disabled={lockBusy}
+                  onClick={() =>
+                    runLock(() =>
+                      playOnlyWithBots(
+                        roomId,
+                        playerId,
+                        players.length,
+                        botsNeeded,
+                      ),
+                    )
+                  }
+                  className="btn-pop btn-plain border border-mint/40 py-2 px-3.5 text-sm"
+                >
+                  🤖 Jogar só com bots
+                </button>
               )}
             </div>
           )}
