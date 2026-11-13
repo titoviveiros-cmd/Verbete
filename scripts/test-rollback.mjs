@@ -54,6 +54,10 @@ try {
   // O client pré-M1 lê rooms sem sessão (e o UPDATE do migrateHost só acha a
   // linha se ela for legível): com a 20261112110000 (leitura só de
   // participantes) aplicada, o modo de emergência pré-M1 exige desfazê-la antes.
+  // E antes dela a 20261112120000 (privacidade fase 2: players e afins só de
+  // participantes — o client pré-M1 também lê players sem sessão; as políticas
+  // dela usam my_room_ids(), que a reversão do #74 apaga).
+  await db.query(readFileSync("supabase/rollback/privacidade_fase2.sql", "utf8"));
   await db.query(readFileSync("supabase/rollback/rooms_leitura_restrita.sql", "utf8"));
   await db.query(readFileSync("supabase/rollback/m1_compat_old_client.sql", "utf8"));
   check("aplica sem erro", true);
