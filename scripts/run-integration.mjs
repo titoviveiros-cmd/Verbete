@@ -30,6 +30,7 @@ const SUITES = [
   "test-seguranca-lancamento.mjs", // código de sala sem colisão (corrida real) + teto do log_ops_event + chat dormente fechado (10/11/2026)
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
+  "test-sala-trancada.mjs", // ECA Digital B4: sala trancada pelo dono, expulso não volta, partida rápida fechada (11/11/2026)
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
   "test-definition-filter.mjs",
