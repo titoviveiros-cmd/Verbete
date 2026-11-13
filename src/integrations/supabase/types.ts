@@ -1688,6 +1688,7 @@ export type Database = {
         Args: { p_base: number; p_room_id: string };
         Returns: number;
       };
+      realtime_topic_allowed: { Args: { p_topic: string }; Returns: boolean };
       record_match_result: { Args: { p_room_code: string }; Returns: Json };
       rejoin_room: {
         Args: {
@@ -1723,6 +1724,7 @@ export type Database = {
         Returns: string;
       };
       room_pause_due: { Args: { p_room_id: string }; Returns: boolean };
+      room_read_allowed: { Args: { p_room_id: string }; Returns: boolean };
       rooms_vc8_compat_on: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
