@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DailyRouteImport } from './routes/daily'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
+import { Route as DenunciasRouteImport } from './routes/denuncias'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PaisRouteImport } from './routes/pais'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RankingRouteImport } from './routes/ranking'
@@ -42,6 +44,11 @@ const DeleteAccountRoute = DeleteAccountRouteImport.update({
   path: '/delete-account',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DenunciasRoute = DenunciasRouteImport.update({
+  id: '/denuncias',
+  path: '/denuncias',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DownloadRoute = DownloadRouteImport.update({
   id: '/download',
   path: '/download',
@@ -50,6 +57,11 @@ const DownloadRoute = DownloadRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaisRoute = PaisRouteImport.update({
+  id: '/pais',
+  path: '/pais',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -117,8 +129,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/daily': typeof DailyRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
@@ -136,8 +150,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/daily': typeof DailyRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
@@ -156,8 +172,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/daily': typeof DailyRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
@@ -177,8 +195,10 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/delete-account'
+    | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
@@ -196,8 +216,10 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/delete-account'
+    | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
@@ -215,8 +237,10 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/delete-account'
+    | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
@@ -235,8 +259,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DailyRoute: typeof DailyRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
+  DenunciasRoute: typeof DenunciasRoute
   DownloadRoute: typeof DownloadRoute
   LoginRoute: typeof LoginRoute
+  PaisRoute: typeof PaisRoute
   PrivacyRoute: typeof PrivacyRoute
   ProfileRoute: typeof ProfileRoute
   RankingRoute: typeof RankingRoute
@@ -274,6 +300,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeleteAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/denuncias': {
+      id: '/denuncias'
+      path: '/denuncias'
+      fullPath: '/denuncias'
+      preLoaderRoute: typeof DenunciasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/download': {
       id: '/download'
       path: '/download'
@@ -286,6 +319,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pais': {
+      id: '/pais'
+      path: '/pais'
+      fullPath: '/pais'
+      preLoaderRoute: typeof PaisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -379,8 +419,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DailyRoute: DailyRoute,
   DeleteAccountRoute: DeleteAccountRoute,
+  DenunciasRoute: DenunciasRoute,
   DownloadRoute: DownloadRoute,
   LoginRoute: LoginRoute,
+  PaisRoute: PaisRoute,
   PrivacyRoute: PrivacyRoute,
   ProfileRoute: ProfileRoute,
   RankingRoute: RankingRoute,

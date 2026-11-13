@@ -116,6 +116,7 @@ export type Database = {
           id: string;
           player_id: string | null;
           reason: string;
+          report_id: string | null;
           user_id: string | null;
         };
         ComputedFields: never;
@@ -126,6 +127,7 @@ export type Database = {
           id?: string;
           player_id?: string | null;
           reason?: string;
+          report_id?: string | null;
           user_id?: string | null;
         };
         Update: {
@@ -135,6 +137,7 @@ export type Database = {
           id?: string;
           player_id?: string | null;
           reason?: string;
+          report_id?: string | null;
           user_id?: string | null;
         };
         Relationships: [];
@@ -463,6 +466,43 @@ export type Database = {
         };
         Relationships: [];
       };
+      moderation_appeals: {
+        Row: {
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_note: string | null;
+          id: string;
+          report_id: string;
+          status: string;
+          text: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
+          id?: string;
+          report_id: string;
+          status?: string;
+          text: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
+          id?: string;
+          report_id?: string;
+          status?: string;
+          text?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       ops_alerts: {
         Row: {
           at: string;
@@ -616,6 +656,7 @@ export type Database = {
           color: string;
           created_at: string;
           display_name: string;
+          ranking_opt_in: boolean;
           updated_at: string;
           user_id: string;
         };
@@ -625,6 +666,7 @@ export type Database = {
           color?: string;
           created_at?: string;
           display_name?: string;
+          ranking_opt_in?: boolean;
           updated_at?: string;
           user_id: string;
         };
@@ -633,6 +675,7 @@ export type Database = {
           color?: string;
           created_at?: string;
           display_name?: string;
+          ranking_opt_in?: boolean;
           updated_at?: string;
           user_id?: string;
         };
@@ -673,7 +716,9 @@ export type Database = {
       };
       reports: {
         Row: {
+          action: string | null;
           created_at: string;
+          decision_reason: string | null;
           definition_id: string | null;
           definition_text: string;
           id: string;
@@ -685,6 +730,7 @@ export type Database = {
           resolution_note: string | null;
           resolved_at: string | null;
           resolved_by: string | null;
+          review_kind: string;
           room_code: string | null;
           room_id: string | null;
           round: number | null;
@@ -692,7 +738,9 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          action?: string | null;
           created_at?: string;
+          decision_reason?: string | null;
           definition_id?: string | null;
           definition_text: string;
           id?: string;
@@ -704,13 +752,16 @@ export type Database = {
           resolution_note?: string | null;
           resolved_at?: string | null;
           resolved_by?: string | null;
+          review_kind?: string;
           room_code?: string | null;
           room_id?: string | null;
           round?: number | null;
           status?: string;
         };
         Update: {
+          action?: string | null;
           created_at?: string;
+          decision_reason?: string | null;
           definition_id?: string | null;
           definition_text?: string;
           id?: string;
@@ -722,6 +773,7 @@ export type Database = {
           resolution_note?: string | null;
           resolved_at?: string | null;
           resolved_by?: string | null;
+          review_kind?: string;
           room_code?: string | null;
           room_id?: string | null;
           round?: number | null;
@@ -827,6 +879,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -851,6 +904,7 @@ export type Database = {
           finished_at?: string | null;
           host_id: string;
           id?: string;
+          locked?: boolean;
           mode?: string;
           nivel?: string;
           paused_at?: string | null;
@@ -874,6 +928,7 @@ export type Database = {
           finished_at?: string | null;
           host_id?: string;
           id?: string;
+          locked?: boolean;
           mode?: string;
           nivel?: string;
           paused_at?: string | null;
@@ -1731,6 +1786,10 @@ export type Database = {
       };
       send_room_message: {
         Args: { p_player_id: string; p_room_id: string; p_text: string };
+        Returns: Json;
+      };
+      set_room_locked: {
+        Args: { p_actor_id: string; p_locked: boolean; p_room_id: string };
         Returns: Json;
       };
       start_game: { Args: { p_room_id: string }; Returns: Json };

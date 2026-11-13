@@ -24,17 +24,22 @@ const SUITES = [
   "test-phase-secs.mjs",
   "test-ops.mjs",
   "test-ops-health.mjs",
+  "test-ranking-optin.mjs", // B6 ECA Digital: ranking só com opt-in, leitura de profiles, vc8 e rollback (11/11/2026)
   "test-r4-anti-loop.mjs",
   "test-p2-xp.mjs",
   "test-player-id.mjs",
   "test-seguranca-lancamento.mjs", // código de sala sem colisão (corrida real) + teto do log_ops_event + chat dormente fechado (10/11/2026)
+  "test-limite-codigo-sala.mjs", // ECA R6: limite de tentativas de código de sala por identidade, registro com hash, corrida real (12/11/2026)
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
+  "test-sala-trancada.mjs", // ECA Digital B4: sala trancada pelo dono, expulso não volta, partida rápida fechada (11/11/2026)
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
   "test-definition-filter.mjs",
+  "test-ugc-filtro.mjs", // ECA Digital: palavrão/link/contato barrados no servidor (definição, apelido, nome exibido) (11/11/2026)
   "test-near-miss.mjs",
   "test-rollback.mjs",
+  "test-denuncia-recurso.mjs", // ECA Digital: decisão fundamentada, recurso 1 por denúncia, tabela fechada ao cliente (11/11/2026)
   "test-probe-local.mjs",
 ];
 

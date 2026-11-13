@@ -140,6 +140,10 @@ function DownloadPage() {
         <Link to="/support" className="hover:text-foreground">
           Suporte
         </Link>
+        <span aria-hidden>·</span>
+        <Link to="/pais" className="hover:text-foreground">
+          Para pais e responsáveis
+        </Link>
       </footer>
     </div>
   );

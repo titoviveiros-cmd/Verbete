@@ -508,8 +508,10 @@ try {
       const S = await novaSala({
         mode: "teams",
         teams: [
-          { id: "a", name: "Corujas", emoji: "🦉", color: "#111" },
-          { id: "b", name: "Raposas", emoji: "🦊", color: "#222" },
+          // preset "Time A × Time B" do app (TEAM_PRESETS.ab): desde o #66 o
+          // servidor só aceita os presets (lista fechada).
+          { id: "a", name: "Time A", color: "#FFD166", emoji: "🅰️" },
+          { id: "b", name: "Time B", color: "#06D6A0", emoji: "🅱️" },
         ],
         jogadores: [
           { nick: "P1", score: 10, user: H, team: "a" },
@@ -519,17 +521,17 @@ try {
         ],
       });
       const a = await criar(H, S);
-      eq(a.champions, [{ name: "Corujas", emoji: "🦉", score: 13 }]);
+      eq(a.champions, [{ name: "Time A", emoji: "🅰️", score: 13 }]);
       const r = await ler(a.token);
       eq(r.mode, "teams");
       eq(
         r.teams.map((x) => [x.rank, x.name, x.score, x.members]),
         [
-          [1, "Corujas", 13, 2],
-          [2, "Raposas", 11, 2],
+          [1, "Time A", 13, 2],
+          [2, "Time B", 11, 2],
         ],
       );
-      eq(r.players.find((p) => p.nickname === "P3").team, "Raposas");
+      eq(r.players.find((p) => p.nickname === "P3").team, "Time B");
     },
   );
 
