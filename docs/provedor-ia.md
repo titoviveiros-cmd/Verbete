@@ -1,5 +1,13 @@
 # Provedor de IA por configuração
 
+> **10/11/2026 — modo sem IA externa preparado.** Os termos da Gemini API e
+> da Vertex AI vedam app provavelmente acessado por menores de 18 (o Verbete
+> é 13+), e as validações N2 de outros provedores reprovaram (N2-M em 06/11,
+> N2-H em 08/11). O interruptor de código `EXTERNAL_AI_MODE`
+> (`_shared/external-ai.ts`) esvazia `AI_PROVIDERS_DISCLOSED` quando
+> `"desligada"`: nenhum perfil abaixo chama a IA, com ou sem chave. Hoje o
+> valor é `"ligada"` (nada mudou). Ordem de ativação: `docs/sem-ia-externa.md`.
+
 Troca o provedor de IA das edges (`bot-definitions`, `bot-definitions-v2`, `score-similarity`) e do Worker do Desafio Diário **só com variáveis de ambiente**, sem mudar código. **Sem nada novo configurado, tudo segue idêntico ao Gemini de hoje** (mesma URL, modelo, cabeçalhos e corpo — coberto por teste).
 
 Código: `supabase/functions/_shared/ai-provider.ts` — **um único módulo** com a tabela de perfis, usado pelas edges (Deno, `Deno.env.get`) e pelo Worker (Node, `process.env`); sem APIs de nenhum dos dois. A chamada continua em `_shared/ai.ts` (`callChat`). Testes: `src/lib/__tests__/ai-provider.test.ts` (só `fetch` simulado).
@@ -15,7 +23,7 @@ Código: `supabase/functions/_shared/ai-provider.ts` — **um único módulo** c
 | `mistral` | `https://api.mistral.ai/v1/chat/completions` | `MISTRAL_API_KEY` | — | `mistral-small-latest` | 1024 | sim |
 | `openai-compatible` | `AI_CHAT_URL` (https; http só em localhost/127.0.0.1) | `AI_API_KEY` | `AI_CHAT_URL`, `AI_MODEL` | *(nenhum: AI_MODEL obrigatório)* | 1024 | sim |
 
-Os modelos padrão de `mistral` e `openai-compatible` são **pontos de partida não avaliados**; o de `workers-ai` é o Mistral Small 3.1 24B, aprovado na N1-M (5 chamadas) e em validação na N2. Definir `AI_MODEL` explicitamente ao trocar.
+Os modelos padrão de `mistral` e `openai-compatible` são **pontos de partida não avaliados**; o de `workers-ai` é o Mistral Small 3.1 24B, aprovado na N1-M (5 chamadas), mas REPROVADO na N2-M (06/11/2026, NO-GO no semântico). Definir `AI_MODEL` explicitamente ao trocar.
 
 **JSON guiado do juiz (fio `workers-run`, 06/11/2026):** no perfil `workers-ai` a chamada vai à API nativa do modelo (a mesma entrada do binding usado na N1-M): modelo na URL, sem `model` no corpo, resposta no envelope `{ result, success }` (aceita `choices[0]` e `response`). As chamadas do **juiz** (multiplayer, gate dos bots v2 e Diário) enviam `guided_json` = `JUDGE_SCORES_SCHEMA` (`_shared/semantic.ts`), o mesmo formato que o prompt já pede; a geração dos bots não envia esquema. No Gemini nada muda (sem `guided_json`).
 

@@ -20,7 +20,10 @@ function files(dir) {
   return out;
 }
 
-const countFiles = (texts, needle) => texts.filter((t) => t.includes(needle)).length;
+/** Mesmo valor de LEGAL_PENDING_MARK (src/lib/legal.ts; um teste amarra). */
+export const LEGAL_PENDING_MARK = "<PENDENTE";
+
+const countFiles =(texts, needle) => texts.filter((t) => t.includes(needle)).length;
 
 function jwtRole(token) {
   try {
@@ -70,6 +73,20 @@ export function verifyWebBundle({ distDir, expectedUrl, expectedKey, buildId }) 
   if (facts.tokenPessoal) problems.push("token pessoal do Supabase (sbp_) no cliente");
   if (facts.serviceRole) problems.push("JWT service_role no cliente");
   if (facts.chaveGoogle) problems.push("chave de API do Google no cliente");
+
+  // Textos legais pendentes (modo sem IA externa, src/lib/legal.ts): o
+  // marcador "<PENDENTE" (nome legal do desenvolvedor, data dos Termos) nunca
+  // pode chegar ao bundle — nem no cliente nem no SSR. Com a IA ligada o
+  // ramo sem IA é eliminado no build e o marcador não aparece.
+  let serverTexts = [];
+  try {
+    serverTexts = files(join(distDir, "server")).map((f) => readFileSync(f, "utf8"));
+  } catch {
+    /* build sem SSR (ex.: shell nativo): só o cliente */
+  }
+  facts.pendenteLegal = [...texts, ...serverTexts].filter((t) => t.includes(LEGAL_PENDING_MARK)).length;
+  if (facts.pendenteLegal)
+    problems.push("texto legal PENDENTE no bundle (DEVELOPER_LEGAL_NAME/NO_AI_TERMS_VERSION em src/lib/legal.ts)");
 
   return { ok: problems.length === 0, problems, facts };
 }

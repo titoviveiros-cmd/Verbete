@@ -1,5 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AI_PROVIDER, CONTACT_EMAIL, contactMailto } from "@/lib/legal";
+import {
+  AI_PROVIDER,
+  CONTACT_EMAIL,
+  NO_AI_LEGAL,
+  contactMailto,
+} from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 export const Route = createFileRoute("/support")({
@@ -74,6 +79,29 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
+// Modo sem IA externa (NO_AI_LEGAL != null; docs/sem-ia-externa.md): a
+// pontuação sem o bônus 🧠, o Desafio só de múltipla escolha e uma pergunta
+// direta sobre IA. As outras respostas são as mesmas.
+const NO_AI_ANSWERS: Record<string, string> = {
+  "Como funciona a pontuação?":
+    "Você ganha pontos votando na definição verdadeira e a cada jogador que cai na definição que você inventou.",
+  "O que é o Desafio Diário?":
+    "Uma palavra rara para você descobrir o significado — vale uma tentativa por hora. Você escolhe a definição correta entre quatro, e quanto mais rápido acertar, mais pontos.",
+};
+const NO_AI_QUESTION = {
+  q: "O Verbete usa inteligência artificial?",
+  a: "Não. As definições dos bots e as opções do Desafio Diário são escolhidas pelo próprio jogo, a partir de textos prontos — nada do que você escreve é enviado a serviços de inteligência artificial.",
+};
+
+/** FAQ exibida: com a IA ligada, exatamente a de sempre. */
+function faqFor(noAi: boolean): { q: string; a: string }[] {
+  if (!noAi) return FAQ;
+  const out = FAQ.map(({ q, a }) => ({ q, a: NO_AI_ANSWERS[q] ?? a }));
+  const daily = out.findIndex((f) => f.q === "O que é o Desafio Diário?");
+  out.splice(daily + 1, 0, NO_AI_QUESTION);
+  return out;
+}
+
 function SupportPage() {
   return (
     <div className="mobile-shell">
@@ -118,7 +146,7 @@ function SupportPage() {
       <section className="mb-6">
         <h2 className="font-display text-xl mb-3">Perguntas frequentes</h2>
         <div className="space-y-2">
-          {FAQ.map(({ q, a }, i) => (
+          {faqFor(NO_AI_LEGAL !== null).map(({ q, a }, i) => (
             <details key={i} className="sticker p-3 group">
               <summary className="font-display cursor-pointer list-none flex items-center justify-between gap-2">
                 <span className="flex-1">{q}</span>

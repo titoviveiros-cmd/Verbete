@@ -1,6 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { APP_HOST } from "@/lib/app-url";
-import { AI_PROVIDER, CONTACT_EMAIL } from "@/lib/legal";
+import {
+  AI_PROVIDER,
+  CONTACT_EMAIL,
+  NO_AI_LEGAL,
+  formatLegalDate,
+} from "@/lib/legal";
 import { READING_VIEWPORT } from "@/lib/viewport";
 
 // Só o comportamento COMPROVADO no código (auditoria da rodada 2A,
@@ -19,6 +24,9 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 // docs/google-play-data-safety-draft.md juntos. Registros da V2 do Diário
 // (daily_eval_claims, ai_quota): limpeza de 3 dias em
 // 20261105150000_daily_guard_v2.sql.
+// Modo sem IA externa (NO_AI_LEGAL != null; docs/sem-ia-externa.md): sem a
+// seção de envio à IA, sem o provedor em "Quem processa", com o nome legal do
+// desenvolvedor e a data da ativação. Com a IA ligada, o texto é o de sempre.
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
@@ -45,6 +53,7 @@ function Mail() {
 }
 
 function PrivacyPage() {
+  const noAi = NO_AI_LEGAL;
   return (
     <div className="mobile-shell">
       <header className="mb-4">
@@ -56,7 +65,9 @@ function PrivacyPage() {
         </Link>
         <h1 className="font-display text-3xl mt-2">Política de Privacidade</h1>
         <p className="text-xs text-muted-foreground mt-1">
-          Última atualização: 8 de novembro de 2026
+          {noAi
+            ? `Última atualização: ${formatLegalDate(noAi.termsVersion)}`
+            : "Última atualização: 8 de novembro de 2026"}
         </p>
       </header>
 
@@ -69,6 +80,13 @@ function PrivacyPage() {
             no app Verbete para Android. Para qualquer assunto sobre seus dados,
             escreva para <Mail />.
           </p>
+          {noAi ? (
+            <p className="mt-2">
+              O Verbete é desenvolvido e mantido por{" "}
+              <strong>{noAi.developerName}</strong>, responsável pelo tratamento
+              dos seus dados (controlador, nos termos da LGPD).
+            </p>
+          ) : null}
         </section>
 
         <section>
@@ -112,20 +130,45 @@ function PrivacyPage() {
               erro e de saúde do jogo (mensagem do erro, página e versão do
               app), sem nome, e-mail ou IP.
             </li>
-            <li>
-              <strong>Limite de uso do Desafio Diário:</strong> quando você
-              envia um palpite, o servidor registra a hora da tentativa e conta
-              quantas avaliações você pediu no dia, ligados ao identificador da
-              sua sessão ou conta (sem o palpite). Serve para evitar avaliações
-              duplicadas e abuso da inteligência artificial; esses registros são
-              apagados automaticamente depois de 3 dias.
-            </li>
+            {noAi ? (
+              <li>
+                <strong>Limite de uso do Desafio Diário:</strong> quando você
+                abre o desafio, o servidor registra a hora da tentativa, as
+                quatro opções sorteadas e quando você terminou, ligados ao
+                identificador da sua sessão ou conta. Serve para valer uma
+                tentativa por hora e evitar abuso; esses registros são apagados
+                automaticamente depois de 3 dias, ou na hora, se você excluir a
+                conta.
+              </li>
+            ) : (
+              <li>
+                <strong>Limite de uso do Desafio Diário:</strong> quando você
+                envia um palpite, o servidor registra a hora da tentativa e
+                conta quantas avaliações você pediu no dia, ligados ao
+                identificador da sua sessão ou conta (sem o palpite). Serve para
+                evitar avaliações duplicadas e abuso da inteligência artificial;
+                esses registros são apagados automaticamente depois de 3 dias.
+              </li>
+            )}
           </ul>
-          <p className="mt-2">
-            Não coletamos localização, contatos, fotos, câmera ou microfone. O
-            app pede só acesso à internet e à vibração do aparelho. Não há
-            anúncios, nem ferramentas de publicidade ou de análise de terceiros.
-          </p>
+          {noAi ? (
+            // Coerência com o Data Safety (11/11/2026): a foto do perfil do
+            // Google (login opcional) é declarada lá como "Fotos"; aqui o que
+            // NÃO acessamos são as fotos e os arquivos do APARELHO.
+            <p className="mt-2">
+              Não acessamos localização, contatos, câmera, microfone nem as
+              fotos e os arquivos do aparelho. O app pede só acesso à internet e
+              à vibração do aparelho. Não há anúncios, nem ferramentas de
+              publicidade ou de análise de terceiros.
+            </p>
+          ) : (
+            <p className="mt-2">
+              Não coletamos localização, contatos, fotos, câmera ou microfone. O
+              app pede só acesso à internet e à vibração do aparelho. Não há
+              anúncios, nem ferramentas de publicidade ou de análise de
+              terceiros.
+            </p>
+          )}
         </section>
 
         <section>
@@ -142,59 +185,104 @@ function PrivacyPage() {
 
         <section>
           <h2 className="font-display text-lg mb-1">Como usamos</h2>
-          <p>
-            Para rodar a partida em tempo real, calcular placares, manter o
-            ranking e o progresso, gerar as definições dos bots, avaliar por
-            inteligência artificial a semelhança entre definições (bônus 🧠 e
-            Desafio Diário), evitar avaliações duplicadas e abuso, moderar
-            denúncias e corrigir erros. Não vendemos seus dados.
-          </p>
+          {noAi ? (
+            <p>
+              Para rodar a partida em tempo real, calcular placares, manter o
+              ranking e o progresso, escolher as definições dos bots, sortear as
+              opções do Desafio Diário, evitar abuso, moderar denúncias e
+              corrigir erros. Não vendemos seus dados.
+            </p>
+          ) : (
+            <p>
+              Para rodar a partida em tempo real, calcular placares, manter o
+              ranking e o progresso, gerar as definições dos bots, avaliar por
+              inteligência artificial a semelhança entre definições (bônus 🧠 e
+              Desafio Diário), evitar avaliações duplicadas e abuso, moderar
+              denúncias e corrigir erros. Não vendemos seus dados.
+            </p>
+          )}
         </section>
 
-        <section>
-          <h2 className="font-display text-lg mb-1">
-            Inteligência artificial ({AI_PROVIDER.name})
-          </h2>
-          <p>
-            Quando os recursos de inteligência artificial estão ligados,
-            enviamos ao {AI_PROVIDER.name}: a palavra da rodada, a definição
-            verdadeira e os textos das definições da rodada, inclusive as
-            escritas pelos jogadores, para avaliar quais chegaram perto da
-            verdadeira; o seu palpite do Desafio Diário, para avaliá-lo; e, para
-            criar as definições dos bots, a palavra, a definição verdadeira e
-            definições anteriores dos próprios bots. Não enviamos nome, apelido,
-            e-mail nem identificadores de conta, sessão ou jogador. Se a
-            inteligência artificial estiver indisponível ou desligada, o bônus
-            🧠 e a avaliação do Desafio Diário podem não funcionar, e os bots
-            usam definições de reserva.
-          </p>
-          <p className="mt-2">
-            {AI_PROVIDER.ownUseNotice ? `${AI_PROVIDER.ownUseNotice} ` : null}
-            <strong>
-              Não escreva dados pessoais (seus ou de outras pessoas) nem
-              informações confidenciais nas definições e nos palpites.
-            </strong>{" "}
-            Veja os{" "}
-            <a
-              className="underline"
-              href={AI_PROVIDER.termsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {AI_PROVIDER.termsLabel}
-            </a>{" "}
-            e a{" "}
-            <a
-              className="underline"
-              href={AI_PROVIDER.privacyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {AI_PROVIDER.privacyLabel}
-            </a>
-            .
-          </p>
-        </section>
+        {noAi ? (
+          <section>
+            <h2 className="font-display text-lg mb-1">
+              Inteligência artificial
+            </h2>
+            <p>
+              O Verbete não usa serviços externos de inteligência artificial: as
+              definições, os palpites e os outros textos que você escreve não
+              são enviados a nenhum provedor de IA. As definições dos bots e as
+              opções do Desafio Diário vêm de textos prontos do próprio jogo.
+            </p>
+            <p className="mt-2">
+              Antes dessa mudança, quando os recursos de inteligência artificial
+              estavam ligados, a palavra da rodada, as definições e os palpites
+              — sem nome, e-mail ou identificadores — eram enviados ao{" "}
+              {AI_PROVIDER.name}; o que já foi enviado segue os{" "}
+              <a
+                className="underline"
+                href={AI_PROVIDER.termsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {AI_PROVIDER.termsLabel}
+              </a>
+              .{" "}
+              <strong>
+                Não escreva dados pessoais (seus ou de outras pessoas) nem
+                informações confidenciais nas definições: elas aparecem para os
+                jogadores da sala.
+              </strong>
+            </p>
+          </section>
+        ) : null}
+
+        {noAi ? null : (
+          <section>
+            <h2 className="font-display text-lg mb-1">
+              Inteligência artificial ({AI_PROVIDER.name})
+            </h2>
+            <p>
+              Quando os recursos de inteligência artificial estão ligados,
+              enviamos ao {AI_PROVIDER.name}: a palavra da rodada, a definição
+              verdadeira e os textos das definições da rodada, inclusive as
+              escritas pelos jogadores, para avaliar quais chegaram perto da
+              verdadeira; o seu palpite do Desafio Diário, para avaliá-lo; e,
+              para criar as definições dos bots, a palavra, a definição
+              verdadeira e definições anteriores dos próprios bots. Não enviamos
+              nome, apelido, e-mail nem identificadores de conta, sessão ou
+              jogador. Se a inteligência artificial estiver indisponível ou
+              desligada, o bônus 🧠 e a avaliação do Desafio Diário podem não
+              funcionar, e os bots usam definições de reserva.
+            </p>
+            <p className="mt-2">
+              {AI_PROVIDER.ownUseNotice ? `${AI_PROVIDER.ownUseNotice} ` : null}
+              <strong>
+                Não escreva dados pessoais (seus ou de outras pessoas) nem
+                informações confidenciais nas definições e nos palpites.
+              </strong>{" "}
+              Veja os{" "}
+              <a
+                className="underline"
+                href={AI_PROVIDER.termsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {AI_PROVIDER.termsLabel}
+              </a>{" "}
+              e a{" "}
+              <a
+                className="underline"
+                href={AI_PROVIDER.privacyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {AI_PROVIDER.privacyLabel}
+              </a>
+              .
+            </p>
+          </section>
+        )}
 
         <section>
           <h2 className="font-display text-lg mb-1">Quem processa os dados</h2>
@@ -206,10 +294,12 @@ function PrivacyPage() {
             <li>
               <strong>Cloudflare:</strong> hospedagem do site e do servidor web.
             </li>
-            <li>
-              <strong>{AI_PROVIDER.name}:</strong> a inteligência artificial
-              descrita acima.
-            </li>
+            {noAi ? null : (
+              <li>
+                <strong>{AI_PROVIDER.name}:</strong> a inteligência artificial
+                descrita acima.
+              </li>
+            )}
             <li>
               <strong>Google:</strong> o login com Google, se você escolher; e
               as fontes do jogo, carregadas dos servidores do Google, que
@@ -287,7 +377,8 @@ function PrivacyPage() {
             </li>
             <li>
               Presença na mesa: 2 dias. Registros de erro e saúde: 30 dias.
-              Registros de limite de uso do Desafio Diário: 3 dias.
+              Registros de limite de uso do Desafio Diário: 3 dias
+              {noAi ? " (ou na hora, se você excluir a conta)." : "."}
             </li>
           </ul>
         </section>
@@ -300,9 +391,11 @@ function PrivacyPage() {
             estatísticas, as conquistas, o histórico de partidas e os palpites
             do Desafio Diário. Permanecem os registros das salas (apelido,
             definições, votos e identificadores técnicos), as denúncias e os
-            banimentos, e os registros técnicos acima — os de limite de uso do
-            Desafio Diário não são apagados na hora, mas expiram sozinhos em 3
-            dias. Sem o app, peça por <Mail /> — detalhes em{" "}
+            banimentos, e os registros técnicos acima —{" "}
+            {noAi
+              ? "os de limite de uso do Desafio Diário saem junto com a conta; só os do antigo modo de escrita, se ainda houver algum, expiram sozinhos em 3 dias."
+              : "os de limite de uso do Desafio Diário não são apagados na hora, mas expiram sozinhos em 3 dias."}{" "}
+            Sem o app, peça por <Mail /> — detalhes em{" "}
             <Link to="/delete-account" className="underline">
               Excluir conta
             </Link>

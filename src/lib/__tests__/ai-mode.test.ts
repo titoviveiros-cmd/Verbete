@@ -1,6 +1,14 @@
 // Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): lógica pura
 // compartilhada pelas edges e pelo Worker, e o Diário em pausa.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Estes testes cobrem o adaptador/contenção com a IA externa LIGADA. O corte
+// do modo sem IA (EXTERNAL_AI_MODE = "desligada") está em
+// src/components/__tests__/legal-sem-ia.test.tsx.
+vi.mock("../../../supabase/functions/_shared/external-ai.ts", () => ({
+  EXTERNAL_AI_MODE: "ligada",
+  isExternalAiOff: (m?: string) => m === "desligada",
+}));
 import {
   AI_MODE_CACHE_MS,
   AI_SUSPENDED_EVENT_WINDOW_MS,

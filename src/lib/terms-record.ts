@@ -3,11 +3,18 @@
 // nenhum token, senha ou segredo, e nem o UID em si (só um resumo dele).
 // Puro (sem React/Supabase): o playwright.config monta o aparelho de teste.
 //
-// TERMS_VERSION = data da "Última atualização" de /terms (um teste amarra
-// as duas): revisão material dos Termos → data nova → novo aceite.
+import { TERMS_CONSENT_VERSION } from "./legal";
+
+// TERMS_VERSION = versão de CONSENTIMENTO = data da última revisão MATERIAL
+// dos Termos (legal.ts, TERMS_CHANGES). A "Última atualização" exibida é a da
+// última revisão de qualquer tipo (TERMS_DISPLAY_DATE): revisão não material
+// muda só a data exibida e NÃO pede novo aceite.
 // 2026-10-27: conteúdo proibido completo, denúncia de jogador, moderação,
 // IA e licença (rodada 2A da conformidade Google Play). Anterior: 2026-05-18.
-export const TERMS_VERSION = "2026-10-27";
+// Modo sem IA externa (legal.ts, NO_AI_TERMS_CHANGE): UM novo aceite para o
+// pacote sem IA + nome legal + denúncia/recurso, só quando EXTERNAL_AI_MODE =
+// "desligada". Com a IA ligada, nada muda (2026-10-27).
+export const TERMS_VERSION = TERMS_CONSENT_VERSION;
 export const TERMS_STORAGE_KEY = "verbete:terms-accepted";
 /** Identidades lembradas por aparelho (cada logout abre uma anônima nova). */
 const MAX_IDENTITIES = 20;

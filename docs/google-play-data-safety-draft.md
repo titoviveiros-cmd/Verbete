@@ -110,3 +110,38 @@ Fonte: `supabase/migrations/20261105150000_daily_guard_v2.sql` (§8 limpeza,
    o formulário, para os dois dizerem a mesma coisa.
 4. Teste de recebimento do e-mail oficial.
 5. `android:allowBackup="true"` (P2, não muda o formulário).
+
+## 7. Variante "sem IA externa" (rascunho de 10/11/2026 — NÃO aplicar ainda)
+
+> Vale **só depois** de: PR de ativação no ar (`EXTERNAL_AI_MODE =
+> "desligada"`, `docs/sem-ia-externa.md`) **e** `GEMINI_API_KEY` removida e
+> revogada. Antes disso o formulário acima (com compartilhamento) é o
+> verdadeiro. Mudar o Console e o site no mesmo dia.
+
+| Item do formulário | Hoje (§1–§2) | Sem IA externa |
+|---|---|---|
+| Criptografia em trânsito | Supabase, Worker, Gemini e fontes | Supabase, Worker (Cloudflare) e fontes — **sem Gemini** |
+| Atividade no app → Outro conteúdo gerado pelo usuário | Coletado: Sim · **Compartilhado: Sim (Google Gemini)** | Coletado: Sim · **Compartilhado: Não** (exibir na sala = ação do usuário; Supabase/Cloudflare = prestadores) |
+| Finalidade do conteúdo gerado | Funcionalidade do app | Funcionalidade do app (moderação incluída) |
+| IDs do usuário — evidência dos registros de limite | `daily_eval_claims`, `ai_quota` (3 d) | `daily_choice_sessions` (3 d, apagada com a conta) + resíduos de `daily_eval_claims`/`ai_quota` até expirarem (3 d) |
+| SDKs e terceiros | inclui Google Gemini | **remover** a linha do Gemini |
+| Demais tipos (nome, e-mail, IDs do dispositivo, interações, falhas, diagnóstico, fotos do login Google) | — | **sem mudança** |
+| Política de Famílias | Não participa (13+) | **sem mudança** (13+ não inclui menores de 13) |
+
+**Coerência conferida em 11/11/2026 (modo sem IA, textos deste PR):**
+- "Fotos" (foto do perfil do Google, login opcional) segue **coletada,
+  opcional, não compartilhada**; a `/privacy` sem IA diz que o app não acessa
+  as fotos e os arquivos **do aparelho** e cita a foto do Google em "Conta"
+  — os dois batem.
+- Registros de limite do Desafio (`daily_choice_sessions`): a `/privacy`
+  ("O que coletamos", "Por quanto tempo", "Exclusão da conta") e a
+  `/delete-account` dizem o mesmo — 3 dias, ou na hora ao excluir a conta;
+  só resíduos do antigo modo de escrita expiram em 3 dias.
+- Ficha da loja e capturas sem IA: nenhuma menção a IA/Gemini e nenhum 🧠
+  (capturas de 11/11 em `verbete-release/play-store-sem-ia-2026-11-11`, fora
+  do repositório).
+
+Resultado esperado no resumo público: "Nenhum dado compartilhado com
+terceiros". Conferir também a ficha da loja (nenhuma menção a "inteligência
+artificial"/"Gemini") e o questionário IARC (se houver pergunta sobre IA
+generativa, responder "não").

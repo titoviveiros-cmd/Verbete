@@ -2,6 +2,15 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mascot } from "@/components/Mascot";
 import { verbeteWordmarkStyle } from "@/components/VerbeteLogo";
+import { isExternalAiOff } from "@/lib/legal";
+
+// Pontuação do "Como jogar". Sem IA externa (docs/sem-ia-externa.md) não há
+// juiz de proximidade: a linha do bônus 🧠 some. Com a IA ligada, o texto de
+// sempre (bônus condicional, PR #49).
+const SCORE_BODY_AI =
+  "+3 pontos por votar na definição verdadeira.\n+3 pontos (bônus 🧠) se sua definição ficar muito próxima da correta, quando a avaliação automática de proximidade estiver ativa.\n+2 pontos para o coordenador se ninguém acertar.\n+1 ponto por voto recebido no seu blefe.";
+const SCORE_BODY_NO_AI =
+  "+3 pontos por votar na definição verdadeira.\n+2 pontos para o coordenador se ninguém acertar.\n+1 ponto por voto recebido no seu blefe.";
 
 type StaticStep = {
   kind: "static";
@@ -53,7 +62,7 @@ const STEPS: Step[] = [
     kind: "static",
     emoji: "🏆",
     title: "Como ganhar pontos",
-    body: "+3 pontos por votar na definição verdadeira.\n+3 pontos (bônus 🧠) se sua definição ficar muito próxima da correta, quando a avaliação automática de proximidade estiver ativa.\n+2 pontos para o coordenador se ninguém acertar.\n+1 ponto por voto recebido no seu blefe.",
+    body: isExternalAiOff() ? SCORE_BODY_NO_AI : SCORE_BODY_AI,
     mood: "excited",
   },
 ];
