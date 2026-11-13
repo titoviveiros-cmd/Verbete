@@ -51,8 +51,9 @@ export const ReactionsLayer = memo(function ReactionsLayer({
 
   useEffect(() => {
     if (!roomId) return;
+    // Canal privado (20261112120000): só participante da sala assina.
     const ch = supabase
-      .channel(`reactions:${roomId}`)
+      .channel(`reactions:${roomId}`, { config: { private: true } })
       .on(
         "postgres_changes",
         {

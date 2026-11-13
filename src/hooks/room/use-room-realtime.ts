@@ -34,12 +34,20 @@ export function useRoomRealtime(ctx: RoomCtx) {
     roomRef,
   } = ctx;
   const roomId = room?.id;
+  // Privacidade fase 2 (20261112120000): o canal da sala é PRIVADO — o
+  // servidor (Realtime Authorization, políticas em realtime.messages) só deixa
+  // assinar quem participa da sala. Na tela de convite não assina (seria
+  // recusado); ao entrar, `joined` vira true e o canal liga. Se a checagem
+  // chegar antes do commit da entrada (jogador otimista), o cliente do
+  // Realtime tenta de novo sozinho (1 s, 2 s, 5 s…).
+  const joined = !!playerId && ctx.players.some((p) => p.id === playerId);
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !joined) return;
     const ch = supabase
       .channel(`room:${roomId}`, {
         config: {
+          private: true,
           presence: {
             key: playerId || `anon-${Math.random().toString(36).slice(2)}`,
           },
@@ -265,7 +273,7 @@ export function useRoomRealtime(ctx: RoomCtx) {
       window.removeEventListener(NUDGE_EVENT, onNudge);
       supabase.removeChannel(ch);
     };
-    // setters/refs são estáveis; deps idênticas ao monólito original
+    // setters/refs são estáveis; deps = as do monólito original + `joined`
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, playerId]);
+  }, [roomId, playerId, joined]);
 }

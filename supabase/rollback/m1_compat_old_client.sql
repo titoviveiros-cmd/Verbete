@@ -9,6 +9,8 @@
 -- Desde 20261112110000 (rooms legível só por participantes): o client pré-M1
 -- lê rooms sem sessão — aplicar ANTES supabase/rollback/rooms_leitura_restrita.sql
 -- (reabre a listagem de códigos; só nesta emergência).
+-- Desde 20261112120000 (players e afins só de participantes): aplicar antes de
+-- tudo supabase/rollback/privacidade_fase2.sql (ordem: fase 2 → rooms → este).
 -- =============================================================================
 
 -- Só as colunas do addBot antigo: score/user_id/kicked_at seguem fora do
