@@ -515,6 +515,8 @@ const DENY = [
   "match_shares_forget_user", "match_shares_cleanup",
   // chat da sala removido do app em 20/10; a RPC dormente fechou em 20261111090100
   "send_room_message",
+  // limite de salas (20261111100000): teto e regra de código são internos
+  "room_create_guard", "room_code_releasable",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",
