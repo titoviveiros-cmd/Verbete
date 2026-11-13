@@ -14,6 +14,7 @@ import {
   sanitizeNickname,
   humanizeMeaning,
   textSimilarity,
+  ugcRejectedReason,
   wellFormedDefinition,
 } from "./text-filter";
 import {
@@ -699,7 +700,13 @@ export async function submitDefinition(
       p_player_id: playerId,
       p_text: clean,
     });
-    if (error) throw error;
+    if (error) {
+      // Gatilho de conteúdo do servidor (ECA Digital, 11/11/2026): mesma
+      // regra de definitionIssue — só chega aqui se o cliente não barrou.
+      const ugc = ugcRejectedReason(error);
+      if (ugc) throw new DefinitionRejectedError(DEFINITION_ISSUE_MESSAGE[ugc]);
+      throw error;
+    }
     if (data && (data as any).ok === false) {
       if ((data as any).reason === "duplicate_definition")
         throw new DuplicateDefinitionError();
