@@ -24,6 +24,7 @@ const SUITES = [
   "test-phase-secs.mjs",
   "test-ops.mjs",
   "test-ops-health.mjs",
+  "test-ranking-optin.mjs", // B6 ECA Digital: ranking só com opt-in, leitura de profiles, vc8 e rollback (11/11/2026)
   "test-r4-anti-loop.mjs",
   "test-p2-xp.mjs",
   "test-player-id.mjs",
