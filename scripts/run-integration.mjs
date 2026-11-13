@@ -28,6 +28,7 @@ const SUITES = [
   "test-p2-xp.mjs",
   "test-player-id.mjs",
   "test-seguranca-lancamento.mjs", // código de sala sem colisão (corrida real) + teto do log_ops_event + chat dormente fechado (10/11/2026)
+  "test-limite-codigo-sala.mjs", // ECA R6: limite de tentativas de código de sala por identidade, registro com hash, corrida real (12/11/2026)
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
   "test-native-auth-callback.mjs",

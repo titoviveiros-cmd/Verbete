@@ -16,6 +16,11 @@ const KNOWN: ReadonlyArray<readonly [RegExp, string]> = [
   [/session_required|sessão de jogo/i, SESSION_REQUIRED_MESSAGE],
   [/aceite os Termos/i, "Para continuar, aceite os Termos de Uso."],
   [/sala pública/i, "Não foi possível encontrar uma sala pública."],
+  // ECA R6 (12/11/2026): limite de tentativas de código de sala no servidor.
+  [
+    /rate_limited/i,
+    "Muitas tentativas com códigos que não abriram uma sala. Espere alguns minutos e tente de novo.",
+  ],
   [
     /failed to fetch|networkerror|network request failed|load failed/i,
     "Sem conexão. Confira a internet e tente de novo.",
@@ -37,4 +42,16 @@ export function friendlyEntryError(
       : String(e ?? "");
   for (const [re, text] of KNOWN) if (re.test(msg)) return text;
   return FALLBACK[action];
+}
+
+/**
+ * Recusa devolvida pelo rejoin_room como RETORNO ({ok:false, reason}) em vez de
+ * erro (ECA R6, 20261112090000: a falha precisa ficar gravada para o limite de
+ * tentativas). Devolve o motivo ou null se a entrada valeu.
+ */
+export function rejoinRefusal(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as { ok?: unknown; reason?: unknown };
+  if (d.ok !== false) return null;
+  return typeof d.reason === "string" && d.reason ? d.reason : "join_refused";
 }
