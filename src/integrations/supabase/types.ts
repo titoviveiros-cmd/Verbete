@@ -1718,6 +1718,11 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: Json;
       };
+      room_actor_gate: { Args: { p_room_id: string }; Returns: string };
+      room_actor_is: {
+        Args: { p_player_id: string; p_room_id: string };
+        Returns: boolean;
+      };
       room_humans_present: { Args: { p_room_id: string }; Returns: boolean };
       room_last_human_activity: {
         Args: { p_room_id: string };
