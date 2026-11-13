@@ -103,6 +103,18 @@ if (relApk) {
     "intent-filters do APK de release (retorno do login + App Links)",
     !!ver && run("node", ["scripts/check-android-intents.mjs", join(relDir, relApk), join(bt, ver, "aapt2")]).status === 0,
   );
+  // A mesma auditoria que o AAB da loja passa no android.yml (canal aqui =
+  // internal, o padrão do build nativo sem VITE_RELEASE_CHANNEL).
+  check(
+    "bundle web do APK de release: config pública, sem segredos, canal internal, versão do gradle",
+    run("node", [
+      "scripts/verify-native-artifact.mjs",
+      join(relDir, relApk),
+      "--channel",
+      process.env.VITE_RELEASE_CHANNEL || "internal",
+      ...(sha ? ["--build-id", sha] : []),
+    ]).status === 0,
+  );
 }
 
 console.log(fails ? `\n${fails}/${total} FALHAS` : `\nANDROID OK — ${total}/${total}`);

@@ -22,8 +22,9 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Assinatura: keystore local via key.properties (NUNCA no repo) —
-            // ver docs/store-checklist.md. Sem key.properties, assina com debug
-            // para permitir `assembleRelease` de teste local.
+            // ver docs/store-checklist.md. Sem key.properties, a release sai SEM
+            // assinatura (app-release-unsigned.apk / AAB sem META-INF de
+            // assinatura) — serve para build de teste local, nunca para a loja.
             def keystoreProperties = new Properties()
             def keystorePropertiesFile = rootProject.file('key.properties')
             if (keystorePropertiesFile.exists()) {
