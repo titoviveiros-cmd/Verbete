@@ -29,6 +29,7 @@ const SUITES = [
   "test-seguranca-lancamento.mjs", // código de sala sem colisão (corrida real) + teto do log_ops_event + chat dormente fechado (10/11/2026)
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
+  "test-autorizacao-fase3.mjs", // RPCs de partida só de participantes ativos; coordenador/host onde o jogo exige; sem oráculo (13/11/2026)
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
   "test-definition-filter.mjs",

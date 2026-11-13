@@ -53,6 +53,10 @@ await db.query("BEGIN");
 try {
   await db.query(readFileSync("supabase/rollback/m1_compat_old_client.sql", "utf8"));
   check("aplica sem erro", true);
+  // Fase 3 (20261113090000): o client pré-M1 chama as RPCs de partida SEM
+  // sessão (e insere jogadores sem user_id) — no modo de emergência pré-M1,
+  // desfazer também a autorização delas (sem objeto em comum com o resto).
+  await db.query(readFileSync("supabase/rollback/autorizacao_fase3.sql", "utf8"));
   let r = await asAnon(
     `INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot) VALUES ($1, $2, 'Bot', 'b', '#111', true)`,
     [`bot_rb${tag}`, rid],
@@ -76,6 +80,9 @@ try {
 console.log("\n— Rollback funcional completo");
 await db.query("BEGIN");
 try {
+  // Fase 3 antes: o m1_full_rollback reescreve start_shuffling e
+  // advance_writing_to_voting (e o client pré-M1 chama sem sessão).
+  await db.query(readFileSync("supabase/rollback/autorizacao_fase3.sql", "utf8"));
   await db.query(readFileSync("supabase/rollback/m1_full_rollback.sql", "utf8"));
   check("aplica sem erro", true);
   const s = await one(`
@@ -108,6 +115,33 @@ try {
            has_table_privilege('anon', 'public.definitions', 'UPDATE') AS defs_update,
            has_table_privilege('anon', 'public.rounds', 'INSERT') AS rounds_insert`);
   check("furos que nenhum client usava continuam fechados", !Object.values(holes).some(Boolean), JSON.stringify(holes));
+} finally {
+  await db.query("ROLLBACK");
+}
+
+console.log("\n— Rollback da fase 3 (autorização das RPCs de partida, 20261113090000)");
+const FASE3_RPCS = `('choose_word','start_shuffling','advance_writing_to_voting','extend_writing_or_advance',
+  'advance_voting_to_reveal','extend_voting_or_advance','finish_reveal','advance_scoreboard_to_next_round_or_finished')`;
+await db.query("BEGIN");
+try {
+  const before = await one(`
+    SELECT count(*) FILTER (WHERE p.prosrc LIKE '%room_actor_%')::int AS guardadas
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ${FASE3_RPCS}`);
+  check("com a migration: as 8 RPCs conferem quem chama", before.guardadas === 8, JSON.stringify(before));
+  await db.query(readFileSync("supabase/rollback/autorizacao_fase3.sql", "utf8"));
+  const after = await one(`
+    SELECT count(*) FILTER (WHERE p.prosrc LIKE '%room_actor_%')::int AS guardadas,
+           to_regprocedure('public.room_actor_gate(uuid)') IS NULL AS sem_gate,
+           to_regprocedure('public.room_actor_is(uuid,text)') IS NULL AS sem_is,
+           bool_and(has_function_privilege('anon', p.oid, 'EXECUTE')) AS acl_anon
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ${FASE3_RPCS}`);
+  check(
+    "rollback: corpos antigos (sem guarda), funções novas apagadas, ACL intacta",
+    after.guardadas === 0 && after.sem_gate && after.sem_is && after.acl_anon,
+    JSON.stringify(after),
+  );
+  const t = await one(`SELECT public.tick_stalled_rooms() AS r`);
+  check("rollback: o cron do motor segue rodando", !!t.r, JSON.stringify(t.r).slice(0, 80));
 } finally {
   await db.query("ROLLBACK");
 }
