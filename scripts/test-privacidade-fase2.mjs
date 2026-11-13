@@ -134,13 +134,22 @@ for (const [who, label, own] of [[anon, "sem sessão", null], [M, "sessão de fo
     const all = await who.c.from(t).select(sel);
     const byId = await who.c.from(t).select(sel).eq("room_id", room.id);
     const amplo = await who.c.from(t).select(sel).neq("room_id", "00000000-0000-0000-0000-000000000000");
-    const { count } = await who.c.from(t).select("*", { count: "exact", head: true });
+    // Contagem com as MESMAS colunas legíveis (room_words só tem GRANT por
+    // coluna, sem `meaning`: "select=*" é negado com 42501 desde o master —
+    // ver a checagem própria logo abaixo).
+    const { count, error: cErr } = await who.c.from(t).select(sel, { count: "exact", head: true });
     const exp = own ? inOther[t] : 0;
     const okOwn = (r) => !r.error && (r.data ?? []).length === exp && (r.data ?? []).every((x) => x.room_id === own);
     check(
-      `${label}: ${t} → listagem ${all.data?.length ?? all.error?.code}, filtro amplo ${amplo.data?.length ?? amplo.error?.code}, room_id da sala ${byId.data?.length ?? byId.error?.code}, contagem ${count} (esperado ${exp}/${exp}/0/${exp})`,
-      okOwn(all) && okOwn(amplo) && !byId.error && byId.data.length === 0 && count === exp,
+      `${label}: ${t} → listagem ${all.data?.length ?? all.error?.code}, filtro amplo ${amplo.data?.length ?? amplo.error?.code}, room_id da sala ${byId.data?.length ?? byId.error?.code}, contagem ${count ?? cErr?.code} (esperado ${exp}/${exp}/0/${exp})`,
+      okOwn(all) && okOwn(amplo) && !byId.error && byId.data.length === 0 && !cErr && count === exp,
     );
+  }
+  // room_words.meaning (o significado da palavra customizada) continua fora de
+  // alcance por GRANT de coluna: "select=*" e "select=meaning" → 42501.
+  for (const s of ["*", "meaning"]) {
+    const r = await who.c.from("room_words").select(s, { count: "exact" }).eq("room_id", room.id);
+    check(`${label}: room_words?select=${s} → negado (42501), sem linhas`, r.error?.code === "42501" && !r.data?.length, short(r.error?.code ?? r.data));
   }
   const emb = await who.c.from("rooms").select("id, players(nickname,user_id)").eq("id", room.id);
   check(`${label}: rooms?select=players(…) da sala → nada`, !emb.error && (emb.data ?? []).length === 0, short(emb.error?.message ?? emb.data));
@@ -215,8 +224,17 @@ console.log("\n— Canal PRIVADO room:<id> (Realtime Authorization)");
 {
   const topic = `room:${room.id}`;
   const recv = { B: [], M: [], pub: [] };
-  const chA = A.c.channel(topic, { config: { private: true, presence: { key: `pf_a_${tag}` } } });
-  const chB = B.c.channel(topic, { config: { private: true, presence: { key: `pf_b_${tag}` } } }).on("broadcast", { event: "room-sync" }, (p) => recv.B.push(p.payload));
+  // Mesma configuração do app (use-room-realtime.ts): chave de presença + um
+  // ouvinte "presence sync". Sem ouvinte de presença, o realtime-js assina com
+  // presence.enabled=false e o servidor não liga a presença no canal.
+  const sync = { A: 0 };
+  const chA = A.c
+    .channel(topic, { config: { private: true, presence: { key: `pf_a_${tag}` } } })
+    .on("presence", { event: "sync" }, () => sync.A++);
+  const chB = B.c
+    .channel(topic, { config: { private: true, presence: { key: `pf_b_${tag}` } } })
+    .on("presence", { event: "sync" }, () => {})
+    .on("broadcast", { event: "room-sync" }, (p) => recv.B.push(p.payload));
   const sA = await subscribe(chA);
   const sB = await subscribe(chB);
   check("participantes (host e convidado) assinam o canal privado", sA.status === "SUBSCRIBED" && sB.status === "SUBSCRIBED", short([sA.log, sB.log]));
@@ -238,13 +256,22 @@ console.log("\n— Canal PRIVADO room:<id> (Realtime Authorization)");
   check("broadcast no canal privado: o participante recebe", sent === "ok" && recv.B.length === 1, `${sent} ${short(recv.B)}`);
   check("o tópico PÚBLICO room:<id> (vc8) não recebe o tráfego privado", sP.status === "SUBSCRIBED" && recv.pub.length === 0, `${sP.status} ${short(recv.pub)}`);
   await M.c.removeChannel(chP);
-  await chB.track({ player_id: `pf_b_${tag}` });
+  const tracked = await chB.track({ player_id: `pf_b_${tag}` });
   let seen = false;
-  for (let i = 0; i < 20 && !seen; i++) {
+  for (let i = 0; i < 40 && !seen; i++) {
     seen = Object.keys(chA.presenceState()).includes(`pf_b_${tag}`);
     if (!seen) await sleep(250);
   }
-  check("presença: o host vê o convidado no canal privado", seen, short(Object.keys(chA.presenceState())));
+  check("presença: o convidado publica (track ok) e o host o vê no canal privado", tracked === "ok" && seen, `track=${tracked} syncs=${sync.A} ${short(Object.keys(chA.presenceState()))}`);
+  // e quem está fora não vê essa presença pelo tópico público de mesmo nome
+  {
+    const chQ = M.c.channel(topic, { config: { presence: { key: `pf_m_${tag}` } } }).on("presence", { event: "sync" }, () => {});
+    const sQ = await subscribe(chQ);
+    await sleep(1500);
+    const keys = Object.keys(chQ.presenceState());
+    check("presença privada não vaza para o tópico PÚBLICO room:<id>", sQ.status === "SUBSCRIBED" && !keys.includes(`pf_b_${tag}`), `${sQ.status} ${short(keys)}`);
+    await M.c.removeChannel(chQ);
+  }
   // reconexão: derruba o socket do convidado e assina de novo
   await B.c.removeChannel(chB);
   B.c.realtime.disconnect();
@@ -325,6 +352,8 @@ console.log("\n— Fluxo do app antigo (vc8): entra pelo código, lê por room_i
   const ps = await V.c.from("players").select("*").eq("room_id", room.id).is("kicked_at", null).order("joined_at");
   const rx = await V.c.from("round_extensions").select("*").eq("room_id", room.id);
   const vt = await V.c.from("votes").select("*").eq("room_id", room.id);
+  // sorteio de palavra do vc8 (room.ts): room_words?select=id,word,category,created_at&room_id=eq.X
+  const rw = await V.c.from("room_words").select("id,word,category,created_at").eq("room_id", room.id);
   const sync = await V.c.rpc("get_round_sync", { p_room_id: room.id });
   let got = 0;
   const ch = V.c.channel(`room:${room.id}`).on("postgres_changes", { event: "*", schema: "public", table: "players", filter: `room_id=eq.${room.id}` }, () => got++);
@@ -335,9 +364,9 @@ console.log("\n— Fluxo do app antigo (vc8): entra pelo código, lê por room_i
     for (let t = 0; t < 10 && got === 0; t++) await sleep(250);
   }
   check(
-    "vc8: lê por código → entra → lê players/round_extensions/votes/get_round_sync por id → recebe postgres_changes no canal público",
-    pre.data?.id === room.id && !j.error && ps.data?.length > 3 && rx.data?.length === inRoom.round_extensions && vt.data?.length === inRoom.votes && !!sync.data && s.status === "SUBSCRIBED" && got > 0,
-    short([pre.error?.message, j.error?.message, ps.data?.length, rx.data?.length, vt.data?.length, !!sync.data, s.status, got]),
+    "vc8: lê por código → entra → lê players/round_extensions/votes/room_words/get_round_sync por id → recebe postgres_changes no canal público",
+    pre.data?.id === room.id && !j.error && ps.data?.length > 3 && rx.data?.length === inRoom.round_extensions && vt.data?.length === inRoom.votes && rw.data?.length === inRoom.room_words && !!sync.data && s.status === "SUBSCRIBED" && got > 0,
+    short([pre.error?.message, j.error?.message, ps.data?.length, rx.data?.length, vt.data?.length, rw.data?.length ?? rw.error?.code, !!sync.data, s.status, got]),
   );
   await V.c.removeChannel(ch);
   // Exposição que SOBRA até o vc9 (documentada): canal público com o mesmo nome segue aberto
