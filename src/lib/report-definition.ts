@@ -85,6 +85,9 @@ export async function fileReport(
     ...(truth
       ? {
           status: "dismissed",
+          action: "dismiss",
+          // art. 30 II (ECA Digital): esta decisão é automática, não humana.
+          review_kind: "automated",
           resolution_note: TRUTH_NOTE,
           resolved_at: new Date().toISOString(),
         }

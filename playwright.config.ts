@@ -5,6 +5,7 @@ import {
   serializeTermsRecord,
   withAcceptance,
 } from "./src/lib/terms-record";
+import { ageDeclarationStorageEntry } from "./src/lib/age-record";
 
 // E2E do Verbete — roda contra o dev server (localhost:5173).
 // Local: usa o Supabase do .env (salas de teste são efêmeras;
@@ -23,12 +24,17 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 //   registro antigo, sem identidade, que o app converte para a sessão
 //   ANÔNIMA na 1ª leitura (migração conservadora; conta não herda).
 const accepted = { version: TERMS_VERSION, at: "2026-10-26T00:00:00.000Z" };
+// ECA Digital B5 (11/11/2026): o aparelho de teste também já declarou o ano
+// de nascimento (adulto); o AgeGate tem specs próprios que começam do zero.
 const acceptedDevice = (value: string) => ({
   cookies: [],
   origins: [
     {
       origin: new URL(baseURL).origin,
-      localStorage: [{ name: TERMS_STORAGE_KEY, value }],
+      localStorage: [
+        { name: TERMS_STORAGE_KEY, value },
+        ageDeclarationStorageEntry(1990),
+      ],
     },
   ],
 });

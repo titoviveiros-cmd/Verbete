@@ -29,6 +29,7 @@ export function useRoomPolling(ctx: RoomCtx) {
     optimisticPlayerIdsRef,
     lastEventAtRef,
     lastRoomSigRef,
+    roomRef,
   } = ctx;
   const roomId = room?.id;
   const roomStatus = room?.status;
@@ -116,6 +117,10 @@ export function useRoomPolling(ctx: RoomCtx) {
         document.visibilityState !== "visible"
       )
         return;
+      // Sem sala carregada (código errado / "Sala não encontrada"): não
+      // insiste sozinho — com o limite de tentativas de código (#73), cada
+      // releitura de um código inexistente conta como falha (20261112110000).
+      if (!roomRef.current) return;
       if (Date.now() - lastEventAtRef.current > 25000) {
         reloadRef.current?.();
       }

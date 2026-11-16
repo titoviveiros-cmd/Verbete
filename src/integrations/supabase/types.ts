@@ -116,6 +116,7 @@ export type Database = {
           id: string;
           player_id: string | null;
           reason: string;
+          report_id: string | null;
           user_id: string | null;
         };
         ComputedFields: never;
@@ -126,6 +127,7 @@ export type Database = {
           id?: string;
           player_id?: string | null;
           reason?: string;
+          report_id?: string | null;
           user_id?: string | null;
         };
         Update: {
@@ -135,9 +137,18 @@ export type Database = {
           id?: string;
           player_id?: string | null;
           reason?: string;
+          report_id?: string | null;
           user_id?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "banned_players_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: false;
+            referencedRelation: "reports";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       daily_attempts: {
         Row: {
@@ -463,6 +474,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      moderation_appeals: {
+        Row: {
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_note: string | null;
+          id: string;
+          report_id: string;
+          status: string;
+          text: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
+          id?: string;
+          report_id: string;
+          status?: string;
+          text: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
+          id?: string;
+          report_id?: string;
+          status?: string;
+          text?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "moderation_appeals_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: true;
+            referencedRelation: "reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       ops_alerts: {
         Row: {
           at: string;
@@ -616,6 +672,7 @@ export type Database = {
           color: string;
           created_at: string;
           display_name: string;
+          ranking_opt_in: boolean;
           updated_at: string;
           user_id: string;
         };
@@ -625,6 +682,7 @@ export type Database = {
           color?: string;
           created_at?: string;
           display_name?: string;
+          ranking_opt_in?: boolean;
           updated_at?: string;
           user_id: string;
         };
@@ -633,6 +691,7 @@ export type Database = {
           color?: string;
           created_at?: string;
           display_name?: string;
+          ranking_opt_in?: boolean;
           updated_at?: string;
           user_id?: string;
         };
@@ -673,7 +732,9 @@ export type Database = {
       };
       reports: {
         Row: {
+          action: string | null;
           created_at: string;
+          decision_reason: string | null;
           definition_id: string | null;
           definition_text: string;
           id: string;
@@ -685,6 +746,7 @@ export type Database = {
           resolution_note: string | null;
           resolved_at: string | null;
           resolved_by: string | null;
+          review_kind: string;
           room_code: string | null;
           room_id: string | null;
           round: number | null;
@@ -692,7 +754,9 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          action?: string | null;
           created_at?: string;
+          decision_reason?: string | null;
           definition_id?: string | null;
           definition_text: string;
           id?: string;
@@ -704,13 +768,16 @@ export type Database = {
           resolution_note?: string | null;
           resolved_at?: string | null;
           resolved_by?: string | null;
+          review_kind?: string;
           room_code?: string | null;
           room_id?: string | null;
           round?: number | null;
           status?: string;
         };
         Update: {
+          action?: string | null;
           created_at?: string;
+          decision_reason?: string | null;
           definition_id?: string | null;
           definition_text?: string;
           id?: string;
@@ -722,6 +789,7 @@ export type Database = {
           resolution_note?: string | null;
           resolved_at?: string | null;
           resolved_by?: string | null;
+          review_kind?: string;
           room_code?: string | null;
           room_id?: string | null;
           round?: number | null;
@@ -827,6 +895,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -851,6 +920,7 @@ export type Database = {
           finished_at?: string | null;
           host_id: string;
           id?: string;
+          locked?: boolean;
           mode?: string;
           nivel?: string;
           paused_at?: string | null;
@@ -874,6 +944,7 @@ export type Database = {
           finished_at?: string | null;
           host_id?: string;
           id?: string;
+          locked?: boolean;
           mode?: string;
           nivel?: string;
           paused_at?: string | null;
@@ -1340,6 +1411,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -1582,6 +1654,7 @@ export type Database = {
         Args: { _player_id: string; _user_id: string };
         Returns: boolean;
       };
+      is_room_participant: { Args: { p_room_id: string }; Returns: boolean };
       is_sessionless_api_call: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
@@ -1604,6 +1677,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -1681,11 +1755,14 @@ export type Database = {
         Returns: number;
       };
       migrate_host: { Args: { p_room_id: string }; Returns: Json };
+      my_room_ids: { Args: Record<PropertyKey, never>; Returns: string[] };
       ops_health_check: { Args: Record<PropertyKey, never>; Returns: Json };
       phase_secs: {
         Args: { p_base: number; p_room_id: string };
         Returns: number;
       };
+      public_rooms_open: { Args: Record<PropertyKey, never>; Returns: boolean };
+      realtime_topic_allowed: { Args: { p_topic: string }; Returns: boolean };
       record_match_result: { Args: { p_room_code: string }; Returns: Json };
       rejoin_room: {
         Args: {
@@ -1715,12 +1792,30 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: Json;
       };
+      room_actor_gate: { Args: { p_room_id: string }; Returns: string };
+      room_actor_is: {
+        Args: { p_player_id: string; p_room_id: string };
+        Returns: boolean;
+      };
+      room_config_issue: {
+        Args: { p_categories: string[]; p_teams: Json };
+        Returns: string;
+      };
       room_humans_present: { Args: { p_room_id: string }; Returns: boolean };
       room_last_human_activity: {
         Args: { p_room_id: string };
         Returns: string;
       };
       room_pause_due: { Args: { p_room_id: string }; Returns: boolean };
+      room_read_allowed: { Args: { p_room_id: string }; Returns: boolean };
+      rooms_vc8_compat_on: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      rooms_vc8_exact_code_read: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
       run_data_retention: {
         Args: { p_anon?: number; p_reports?: number; p_rooms?: number };
         Returns: Json;
@@ -1731,6 +1826,10 @@ export type Database = {
       };
       send_room_message: {
         Args: { p_player_id: string; p_room_id: string; p_text: string };
+        Returns: Json;
+      };
+      set_room_locked: {
+        Args: { p_actor_id: string; p_locked: boolean; p_room_id: string };
         Returns: Json;
       };
       start_game: { Args: { p_room_id: string }; Returns: Json };
@@ -1761,6 +1860,8 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string; p_state?: string };
         Returns: Json;
       };
+      ugc_symbol_issue: { Args: { p_text: string }; Returns: boolean };
+      ugc_text_issue: { Args: { p_text: string }; Returns: string };
       writing_phase_secs: { Args: { p_base: number }; Returns: number };
       xp_to_level: { Args: { p_xp: number }; Returns: number };
     };

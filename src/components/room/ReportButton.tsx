@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useServerFn } from "@tanstack/react-start";
 import { reportDefinition } from "@/lib/moderation.functions";
 import { expectOk } from "@/lib/server-fn-transport";
+import { ReportSent } from "@/components/room/ReportSent";
 import { useAuth } from "@/hooks/use-auth";
 import type { Definition } from "@/lib/room";
 
@@ -107,7 +108,7 @@ export function ReportButton({
                 <div className="text-3xl mb-1">🚩</div>
                 <h3 className="font-display text-lg">Reportar definição</h3>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Nossa equipe vai revisar.
+                  Uma pessoa da equipe analisa em até 72 h.
                 </p>
               </div>
 
@@ -154,9 +155,7 @@ export function ReportButton({
                   </div>
                 </>
               ) : (
-                <p className="text-center text-mint text-sm py-2">
-                  ✅ Obrigado! Denúncia registrada.
-                </p>
+                <ReportSent />
               )}
             </div>
           </div>,

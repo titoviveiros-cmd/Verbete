@@ -11,10 +11,13 @@ const SUITES = [
   "test-e2e-round.mjs",
   "test-match-sem-ia.mjs", // partida completa com ai_mode=suspenso, sem edges servidas (08/11/2026)
   "test-security-rest.mjs",
+  "test-rooms-leitura.mjs", // salas: leitura só de participantes; enumeração, código exato (vc8), Realtime, entradas simultâneas (12/11/2026)
+  "test-privacidade-fase2.mjs", // players e tabelas ligadas só de participantes, RPCs por id, canais Realtime PRIVADOS (12/11/2026)
   "test-shuffling-deadlock.mjs",
   "test-similarity-bonus.mjs",
   "test-daily-guard.mjs", // V2 Diário: reserva atômica antes da IA, com conexões REAIS independentes
   "test-match-share.mjs", // resultado compartilhado: retrato do servidor, token aleatório, validade (09/11/2026)
+  "test-autorizacao-fase3.mjs", // RPCs de partida só de participantes ativos; coordenador/host onde o jogo exige; sem oráculo (13/11/2026)
   "test-daily-choice.mjs", // Diário D1 (modo escolha, sem IA): uma tentativa por hora nos 2 modos, relógio do servidor, sequência, placar (08/11/2026)
   "test-daily-choice-hash.mjs", // D1 R1/R2/R3 no banco: hash conferido no UPDATE, trava de aprovado, corridas reais (10/11/2026)
   "test-daily-choice-r6b.mjs", // D1 R6b no banco: a função antiga não aprova (só por hash), rollback byte a byte, corrida real (10/11/2026)
@@ -23,6 +26,7 @@ const SUITES = [
   "test-phase-secs.mjs",
   "test-ops.mjs",
   "test-ops-health.mjs",
+  "test-ranking-optin.mjs", // B6 ECA Digital: ranking só com opt-in, leitura de profiles, vc8 e rollback (11/11/2026)
   "test-r4-anti-loop.mjs",
   "test-p2-xp.mjs",
   "test-player-id.mjs",
@@ -30,11 +34,14 @@ const SUITES = [
   "test-limite-codigo-sala.mjs", // ECA R6: limite de tentativas de código de sala por identidade, registro com hash, corrida real (12/11/2026)
   "test-pause-resume.mjs",
   "test-bot-votes.mjs",
+  "test-sala-trancada.mjs", // ECA Digital B4: sala trancada pelo dono, expulso não volta, partida rápida fechada (11/11/2026)
   "test-native-auth-callback.mjs",
   "test-data-retention.mjs",
   "test-definition-filter.mjs",
+  "test-ugc-filtro.mjs", // ECA Digital: palavrão/link/contato barrados no servidor (definição, apelido, nome exibido) (11/11/2026)
   "test-near-miss.mjs",
   "test-rollback.mjs",
+  "test-denuncia-recurso.mjs", // ECA Digital: decisão fundamentada, recurso 1 por denúncia, tabela fechada ao cliente (11/11/2026)
   "test-probe-local.mjs",
 ];
 

@@ -10,6 +10,7 @@ import {
   fetchUnlockedCodes,
   type Achievement,
 } from "@/lib/daily";
+import { RankingOptIn } from "@/components/RankingOptIn";
 import { deleteAccount, resetMyStats } from "@/lib/account.functions";
 import { expectOk } from "@/lib/server-fn-transport";
 import { AvatarGrid } from "@/components/AvatarGrid";
@@ -17,6 +18,7 @@ import { setStored } from "@/lib/player-id";
 import { TermsConsent } from "@/components/TermsConsent";
 import { useTermsGate } from "@/hooks/use-terms-gate";
 import { assertTermsAccepted } from "@/lib/terms-consent";
+import { nicknameIssueMessage } from "@/lib/text-filter";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -72,6 +74,9 @@ function ProfilePage() {
   const [history, setHistory] = useState<Match[]>([]);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
+  // Nome recusado pela regra de conteúdo (palavrão, contato) — o servidor
+  // troca por "Jogador" se chegar lá (gatilho em profiles, 11/11/2026).
+  const [nameError, setNameError] = useState<string | null>(null);
   // O nome aparece no ranking: sem o aceite deste aparelho, aceita aqui.
   const terms = useTermsGate();
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -147,6 +152,9 @@ function ProfilePage() {
     if (!user) return;
     const trimmed = name.trim().slice(0, 24);
     if (!trimmed) return;
+    const issue = nicknameIssueMessage(trimmed);
+    setNameError(issue);
+    if (issue) return;
     if (!terms.confirm()) return;
     try {
       await assertTermsAccepted(); // a conta da sessão no instante de salvar
@@ -270,6 +278,11 @@ function ProfilePage() {
                 Salvar
               </button>
             </div>
+            {nameError && (
+              <p role="alert" className="text-xs text-destructive mt-2">
+                {nameError}
+              </p>
+            )}
             <TermsConsent gate={terms} className="mt-2 max-w-sm mx-auto" />
           </>
         ) : (
@@ -364,6 +377,8 @@ function ProfilePage() {
           🏆 Ranking
         </Link>
       </div>
+      {/* B6 (ECA Digital): aparecer no ranking é escolha, desligada por padrão. */}
+      {user && <RankingOptIn userId={user.id} />}
 
       {isAdmin && (
         <Link
