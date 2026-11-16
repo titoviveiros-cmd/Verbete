@@ -565,6 +565,10 @@ function DailyPage() {
           <h2 className="font-display text-xl flex items-center gap-2">
             🏆 <span>Ranking de hoje</span>
           </h2>
+          {/* B6 (ECA Digital): o placar só mostra quem ativou (filtro no banco). */}
+          <p className="text-[11px] text-muted-foreground -mt-1">
+            Só aparece quem ativou “Aparecer no ranking público” no Perfil.
+          </p>
           {board.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-3">
               Seja o primeiro a jogar hoje!
