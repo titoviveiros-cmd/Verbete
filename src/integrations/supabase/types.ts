@@ -832,6 +832,25 @@ export type Database = {
         };
         Relationships: [];
       };
+      room_create_log: {
+        Row: {
+          at: string;
+          id: number;
+          who: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          at?: string;
+          id?: never;
+          who: string;
+        };
+        Update: {
+          at?: string;
+          id?: never;
+          who?: string;
+        };
+        Relationships: [];
+      };
       room_messages: {
         Row: {
           created_at: string;
@@ -1848,12 +1867,17 @@ export type Database = {
         Args: { p_hash: string };
         Returns: undefined;
       };
+      room_code_releasable: {
+        Args: { p_finished_at: string; p_reason: string; p_status: string };
+        Returns: boolean;
+      };
       room_code_retry_after: { Args: { p_hash: string }; Returns: number };
       room_code_uid_hash: { Args: { p_uid: string }; Returns: string };
       room_config_issue: {
         Args: { p_categories: string[]; p_teams: Json };
         Returns: string;
       };
+      room_create_guard: { Args: { p_uid: string }; Returns: undefined };
       room_humans_present: { Args: { p_room_id: string }; Returns: boolean };
       room_last_human_activity: {
         Args: { p_room_id: string };
