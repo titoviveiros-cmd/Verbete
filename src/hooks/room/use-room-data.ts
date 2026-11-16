@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { hedged } from "@/lib/hedge";
+import { ensureAnonSession } from "@/lib/auth-session";
 import type { Room, Player, Definition, Vote, Word } from "@/lib/room";
 import { withPendingConfig } from "@/lib/room-config-writer";
 import { isStaleServerPhase } from "@/lib/transition-floor";
@@ -35,6 +36,10 @@ export function useRoomData(ctx: RoomCtx) {
     if (!code) return;
     let alive = true;
     const load = async () => {
+      // Desde 20261112110000 a sala só responde a quem tem sessão: no convite
+      // aberto a frio, a sessão anônima do boot pode não ter chegado ainda.
+      await ensureAnonSession();
+      if (!alive) return;
       const { data, error: rpcErr } = await supabase.rpc("get_room_state", {
         p_code: code,
       });

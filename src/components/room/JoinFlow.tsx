@@ -6,7 +6,7 @@ import { joinRoom } from "@/lib/room";
 import { friendlyEntryError } from "@/lib/entry-errors";
 import { randomAvatar, randomColor } from "@/lib/avatars";
 import { AvatarGrid } from "@/components/AvatarGrid";
-import { sanitizeNickname } from "@/lib/text-filter";
+import { nicknameIssueMessage, sanitizeNickname } from "@/lib/text-filter";
 import { Mascot } from "@/components/Mascot";
 import { primeAudio, playUITap } from "@/lib/sound";
 import { TermsConsent } from "@/components/TermsConsent";
@@ -43,6 +43,11 @@ export function JoinFlow({
     const cleanNick = sanitizeNickname(nick);
     if (!cleanNick || cleanNick === "Anônimo") {
       setError("Escolha um apelido");
+      return;
+    }
+    const nickIssue = nicknameIssueMessage(cleanNick);
+    if (nickIssue) {
+      setError(nickIssue);
       return;
     }
     if (!terms.confirm()) return;

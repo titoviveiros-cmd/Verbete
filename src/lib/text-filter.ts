@@ -1,5 +1,15 @@
-// Filtro simples de texto: remove espaços extras, limita tamanho e censura palavrões básicos.
-const BLOCKED = [
+// Filtro simples de texto: remove espaços extras, limita tamanho e recusa
+// palavrões básicos, links e dados de contato.
+//
+// ECA Digital (11/11/2026): as MESMAS listas e regras valem no servidor —
+// public.ugc_text_issue (supabase/migrations/20261111120000_ugc_filtro_servidor.sql),
+// aplicada por gatilho em definitions, players.nickname e profiles.display_name.
+// Um teste confere que as listas daqui e as da migration são idênticas
+// (src/lib/__tests__/ugc-filter-parity.test.ts). É um PISO mínimo: o
+// tratamento real de ofensa e assédio é a denúncia + revisão humana.
+
+/** Começo de palavra (texto sem acento, minúsculo): recusado como palavrão. */
+export const UGC_BLOCKED = [
   "porra",
   "merda",
   "caralho",
@@ -12,9 +22,50 @@ const BLOCKED = [
   "bct",
   "arrombado",
   "filhodaputa",
+  "foda",
+  "foder",
+  "fodido",
+  "punheta",
+  "boquete",
+  "siririca",
+  "piroca",
+  "xoxota",
+  "traveco",
+  "sapatao",
+  "vadia",
+  "babaca",
+  "otario",
+  "pqp",
+  "vsf",
+  "vtnc",
+  "tnc",
+  "krl",
 ];
 
-const LINK_RE = /https?:\/\/\S+/gi;
+/**
+ * Começo de palavra que indica contato fora do jogo (rede social, e-mail).
+ * Público 13+: troca de contato é o primeiro passo de aliciamento — a
+ * definição e o apelido são vistos por desconhecidos da sala.
+ */
+export const UGC_CONTACT_WORDS = [
+  "whatsapp",
+  "whatsap",
+  "wpp",
+  "zapzap",
+  "telegram",
+  "instagram",
+  "discord",
+  "tiktok",
+  "snapchat",
+  "gmail",
+  "hotmail",
+  "outlook",
+];
+
+// Telefone: 8+ dígitos, mesmo separados por espaço, ponto, hífen ou parênteses.
+const PHONE_RE = /\d(?:[\s().-]*\d){7,}/;
+// @usuario ou e-mail: "@" seguido de 2+ letras/dígitos.
+const HANDLE_RE = /@[a-z0-9_]{2}/;
 
 // Normaliza grafia padrão do jogo: minúsculas, sem acentos.
 // Mantém ç → c e remove diacríticos. Garante leitura neutra na votação.
@@ -99,7 +150,24 @@ function leaksWordStrict(
   return false;
 }
 
-export type DefinitionIssue = "reveals_word" | "blocked_word" | "link";
+export type UgcIssue = "link" | "blocked_word" | "contact";
+export type DefinitionIssue = "reveals_word" | UgcIssue;
+
+/**
+ * Regra comum a todo texto escrito por jogador (definição, apelido, nome
+ * exibido): link, palavrão ou contato → motivo; senão null. Espelhada no
+ * servidor em public.ugc_text_issue (mesma ordem, mesmas listas).
+ */
+export function ugcTextIssue(text: string): UgcIssue | null {
+  const plain = normalizeForGame(String(text ?? "").replace(INVISIBLE_RE, ""));
+  if (/https?:\/\/\S/.test(plain) || /\bwww\./.test(plain)) return "link";
+  for (const b of UGC_BLOCKED)
+    if (new RegExp(`\\b${b}`).test(plain)) return "blocked_word";
+  if (PHONE_RE.test(plain) || HANDLE_RE.test(plain)) return "contact";
+  for (const c of UGC_CONTACT_WORDS)
+    if (new RegExp(`\\b${c}`).test(plain)) return "contact";
+  return null;
+}
 
 /** Motivo para recusar (sem alterar) a definição de um jogador, ou null. */
 export function definitionIssue(
@@ -107,27 +175,41 @@ export function definitionIssue(
   word?: string,
 ): DefinitionIssue | null {
   if (word && revealsWord(text, word)) return "reveals_word";
-  if (LINK_RE.test(text) || /\bwww\./i.test(text)) {
-    LINK_RE.lastIndex = 0;
-    return "link";
-  }
-  LINK_RE.lastIndex = 0;
-  const plain = normalizeForGame(text.replace(INVISIBLE_RE, ""));
-  for (const b of BLOCKED)
-    if (new RegExp(`\\b${b}\\w*`).test(plain)) return "blocked_word";
-  return null;
+  return ugcTextIssue(text);
 }
 
 export const DEFINITION_ISSUE_MESSAGE: Record<DefinitionIssue, string> = {
   reveals_word: "⚠️ Não vale usar a palavra da rodada!",
   blocked_word: "⚠️ Sem palavrão na definição!",
   link: "⚠️ Sem links na definição!",
+  contact: "⚠️ Sem telefone, e-mail, @ ou rede social na definição!",
 };
+
+/**
+ * O servidor recusou o texto pelo gatilho de conteúdo (erro do Postgres
+ * "ugc_rejected:<motivo>")? Devolve o motivo — só acontece com cliente
+ * antigo ou chamada direta à API; o app atual recusa antes de enviar.
+ */
+export function ugcRejectedReason(err: unknown): UgcIssue | null {
+  const msg = String((err as { message?: unknown } | null)?.message ?? "");
+  const m = /ugc_rejected:(link|blocked_word|contact)\b/.exec(msg);
+  return m ? (m[1] as UgcIssue) : null;
+}
+
+/** Mensagem para apelido/nome exibido recusado, ou null quando pode usar. */
+export function nicknameIssueMessage(nick: string): string | null {
+  const issue = ugcTextIssue(nick);
+  if (!issue) return null;
+  if (issue === "contact")
+    return "Sem telefone, e-mail, @ ou rede social no apelido. Não use seu nome real nem contato.";
+  return "Esse apelido não é permitido. Escolha outro.";
+}
 
 // Só normalização técnica (2.1.4): invisíveis e espaços extras saem, tamanho
 // máximo, minúsculas sem acento (grafia neutra da votação). NUNCA mascara —
-// texto que revela a palavra, tem palavrão ou link é recusado antes do envio
-// (definitionIssue) e no servidor (submit_definition).
+// texto que revela a palavra, tem palavrão, link ou contato é recusado antes
+// do envio (definitionIssue) e no servidor (submit_definition para a palavra;
+// gatilho definitions_ugc_guard para palavrão/link/contato, 11/11/2026).
 export function sanitizeDefinition(input: string, maxLen = 140): string {
   const t = input
     .replace(INVISIBLE_RE, "")

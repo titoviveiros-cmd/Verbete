@@ -677,6 +677,11 @@ try {
     const [j, e] = [await novoUsuario(), await novoUsuario()];
     await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, time_seconds, is_correct, mode)
                 VALUES ($1, $3::timestamptz::date, $3::timestamptz, 'j', 999, 1, true, 'juiz'), ($2, $3::timestamptz::date, $3::timestamptz, 'e', 998, 1, true, 'escolha')`, [j, e, HORA]);
+    // B6 (20261111154500_ranking_opt_in): no banco real o placar só lista quem
+    // ativou "Aparecer no ranking público". O ensaio PGlite usa o corpo do D1.
+    if (modePg)
+      await db.q(`INSERT INTO public.profiles (user_id, ranking_opt_in) SELECT u, true FROM unnest($1::uuid[]) AS u
+                  ON CONFLICT (user_id) DO UPDATE SET ranking_opt_in = true`, [[j, e]]);
     const modos = async (sql) => new Set((await db.q(sql)).map((r) => r.mode));
     eq([...(await modos(`SELECT * FROM public.get_daily_leaderboard(100, 'escolha')`))], ["escolha"]);
     eq([...(await modos(`SELECT * FROM public.get_daily_leaderboard(100, 'juiz')`))], ["juiz"]);

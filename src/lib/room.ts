@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { setStored, regeneratePlayerId } from "./player-id";
 import { ensureAnonSession, SESSION_REQUIRED_MESSAGE } from "./auth-session";
+import { rejoinRefusal } from "./entry-errors";
 import { assertTermsAccepted } from "./terms-consent";
 import { WRITING_BASE_SECS, writingPhaseSecs } from "./game-times";
 import { hedged } from "./hedge";
@@ -14,6 +15,7 @@ import {
   sanitizeNickname,
   humanizeMeaning,
   textSimilarity,
+  ugcRejectedReason,
   wellFormedDefinition,
 } from "./text-filter";
 import {
@@ -192,16 +194,13 @@ export async function joinRoom(
   if (!(await ensureAnonSession())) throw new Error(SESSION_REQUIRED_MESSAGE);
   // Toda entrada (Home, convite, volta do host, volta após remoção) passa aqui.
   await assertTermsAccepted();
-  // Leituras com "segunda via" (hedged): na medição de 2026-10-20 a
-  // checagem de banimento travou 19,8 s e o host só viu o convidado
-  // entrar 21,5 s depois. Mesma consulta, mesmo resultado.
-  const { data: room, error } = await hedged(() =>
-    supabase.from("rooms").select("*").eq("code", code).maybeSingle(),
-  );
-  if (error) throw error;
-  if (!room) throw new Error("Sala não encontrada");
+  // Sem leitura de `rooms` por código antes de entrar: desde 20261112110000
+  // só quem participa lê a sala. A própria rejoin_room devolve a sala (e
+  // "room_not_found" quando o código não existe).
 
-  // Bloqueia jogadores banidos antes de inserir na sala
+  // Bloqueia jogadores banidos antes de inserir na sala. Com "segunda via"
+  // (hedged): na medição de 2026-10-20 esta checagem travou 19,8 s e o host
+  // só viu o convidado entrar 21,5 s depois. Mesma consulta, mesmo resultado.
   const { data: authData } = await supabase.auth.getUser();
   const authUserId = authData?.user?.id ?? null;
   const { data: banned } = await hedged(() =>
@@ -222,26 +221,36 @@ export async function joinRoom(
 
   // Usa rejoin_room: se o jogador existir (mesmo kicked_at), preserva
   // a pontuação acumulada e zera apenas os contadores de penalidade.
-  const callRejoin = (pid: string) =>
-    supabase.rpc("rejoin_room", {
+  // A sala que ela devolve (to_jsonb da linha) é o retorno do joinRoom.
+  let joined: unknown = null;
+  const callRejoin = async (pid: string) => {
+    const res = await supabase.rpc("rejoin_room", {
       p_code: code,
       p_player_id: pid,
       p_nickname: cleanNick,
       p_avatar: avatar,
       p_color: color,
     });
+    joined = res.error ? null : res.data;
+    return res;
+  };
   // De novo, colado na gravação: sala e banimento podem levar segundos, e
   // outra aba pode ter trocado de conta nesse meio-tempo.
   await assertTermsAccepted();
   let effectiveId = playerId;
-  let { error: rpcErr } = await callRejoin(playerId);
+  let { data: rpcData, error: rpcErr } = await callRejoin(playerId);
   // S4: o id local pertence a outra identidade auth — gera um novo e
   // tenta 1x. O componente da sala relê getPlayerId() após a navegação.
   if (rpcErr && String(rpcErr.message ?? "").includes("player_id_taken")) {
     effectiveId = regeneratePlayerId();
-    ({ error: rpcErr } = await callRejoin(effectiveId));
+    ({ data: rpcData, error: rpcErr } = await callRejoin(effectiveId));
   }
   if (rpcErr) throw rpcErr;
+  // ECA R6 (20261112090000): código inexistente, sala trancada e excesso de
+  // tentativas voltam como {ok:false, reason} (não erro, para a contagem de
+  // falhas não ser desfeita no servidor).
+  const refused = rejoinRefusal(rpcData);
+  if (refused) throw new Error(refused);
   // Amarra a identidade auth ao jogador (idempotente; ignora sem sessão).
   supabase
     .rpc("claim_player_identity", {
@@ -251,7 +260,17 @@ export async function joinRoom(
       () => {},
       () => {},
     );
-  return room as unknown as Room;
+  // Quem chama só usa room.code (navegação); sem a linha, segue com o código
+  // e a tela da sala decide (get_room_state).
+  return joinedRoom(joined, code);
+}
+
+/** Sala devolvida pela rejoin_room, ou o mínimo para navegar até ela. */
+export function joinedRoom(data: unknown, code: string): Room {
+  const r = data as Partial<Room> | null;
+  if (r && typeof r === "object" && typeof r.id === "string" && r.code)
+    return r as Room;
+  return { code } as Room;
 }
 
 /** Reentra na sala após ser removido — preserva pontuação, zera advertências. */
@@ -687,7 +706,13 @@ export async function submitDefinition(
       p_player_id: playerId,
       p_text: clean,
     });
-    if (error) throw error;
+    if (error) {
+      // Gatilho de conteúdo do servidor (ECA Digital, 11/11/2026): mesma
+      // regra de definitionIssue — só chega aqui se o cliente não barrou.
+      const ugc = ugcRejectedReason(error);
+      if (ugc) throw new DefinitionRejectedError(DEFINITION_ISSUE_MESSAGE[ugc]);
+      throw error;
+    }
     if (data && (data as any).ok === false) {
       if ((data as any).reason === "duplicate_definition")
         throw new DuplicateDefinitionError();
