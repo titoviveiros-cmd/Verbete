@@ -102,9 +102,19 @@ check(
 console.log("\n— tick: erro numa sala não derruba as outras");
 const broken = await mkRoom("scoreboard", {
   mode: "teams",
-  teams: JSON.stringify("nao-e-lista"),
   ends: new Date(Date.now() - 60_000).toISOString(),
 });
+// Dado LEGADO/corrompido (times que não são lista). Desde o filtro do #66
+// (20261111120000, gatilho rooms_config_ugc_guard) só existe se foi gravado
+// antes dele — simulado com o gatilho desligado nesta transação.
+{
+  await db.query("BEGIN");
+  const guard = (await row(`SELECT count(*)::int n FROM pg_trigger WHERE tgname = 'rooms_config_ugc_guard'`)).n > 0;
+  if (guard) await db.query("ALTER TABLE public.rooms DISABLE TRIGGER rooms_config_ugc_guard");
+  await db.query(`UPDATE public.rooms SET teams = $2::jsonb WHERE id = $1`, [broken, JSON.stringify("nao-e-lista")]);
+  if (guard) await db.query("ALTER TABLE public.rooms ENABLE TRIGGER rooms_config_ugc_guard");
+  await db.query("COMMIT");
+}
 const healthyLobbyHostless = await mkRoom("lobby", { human: true });
 await db.query(`UPDATE public.rooms SET host_id = 'ausente_${tag}' WHERE id = $1`, [healthyLobbyHostless]);
 const t3 = (await row(`SELECT public.tick_stalled_rooms() AS t`)).t;
