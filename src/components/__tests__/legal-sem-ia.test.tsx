@@ -190,6 +190,10 @@ describe("modo 'desligada': textos legais e de jogo", () => {
     expect(t).not.toMatch(/inclusive pela inteligência artificial/);
     expect(t).not.toMatch(/Gemini|bônus 🧠/);
     expect(t).toContain("processá-lo e usá-lo na moderação");
+    // ECA Digital (Lei 15.211, arts. 32–33): uso abusivo da denúncia
+    expect(t).toContain(
+      "Denúncia falsa ou feita só para prejudicar alguém também viola estes Termos",
+    );
     // o resto dos Termos (UGC, idade, denúncia) continua igual
     for (const keep of [
       "Recomendado para 13 anos ou mais",

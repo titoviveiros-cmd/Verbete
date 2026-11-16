@@ -34,6 +34,7 @@ export const READING_PATHS = [
   "/support",
   "/delete-account",
   "/pais", // Para pais e responsáveis (B7 ECA Digital, 11/11/2026)
+  "/transparencia", // Transparência (Lei 14.852 art. 16 IV, 16/11/2026)
 ] as const;
 
 export function isReadingPath(pathname: string): boolean {

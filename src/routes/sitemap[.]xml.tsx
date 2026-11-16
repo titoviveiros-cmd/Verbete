@@ -6,6 +6,7 @@ const URLS = [
   { loc: `${APP_URL}/daily`, priority: "0.9", changefreq: "daily" },
   { loc: `${APP_URL}/ranking`, priority: "0.7", changefreq: "daily" },
   { loc: `${APP_URL}/pais`, priority: "0.5", changefreq: "monthly" },
+  { loc: `${APP_URL}/transparencia`, priority: "0.4", changefreq: "monthly" },
 ];
 
 export const Route = createFileRoute("/sitemap.xml")({
