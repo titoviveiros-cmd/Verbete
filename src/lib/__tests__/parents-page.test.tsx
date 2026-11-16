@@ -91,7 +91,7 @@ describe("rota /pais", () => {
     ).toBeInTheDocument();
   });
 
-  it("contato: o e-mail oficial (constante) e o nome legal ainda PENDENTE", async () => {
+  it("contato: o e-mail oficial (constante) e o nome legal decidido", async () => {
     await montar({ comDenuncias: false });
     const mails = screen.getAllByRole("link", { name: CONTACT_EMAIL });
     expect(mails.length).toBeGreaterThan(0);
@@ -100,7 +100,9 @@ describe("rota /pais", () => {
         /^mailto:titoviveiros@hotmail\.com\?subject=/,
       );
     expect(
-      screen.getByText(new RegExp(`Responsável pelo jogo: <PENDENTE`)),
+      screen.getByText(
+        /Responsável pelo jogo: Tito Augusto Ramos de Viveiros \(nome público: Tito Viveiros\)/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -190,10 +192,17 @@ describe("regras do texto", () => {
     expect(read("src/routes/pais.tsx")).not.toMatch(/@[a-z0-9-]+\.[a-z]/i);
   });
 
-  it("nome legal: o marcador do #63 ('<PENDENTE'), para a trava de build reprovar", () => {
-    // LEGAL_PENDING_MARK do PR #63 (src/lib/legal.ts e verify-web-bundle.mjs)
-    expect(PARENTS_DEVELOPER_NAME.startsWith("<PENDENTE")).toBe(true);
+  it("nome legal decidido pelo dono, sem marcador pendente, igual ao do #63", async () => {
+    expect(PARENTS_DEVELOPER_NAME).toBe(
+      "Tito Augusto Ramos de Viveiros (nome público: Tito Viveiros)",
+    );
+    // a trava de bundle do #63 reprova qualquer "<PENDENTE"
+    expect(PARENTS_DEVELOPER_NAME).not.toMatch(/[<>]|pendente/i);
     expect(page).toMatch(/\{PARENTS_DEVELOPER_NAME\}/);
+    // árvore integrada: fonte única com DEVELOPER_LEGAL_NAME (src/lib/legal.ts)
+    const legal: Record<string, unknown> = await import("@/lib/legal");
+    if ("DEVELOPER_LEGAL_NAME" in legal)
+      expect(legal.DEVELOPER_LEGAL_NAME).toBe(PARENTS_DEVELOPER_NAME);
   });
 
   it("é página de leitura (zoom livre) e está no rodapé, no Download e no sitemap", () => {
