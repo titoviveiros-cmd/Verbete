@@ -166,6 +166,8 @@ const errCode = (e) => String(e?.message ?? e);
     check("5 códigos livres em 9.000 → as 5 criações dão certo", got.length === 5 && !err, err ?? got.join(","));
     check("os 5 códigos são exatamente os livres", got.every((x) => free.has(x)) && new Set(got).size === got.length);
     let sexta = null;
+    // outra identidade: com a 20261111100000 a mesma teria 5 salas vivas (teto)
+    await db.query(claims(randomUUID()));
     try {
       await q(`SELECT public.create_room_with_host($1, 'Teste', 'x', '#000')`, [`rc_${tag}_s6`]);
     } catch (e) {

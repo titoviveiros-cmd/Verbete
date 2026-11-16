@@ -482,7 +482,10 @@ try {
     // finished_at) — nunca encerram sala; conferido logo abaixo.
     // Resultado compartilhado (09/11/2026): o gatilho só LÊ NEW.status = 'finished'
     // para congelar o retrato da partida — nunca encerra nem muda a sala.
-    const READS_ONLY = ["match_share_on_finish", "retention_purge_rooms", "rooms_track_finished_at"];
+    // Limite de salas (11/11/2026, 20261111100000): room_code_releasable só LÊ
+    // status = 'finished' para decidir se o código de uma sala encerrada pela
+    // limpeza pode ser reusado — nunca encerra sala (conferido logo abaixo).
+    const READS_ONLY = ["match_share_on_finish", "retention_purge_rooms", "room_code_releasable", "rooms_track_finished_at"];
     const names = fns.map((f) => f.fn);
     check(
       "todo caminho para 'finished' está classificado (natural: finish_reveal, advance_scoreboard…; limpeza: cleanup_zombie_rooms; só leitura: retenção)",
