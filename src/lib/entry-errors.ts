@@ -4,8 +4,10 @@ import { SESSION_REQUIRED_MESSAGE } from "@/lib/auth-session";
 // 2026-10-21 o erro cru do banco ("duplicate key value violates unique
 // constraint players_pkey") chegou à tela. Mensagem do banco NUNCA aparece:
 // só textos nossos, por lista de motivos conhecidos.
+// ECA Digital art. 30 (11/11/2026): quem sofre a medida precisa saber onde
+// ver o motivo e contestar — a página /denuncias mostra o aviso e o recurso.
 const BANNED =
-  "Esta conta ou dispositivo foi banido por violar as regras da comunidade.";
+  "Esta conta ou dispositivo foi banido por violar as regras da comunidade. Veja o motivo e conteste na página Denúncias (/denuncias).";
 
 const KNOWN: ReadonlyArray<readonly [RegExp, string]> = [
   [
