@@ -185,6 +185,23 @@ const errCode = (e) => String(e?.message ?? e);
     await db.query(`UPDATE public.rooms SET status = 'finished' WHERE visibility = 'public' AND status = 'lobby'`);
     await fillLeaving(db, 3, `rcfill_${tag}_`);
     await db.query(claims(randomUUID()));
+    // ECA Digital B4 (PR #69): partida rápida FECHADA por padrão para sessão do
+    // app. Com o gatilho instalado, prova primeiro que SEM o parâmetro a entrada
+    // é recusada; só então abre (SET LOCAL, como o dono do banco faria) para
+    // medir o código sem colisão. Sem o gatilho (--esquema-minimo), nada muda.
+    const [{ b4 }] = await q(`SELECT to_regproc('public.public_rooms_open') IS NOT NULL AS b4`);
+    if (b4) {
+      await db.query("SAVEPOINT fechado");
+      let fechado = null;
+      try {
+        await q(`SELECT public.join_public_room($1, 'Teste', 'x', '#000')`, [`rc_${tag}_jx`]);
+      } catch (e) {
+        fechado = errCode(e);
+      }
+      await db.query("ROLLBACK TO SAVEPOINT fechado");
+      check("partida rápida fechada sem verbete.public_rooms_open (ECA B4)", /public_rooms_closed/.test(fechado ?? ""), fechado ?? "entrou?!");
+      await db.query(`SET LOCAL verbete.public_rooms_open = 'on'`);
+    }
     const got = [];
     let err = null;
     for (let i = 0; i < 3 && !err; i++) {
