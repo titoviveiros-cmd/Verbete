@@ -90,3 +90,20 @@ export async function playOnlyWithBots(
   for (let i = 0; i < botsNeeded; i++)
     await addBot(roomId, actorId, currentPlayers + i);
 }
+
+/**
+ * Integração B4 × B5 (12/11/2026): quem DECLAROU menos de 13 e é dono da sala
+ * joga só com bots, então a sala dele fica TRANCADA (ninguém novo entra; bots
+ * entram). Se destrancar, a tela tranca de novo. Autodeclaração não comprova
+ * idade: é só a experiência mais protetiva para a faixa declarada.
+ */
+export function ageLockRequired(input: {
+  isHost: boolean;
+  inRoom: boolean;
+  ageBand: AgeBand;
+  locked: boolean;
+}): boolean {
+  return (
+    input.isHost && input.inRoom && input.ageBand === "under13" && !input.locked
+  );
+}

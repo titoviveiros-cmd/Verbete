@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { TERMS_VERSION, identityKey } from "../src/lib/terms-record";
+import { ageDeclarationStorageEntry } from "../src/lib/age-record";
 
 // Aceite dos Termos contra o backend REAL (Supabase local do CI): aparelhos
 // que NUNCA aceitaram (sem o storageState padrão do config). O host cria a
@@ -7,7 +8,18 @@ import { TERMS_VERSION, identityKey } from "../src/lib/terms-record";
 // SEM aceite (não entra: o host segue sozinho) e, com a caixa, entra.
 const NICK = "Ex: Bia, Zé, Dudu...";
 const ALERT = "Para continuar, aceite os Termos de Uso.";
-const NEVER_ACCEPTED = { cookies: [], origins: [] };
+// Nunca aceitou os Termos, mas já declarou o ano (ECA Digital B5): este spec
+// mede o aceite, não a pergunta da idade.
+const NEVER_ACCEPTED = {
+  cookies: [],
+  origins: [
+    {
+      origin: new URL(process.env.E2E_BASE_URL ?? "http://localhost:5173")
+        .origin,
+      localStorage: [ageDeclarationStorageEntry(1990)],
+    },
+  ],
+};
 
 test("aceite real: host cria e convidado só entra com a caixa marcada", async ({
   browser,
