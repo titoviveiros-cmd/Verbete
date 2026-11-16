@@ -158,7 +158,8 @@ function TermsPage() {
                 ; quem teve conteúdo removido ou a conta suspensa recebe um
                 aviso com o motivo e pode contestar a decisão por lá, nos prazos
                 informados nessa página. Quem foi denunciado nunca sabe quem
-                denunciou.
+                denunciou. Denúncia falsa ou feita só para prejudicar alguém
+                também viola estes Termos e pode levar às mesmas medidas.
               </>
             ) : (
               "Para contestar uma decisão, escreva para o contato abaixo."
