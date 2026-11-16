@@ -1723,6 +1723,10 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string };
         Returns: boolean;
       };
+      room_config_issue: {
+        Args: { p_categories: string[]; p_teams: Json };
+        Returns: string;
+      };
       room_humans_present: { Args: { p_room_id: string }; Returns: boolean };
       room_last_human_activity: {
         Args: { p_room_id: string };
@@ -1778,6 +1782,8 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string; p_state?: string };
         Returns: Json;
       };
+      ugc_symbol_issue: { Args: { p_text: string }; Returns: boolean };
+      ugc_text_issue: { Args: { p_text: string }; Returns: string };
       writing_phase_secs: { Args: { p_base: number }; Returns: number };
       xp_to_level: { Args: { p_xp: number }; Returns: number };
     };
