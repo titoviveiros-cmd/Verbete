@@ -102,6 +102,29 @@ jobs:
           fi
           ./gradlew bundleRelease --no-daemon
 
+      # Auditoria do AAB ANTES do upload do artefato (só dados públicos): o
+      # bundle web embutido (config pública, nenhum segredo, canal pedido,
+      # versão do build.gradle, build ID = commit) e, no resumo do job, o
+      # sha256 do AAB e a impressão digital do certificado de UPLOAD (lida do
+      # próprio AAB; esperado FA:CC…54:65, o mesmo do vc7/vc8).
+      - name: Auditar o AAB (bundle web, canal, versão, certificado)
+        if: ${{ github.event_name == 'workflow_dispatch' && hashFiles('android/key.properties') != '' }}
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          node scripts/verify-native-artifact.mjs "$AAB" \
+            --channel "${{ github.event.inputs.release_channel || 'internal' }}" \
+            --build-id "$GITHUB_SHA"
+          CERT=$(keytool -printcert -jarfile "$AAB" | grep -m1 'SHA256:' | awk '{print $2}')
+          {
+            echo "### AAB ${{ github.event.inputs.release_channel || 'internal' }}"
+            echo "- commit: \`$GITHUB_SHA\`"
+            echo "- sha256: \`$(sha256sum "$AAB" | cut -d' ' -f1)\`"
+            echo "- tamanho: $(stat -c%s "$AAB") B"
+            echo "- certificado de upload (SHA-256): \`${CERT:-NÃO ASSINADO}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$CERT" = "FA:CC:D8:6C:68:B9:66:9D:A7:DB:59:67:5F:8E:17:4F:A1:15:BF:F2:5A:3A:C8:A4:ED:E5:C8:CD:58:39:54:65" ] || {
+            echo "::error::certificado de upload inesperado (${CERT:-ausente}); esperado FA:CC…54:65 (vc7/vc8)"; exit 1; }
+
       - uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'workflow_dispatch' && hashFiles('android/key.properties') != '' }}
         with:
