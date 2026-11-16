@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SQL_FASES_SEM_IA, SQL_PRONTIDAO_SEM_IA } from "./lib/sem-ia-prontidao.mjs";
 
 const db = new pg.Client({
   connectionString: process.env.DB_URL,
@@ -51,8 +52,20 @@ async function asAnon(sql, params) {
 console.log("— Rollback de compatibilidade (web pré-M1 + banco M1)");
 await db.query("BEGIN");
 try {
+  // O client pré-M1 lê rooms sem sessão (e o UPDATE do migrateHost só acha a
+  // linha se ela for legível): com a 20261112110000 (leitura só de
+  // participantes) aplicada, o modo de emergência pré-M1 exige desfazê-la antes.
+  // E antes dela a 20261112120000 (privacidade fase 2: players e afins só de
+  // participantes — o client pré-M1 também lê players sem sessão; as políticas
+  // dela usam my_room_ids(), que a reversão do #74 apaga).
+  await db.query(readFileSync("supabase/rollback/privacidade_fase2.sql", "utf8"));
+  await db.query(readFileSync("supabase/rollback/rooms_leitura_restrita.sql", "utf8"));
   await db.query(readFileSync("supabase/rollback/m1_compat_old_client.sql", "utf8"));
   check("aplica sem erro", true);
+  // Fase 3 (20261113090000): o client pré-M1 chama as RPCs de partida SEM
+  // sessão (e insere jogadores sem user_id) — no modo de emergência pré-M1,
+  // desfazer também a autorização delas (sem objeto em comum com o resto).
+  await db.query(readFileSync("supabase/rollback/autorizacao_fase3.sql", "utf8"));
   let r = await asAnon(
     `INSERT INTO public.players (id, room_id, nickname, avatar, color, is_bot) VALUES ($1, $2, 'Bot', 'b', '#111', true)`,
     [`bot_rb${tag}`, rid],
@@ -76,6 +89,9 @@ try {
 console.log("\n— Rollback funcional completo");
 await db.query("BEGIN");
 try {
+  // Fase 3 antes: o m1_full_rollback reescreve start_shuffling e
+  // advance_writing_to_voting (e o client pré-M1 chama sem sessão).
+  await db.query(readFileSync("supabase/rollback/autorizacao_fase3.sql", "utf8"));
   await db.query(readFileSync("supabase/rollback/m1_full_rollback.sql", "utf8"));
   check("aplica sem erro", true);
   const s = await one(`
@@ -108,6 +124,33 @@ try {
            has_table_privilege('anon', 'public.definitions', 'UPDATE') AS defs_update,
            has_table_privilege('anon', 'public.rounds', 'INSERT') AS rounds_insert`);
   check("furos que nenhum client usava continuam fechados", !Object.values(holes).some(Boolean), JSON.stringify(holes));
+} finally {
+  await db.query("ROLLBACK");
+}
+
+console.log("\n— Rollback da fase 3 (autorização das RPCs de partida, 20261113090000)");
+const FASE3_RPCS = `('choose_word','start_shuffling','advance_writing_to_voting','extend_writing_or_advance',
+  'advance_voting_to_reveal','extend_voting_or_advance','finish_reveal','advance_scoreboard_to_next_round_or_finished')`;
+await db.query("BEGIN");
+try {
+  const before = await one(`
+    SELECT count(*) FILTER (WHERE p.prosrc LIKE '%room_actor_%')::int AS guardadas
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ${FASE3_RPCS}`);
+  check("com a migration: as 8 RPCs conferem quem chama", before.guardadas === 8, JSON.stringify(before));
+  await db.query(readFileSync("supabase/rollback/autorizacao_fase3.sql", "utf8"));
+  const after = await one(`
+    SELECT count(*) FILTER (WHERE p.prosrc LIKE '%room_actor_%')::int AS guardadas,
+           to_regprocedure('public.room_actor_gate(uuid)') IS NULL AS sem_gate,
+           to_regprocedure('public.room_actor_is(uuid,text)') IS NULL AS sem_is,
+           bool_and(has_function_privilege('anon', p.oid, 'EXECUTE')) AS acl_anon
+      FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ${FASE3_RPCS}`);
+  check(
+    "rollback: corpos antigos (sem guarda), funções novas apagadas, ACL intacta",
+    after.guardadas === 0 && after.sem_gate && after.sem_is && after.acl_anon,
+    JSON.stringify(after),
+  );
+  const t = await one(`SELECT public.tick_stalled_rooms() AS r`);
+  check("rollback: o cron do motor segue rodando", !!t.r, JSON.stringify(t.r).slice(0, 80));
 } finally {
   await db.query("ROLLBACK");
 }
@@ -169,6 +212,69 @@ const denied = [
   node(["scripts/set-app-config.mjs", "ops_alert_webhook_url", "http://inseguro"]).status,
 ];
 check("set-app-config recusa chave fora da lista e valor inválido", denied.every((s) => s === 2), JSON.stringify(denied));
+
+// Trava dos 168 (11/11/2026, scripts/lib/sem-ia-prontidao.mjs): a consulta
+// REAL contra o banco migrado e o set-app-config REAL recusando sem estoque.
+const cfgVal = async (k) => (await one(`SELECT value FROM public.app_config WHERE key = $1`, [k]))?.value;
+const restoreCfg = async (k, v) =>
+  v === undefined
+    ? db.query(`DELETE FROM public.app_config WHERE key = $1`, [k])
+    : db.query(
+        `INSERT INTO public.app_config (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [k, v],
+      );
+const aiOrig = await cfgVal("ai_mode");
+const dmOrig = await cfgVal("daily_mode");
+const pront = await one(SQL_PRONTIDAO_SEM_IA);
+check(
+  "trava 168: a consulta de prontidão roda no banco migrado (mesmo critério do painel)",
+  Number.isInteger(pront?.aprovado_jogavel),
+  JSON.stringify(pront),
+);
+if (pront.aprovado_jogavel < 168) {
+  const aiTry = node(["scripts/set-app-config.mjs", "ai_mode", "suspenso"]);
+  check(
+    "trava 168: ai_mode=suspenso RECUSADO sem estoque (exit 3, nada gravado)",
+    aiTry.status === 3 && (await cfgVal("ai_mode")) === aiOrig,
+    `exit=${aiTry.status} ${aiTry.stderr.trim().slice(0, 140)}`,
+  );
+  const dmTry = node(["scripts/set-app-config.mjs", "daily_mode", "escolha"]);
+  check(
+    "trava 168: daily_mode=escolha RECUSADO sem estoque (exit 3, nada gravado)",
+    dmTry.status === 3 && (await cfgVal("daily_mode")) === dmOrig,
+    `exit=${dmTry.status} ${dmTry.stderr.trim().slice(0, 140)}`,
+  );
+  const gate = node(["scripts/check-sem-ia-prontidao.mjs"]);
+  check("trava 168: portão só de leitura sai 1 (não pronto)", gate.status === 1, `exit=${gate.status}`);
+  // R3: a consulta dos portões por fase roda no banco migrado (colunas e
+  // tipos reais) e cada fase bloqueia sem estoque
+  const fases = await one(SQL_FASES_SEM_IA);
+  check(
+    "portões por fase: a consulta roda no banco migrado (só leitura)",
+    Number.isInteger(fases?.aprovado_jogavel) && Number.isInteger(fases?.ia_24h) && Array.isArray(fases?.fns_suspensas_1h),
+    JSON.stringify(fases),
+  );
+  const porFase = ["escolha", "suspender", "textos", "revogar"].map(
+    (f) => node(["scripts/check-sem-ia-prontidao.mjs", "--fase", f]).status,
+  );
+  check("portões por fase: as 4 fases saem 1 sem estoque", porFase.every((s) => s === 1), JSON.stringify(porFase));
+  const emer = node(["scripts/set-app-config.mjs", "ai_mode", "suspenso", "--emergencia"]);
+  const emerVal = await cfgVal("ai_mode");
+  await restoreCfg("ai_mode", aiOrig);
+  check(
+    "trava 168: contenção de emergência (--emergencia) continua possível e avisa",
+    emer.status === 0 && emerVal === "suspenso" && /EMERGÊNCIA/.test(emer.stderr),
+    `exit=${emer.status} valor=${emerVal}`,
+  );
+  const back = node(["scripts/set-app-config.mjs", "ai_mode", "ligado"]);
+  await restoreCfg("ai_mode", aiOrig);
+  check("trava 168: rollback ai_mode=ligado nunca é barrado", back.status === 0, `exit=${back.status}`);
+} else {
+  check("trava 168: banco do CI já tem ≥ 168 aprovados — casos negativos pulados", true);
+}
+await restoreCfg("ai_mode", aiOrig);
+await restoreCfg("daily_mode", dmOrig);
 
 const after = await one(`SELECT to_regprocedure('public.migrate_host(uuid)') IS NOT NULL AS m1`);
 check("banco do CI segue no M1 após os testes (transações desfeitas)", after.m1);

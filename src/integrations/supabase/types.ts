@@ -1637,6 +1637,7 @@ export type Database = {
         Args: { _player_id: string; _user_id: string };
         Returns: boolean;
       };
+      is_room_participant: { Args: { p_room_id: string }; Returns: boolean };
       is_sessionless_api_call: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
@@ -1736,11 +1737,13 @@ export type Database = {
         Returns: number;
       };
       migrate_host: { Args: { p_room_id: string }; Returns: Json };
+      my_room_ids: { Args: Record<PropertyKey, never>; Returns: string[] };
       ops_health_check: { Args: Record<PropertyKey, never>; Returns: Json };
       phase_secs: {
         Args: { p_base: number; p_room_id: string };
         Returns: number;
       };
+      realtime_topic_allowed: { Args: { p_topic: string }; Returns: boolean };
       record_match_result: { Args: { p_room_code: string }; Returns: Json };
       rejoin_room: {
         Args: {
@@ -1770,12 +1773,26 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: Json;
       };
+      room_actor_gate: { Args: { p_room_id: string }; Returns: string };
+      room_actor_is: {
+        Args: { p_player_id: string; p_room_id: string };
+        Returns: boolean;
+      };
       room_humans_present: { Args: { p_room_id: string }; Returns: boolean };
       room_last_human_activity: {
         Args: { p_room_id: string };
         Returns: string;
       };
       room_pause_due: { Args: { p_room_id: string }; Returns: boolean };
+      room_read_allowed: { Args: { p_room_id: string }; Returns: boolean };
+      rooms_vc8_compat_on: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      rooms_vc8_exact_code_read: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
       run_data_retention: {
         Args: { p_anon?: number; p_reports?: number; p_rooms?: number };
         Returns: Json;

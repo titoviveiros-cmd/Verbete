@@ -159,7 +159,15 @@ for (const actor of [anon, E]) {
     leak.error?.code,
   );
   const ok = await actor.c.from("room_words").select("id,word,category").eq("room_id", rid);
-  check(`[${actor.label}] colunas não-reveladoras seguem legíveis`, ok.data?.[0]?.word === "zimbrar", ok.error?.code);
+  // Desde 20261112120000 (privacidade fase 2) só quem participa da sala lê
+  // room_words: Eve (na sala) lê as colunas não-reveladoras; sem sessão, nada.
+  if (actor === anon)
+    check(`[${actor.label}] room_words da sala → 0 linhas (só participante lê)`, !ok.error && (ok.data ?? []).length === 0, ok.error?.code ?? short(ok.data));
+  else check(`[${actor.label}] colunas não-reveladoras seguem legíveis`, ok.data?.[0]?.word === "zimbrar", ok.error?.code);
+}
+{
+  const out = await M.c.from("room_words").select("id,word,category").eq("room_id", rid);
+  check("[Mallory (de fora)] room_words da sala → 0 linhas", !out.error && (out.data ?? []).length === 0, out.error?.code ?? short(out.data));
 }
 
 console.log("\n— RPCs internas fechadas");
@@ -515,6 +523,8 @@ const DENY = [
   "match_shares_forget_user", "match_shares_cleanup",
   // chat da sala removido do app em 20/10; a RPC dormente fechou em 20261111090100
   "send_room_message",
+  // limite de salas (20261111100000): teto e regra de código são internos
+  "room_create_guard", "room_code_releasable",
 ];
 const ALLOW_ANON = [
   "add_bot", "admin_list_words", "admin_ops_recent", "admin_ops_summary", "admin_review_word",

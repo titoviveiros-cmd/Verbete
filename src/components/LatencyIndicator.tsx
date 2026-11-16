@@ -18,24 +18,36 @@ export function LatencyIndicator({ code }: { code: string }) {
     let channel: RealtimeChannel | null = null;
     let ready = false;
 
-    channel = supabase.channel(`latency-${code}`, {
-      config: { broadcast: { ack: true, self: false } },
-    });
-
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        ready = true;
-        ping();
-      } else if (
-        status === "CHANNEL_ERROR" ||
-        status === "TIMED_OUT" ||
-        status === "CLOSED"
-      ) {
-        if (!cancelled) {
-          setOk(false);
-          setMs(null);
+    // Privacidade fase 2 (20261112120000): o tópico antigo `latency-<código>`
+    // era público e compartilhado — quem assinasse `latency-XXXX` ouvia os
+    // pings dos aparelhos daquela sala (oráculo de código ativo). Agora cada
+    // sessão mede no PRÓPRIO canal privado `latency:<id da sessão>` (o ack
+    // vem do servidor; ninguém mais precisa estar no canal).
+    void supabase.auth.getSession().then(({ data }) => {
+      const uid = data.session?.user?.id;
+      if (cancelled || !uid) return;
+      channel = supabase.channel(`latency:${uid}`, {
+        config: { private: true, broadcast: { ack: true, self: false } },
+      });
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          ready = true;
+          ping();
+        } else if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
+          // Recusa ANTES do 1º SUBSCRIBED = servidor sem a autorização do
+          // canal (banco sem a 20261112120000): esconde o indicador em vez de
+          // acusar "conexão instável" para todo mundo.
+          if (!cancelled && !ready) return;
+          if (!cancelled) {
+            setOk(false);
+            setMs(null);
+          }
         }
-      }
+      });
     });
 
     const ping = async () => {

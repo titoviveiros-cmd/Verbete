@@ -40,6 +40,12 @@ describe("erros de entrada nunca mostram o banco", () => {
     expect(friendlyEntryError(new TypeError("Failed to fetch"), "join")).toBe(
       "Sem conexão. Confira a internet e tente de novo.",
     );
+    expect(
+      friendlyEntryError(
+        { message: "room_rate_limited", details: "hour" },
+        "create",
+      ),
+    ).toMatch(/muitas salas em pouco tempo/);
     expect(friendlyEntryError("qualquer coisa", "join")).toBe(
       "Não deu para entrar na sala agora. Tente de novo.",
     );
