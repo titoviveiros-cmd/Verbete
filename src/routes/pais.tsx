@@ -167,8 +167,8 @@ function ParentsPage() {
             Não coletamos localização, contatos, fotos, câmera ou microfone. Não
             há anúncios nem ferramentas de publicidade ou de análise de
             terceiros. Sessões sem conta são apagadas depois de 30 dias sem uso.
-            Os detalhes (inclusive o uso de inteligência artificial e por quanto
-            tempo guardamos cada dado) estão na{" "}
+            Os detalhes (inclusive por quanto tempo guardamos cada dado) estão
+            na{" "}
             <Link to="/privacy" className="underline">
               Política de Privacidade
             </Link>
@@ -199,7 +199,12 @@ function ParentsPage() {
               Termos de Uso
             </Link>
             .
-            <ReportsPageLink />
+            <ReportsPageLink /> Como moderamos, as medidas que aplicamos e os
+            números de denúncias estão em{" "}
+            <Link to="/transparencia" className="underline">
+              Transparência
+            </Link>
+            .
           </p>
         </section>
 
