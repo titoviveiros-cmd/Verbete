@@ -15,6 +15,7 @@ import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as DenunciasRouteImport } from './routes/denuncias'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PaisRouteImport } from './routes/pais'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RankingRouteImport } from './routes/ranking'
@@ -56,6 +57,11 @@ const DownloadRoute = DownloadRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaisRoute = PaisRouteImport.update({
+  id: '/pais',
+  path: '/pais',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -126,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
@@ -250,6 +262,7 @@ export interface RootRouteChildren {
   DenunciasRoute: typeof DenunciasRoute
   DownloadRoute: typeof DownloadRoute
   LoginRoute: typeof LoginRoute
+  PaisRoute: typeof PaisRoute
   PrivacyRoute: typeof PrivacyRoute
   ProfileRoute: typeof ProfileRoute
   RankingRoute: typeof RankingRoute
@@ -306,6 +319,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pais': {
+      id: '/pais'
+      path: '/pais'
+      fullPath: '/pais'
+      preLoaderRoute: typeof PaisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -402,6 +422,7 @@ const rootRouteChildren: RootRouteChildren = {
   DenunciasRoute: DenunciasRoute,
   DownloadRoute: DownloadRoute,
   LoginRoute: LoginRoute,
+  PaisRoute: PaisRoute,
   PrivacyRoute: PrivacyRoute,
   ProfileRoute: ProfileRoute,
   RankingRoute: RankingRoute,

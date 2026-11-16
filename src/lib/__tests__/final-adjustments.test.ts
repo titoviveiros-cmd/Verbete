@@ -130,7 +130,7 @@ describe("escala fixa de jogo (sem zoom)", () => {
     ])
       expect(READING_VIEWPORT_CONTENT).toContain(part);
     const routes = join(__dirname, "../../routes");
-    const reading = ["privacy", "terms", "support", "delete-account"];
+    const reading = ["privacy", "terms", "support", "delete-account", "pais"];
     for (const f of readdirSync(routes).filter((x) => x.endsWith(".tsx"))) {
       const src = readFileSync(join(routes, f), "utf8");
       const isReading = reading.includes(f.replace(/\.tsx$/, ""));
@@ -139,7 +139,13 @@ describe("escala fixa de jogo (sem zoom)", () => {
     expect([...READING_PATHS].sort()).toEqual(
       reading.map((r) => "/" + r).sort(),
     );
-    for (const p of ["/privacy", "/terms/", "/support", "/delete-account"])
+    for (const p of [
+      "/privacy",
+      "/terms/",
+      "/support",
+      "/delete-account",
+      "/pais",
+    ])
       expect(isReadingPath(p), p).toBe(true);
     for (const p of [
       "/",

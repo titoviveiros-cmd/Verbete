@@ -33,6 +33,7 @@ export const READING_PATHS = [
   "/terms",
   "/support",
   "/delete-account",
+  "/pais", // Para pais e responsáveis (B7 ECA Digital, 11/11/2026)
 ] as const;
 
 export function isReadingPath(pathname: string): boolean {
