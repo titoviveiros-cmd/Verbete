@@ -184,10 +184,11 @@ const desafioAntes = (await db.q(`SELECT * FROM public.daily_challenges WHERE ch
 const usuarios = [];
 const palavras = [];
 
-const novoUsuario = async () => {
+// anonimo = convidado (sessão anônima do Supabase): mesmo caminho da conta
+const novoUsuario = async (anonimo = false) => {
   const id = randomUUID();
   usuarios.push(id);
-  await db.q(`INSERT INTO auth.users (id, is_anonymous) VALUES ($1, false)`, [id]);
+  await db.q(`INSERT INTO auth.users (id, is_anonymous) VALUES ($1, $2)`, [id, anonimo]);
   return id;
 };
 /**
@@ -429,6 +430,22 @@ try {
     eq(r.result.truth, s.options[s.correct_pos]);
     const st = await stats(u);
     eq([st.current_streak, st.best_streak, st.total_score], [5, 5, 100]);
+  });
+
+  await t("R3 perfis (13+ sem IA): convidado (sessão anônima) e conta jogam o modo escolha igual — pontua, 1 por hora", async () => {
+    for (const anonimo of [true, false]) {
+      const perfil = anonimo ? "convidado" : "conta";
+      const u = await novoUsuario(anonimo);
+      await start(u);
+      const s = await sessao(u);
+      eq(s.options.length, 4, perfil);
+      const r = await finish(u, s.correct_pos);
+      eq([r.status, r.result.is_correct, r.result.score > 0], ["recorded", true, true], perfil);
+      eq((await finish(u, s.correct_pos)).status, "already_played", perfil);
+      eq(await tentativas(u), 1, perfil);
+      const [linha] = await db.q(`SELECT mode FROM public.daily_attempts WHERE user_id = $1`, [u]);
+      eq(linha.mode, "escolha", perfil);
+    }
   });
 
   await t("7. 2º envio e envio sem início = exatamente 1 / 0 linha", async () => {
