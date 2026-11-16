@@ -1408,6 +1408,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -1673,6 +1674,7 @@ export type Database = {
           finished_at: string | null;
           host_id: string;
           id: string;
+          locked: boolean;
           mode: string;
           nivel: string;
           paused_at: string | null;
@@ -1756,6 +1758,7 @@ export type Database = {
         Args: { p_base: number; p_room_id: string };
         Returns: number;
       };
+      public_rooms_open: { Args: Record<PropertyKey, never>; Returns: boolean };
       realtime_topic_allowed: { Args: { p_topic: string }; Returns: boolean };
       record_match_result: { Args: { p_room_code: string }; Returns: Json };
       rejoin_room: {
