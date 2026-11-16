@@ -358,8 +358,9 @@ describe("trava do nome legal e da data (build de produção)", () => {
       "Tito Augusto Ramos de Viveiros (nome público: Tito Viveiros)",
     );
     expect(isPlausibleLegalName(DEVELOPER_LEGAL_NAME)).toBe(true);
-    // a data dos Termos sem IA continua pendente até o PR de ativação
-    expect(pendingNoAiLegal("desligada")).toEqual(["NO_AI_TERMS_VERSION"]);
+    // o nome não é mais pendência (a data só é preenchida no PR de ativação;
+    // este teste vale antes e depois dela)
+    expect(pendingNoAiLegal("desligada")).not.toContain("DEVELOPER_LEGAL_NAME");
   });
 
   it.each(["Fulano de Tal", "Ana Lú", "Tito Viveiros ME", "J. P. Souza"])(
