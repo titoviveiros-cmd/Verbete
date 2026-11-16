@@ -797,6 +797,41 @@ export type Database = {
         };
         Relationships: [];
       };
+      room_code_failure_salt: {
+        Row: {
+          id: number;
+          salt: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          id: number;
+          salt: string;
+        };
+        Update: {
+          id?: number;
+          salt?: string;
+        };
+        Relationships: [];
+      };
+      room_code_failures: {
+        Row: {
+          created_at: string;
+          id: number;
+          uid_hash: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: never;
+          uid_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: never;
+          uid_hash?: string;
+        };
+        Relationships: [];
+      };
       room_messages: {
         Row: {
           created_at: string;
@@ -1797,6 +1832,24 @@ export type Database = {
         Args: { p_player_id: string; p_room_id: string };
         Returns: boolean;
       };
+      room_code_failures_cleanup: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
+      room_code_limit: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          max_failures: number;
+          retention_secs: number;
+          window_secs: number;
+        }[];
+      };
+      room_code_record_failure: {
+        Args: { p_hash: string };
+        Returns: undefined;
+      };
+      room_code_retry_after: { Args: { p_hash: string }; Returns: number };
+      room_code_uid_hash: { Args: { p_uid: string }; Returns: string };
       room_config_issue: {
         Args: { p_categories: string[]; p_teams: Json };
         Returns: string;
