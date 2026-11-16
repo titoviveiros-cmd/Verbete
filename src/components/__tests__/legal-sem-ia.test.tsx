@@ -351,6 +351,17 @@ describe("trava do nome legal e da data (build de produção)", () => {
     ).toEqual(["DEVELOPER_LEGAL_NAME"]);
   });
 
+  it("nome legal decidido pelo dono (16/11/2026) está gravado e é plausível", async () => {
+    const { DEVELOPER_LEGAL_NAME, isPlausibleLegalName, pendingNoAiLegal } =
+      await import("@/lib/legal");
+    expect(DEVELOPER_LEGAL_NAME).toBe(
+      "Tito Augusto Ramos de Viveiros (nome público: Tito Viveiros)",
+    );
+    expect(isPlausibleLegalName(DEVELOPER_LEGAL_NAME)).toBe(true);
+    // a data dos Termos sem IA continua pendente até o PR de ativação
+    expect(pendingNoAiLegal("desligada")).toEqual(["NO_AI_TERMS_VERSION"]);
+  });
+
   it.each(["Fulano de Tal", "Ana Lú", "Tito Viveiros ME", "J. P. Souza"])(
     "nome plausível passa: %j",
     async (name) => {

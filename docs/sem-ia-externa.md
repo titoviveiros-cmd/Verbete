@@ -19,11 +19,12 @@ ambiente nem de segredo.
 Com `"ligada"`, o build de produção elimina o ramo sem IA (o bundle nem leva o
 nome pendente; `verify-web-bundle` confere).
 
-## 2. Ativação = PR de 3 linhas (só na ordem da §4)
+## 2. Ativação = PR de 2 linhas (o nome legal já está no código) (só na ordem da §4)
 
 1. `external-ai.ts`: `EXTERNAL_AI_MODE = "desligada"`.
-2. `src/lib/legal.ts`: `DEVELOPER_LEGAL_NAME` = nome legal **igual ao da conta
-   do Play Console** (dono).
+2. ~~`src/lib/legal.ts`: `DEVELOPER_LEGAL_NAME`~~ — **já gravado (16/11/2026,
+   decisão do dono):** "Tito Augusto Ramos de Viveiros (nome público: Tito
+   Viveiros)" = titular da conta pessoal do Play Console + nome público.
 3. `src/lib/legal.ts`: `NO_AI_TERMS_VERSION` = data da publicação
    (`AAAA-MM-DD`).
 

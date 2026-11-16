@@ -87,13 +87,16 @@ export {
 export const LEGAL_PENDING_MARK = "<PENDENTE";
 
 /**
- * Nome legal do desenvolvedor (controlador dos dados), IGUAL ao da conta do
- * Play Console. PENDENTE: confirmar com o dono. Só aparece nas páginas do
+ * Nome legal do desenvolvedor (controlador dos dados). Decisão do dono
+ * (16/11/2026): titular da conta do Play Console (conta pessoal) = "Tito
+ * Augusto Ramos de Viveiros"; nome público de desenvolvedor = "Tito
+ * Viveiros". Só aparece nas páginas do
  * modo sem IA; com o modo "desligada" e este valor pendente, o build de
  * produção FALHA (build/legal-guard.ts, verify-web-bundle e
  * legal-sem-ia.test.ts).
  */
-export const DEVELOPER_LEGAL_NAME = "<PENDENTE: confirmar com o dono>";
+export const DEVELOPER_LEGAL_NAME =
+  "Tito Augusto Ramos de Viveiros (nome público: Tito Viveiros)";
 
 /**
  * Versão (= data "Última atualização", AAAA-MM-DD) dos Termos sem IA. É
