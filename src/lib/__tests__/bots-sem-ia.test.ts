@@ -63,7 +63,12 @@ const WORDS: W[] = (() => {
 const gen = (w: W, seed: string, count = 3, avoid: string[] = []) =>
   generateOfflineDefinitions({ ...w, count, seed, avoid });
 
-/** Todos os textos do banco (fragmentos), com {o} resolvido nos 2 gêneros. */
+/**
+ * Todos os textos do banco que podem virar definição servida (fragmentos), com
+ * {o} resolvido nos 2 gêneros. O mini-tesauro de proteção (SEMANTIC_FIELDS)
+ * fica de fora: são RADICAIS que só reconhecem o campo do sentido verdadeiro
+ * para BARRAR o blefe — nunca entram em texto (teste próprio abaixo).
+ */
 function bankStrings(): string[] {
   const out: string[] = [];
   const walk = (v: unknown) => {
@@ -71,7 +76,9 @@ function bankStrings(): string[] {
     else if (Array.isArray(v)) v.forEach(walk);
     else if (v && typeof v === "object") Object.values(v).forEach(walk);
   };
-  walk(BANK);
+  const { SEMANTIC_FIELDS: _fields, ...content } = BANK;
+  void _fields;
+  walk(content);
   return out.flatMap((s) => [
     s.replace(/\{o\}/g, "o"),
     s.replace(/\{o\}/g, "a"),
@@ -172,6 +179,29 @@ describe("bots sem IA: conteúdo", () => {
           false,
         );
     }
+  });
+
+  // Integração 16/11 (#62 × #66): a lista de palavrões do #66 ganhou "vadia",
+  // que é também o radical de proteção de "vadiar/vadiagem" no campo
+  // "preguiça". Radical de proteção nunca vira texto servido (as saídas do
+  // gerador são checadas com definitionIssue nos testes de geração); aqui só
+  // se exige que QUALQUER radical que o filtro de conteúdo pegue esteja nesta
+  // lista fechada e não apareça em nenhum texto servível do banco.
+  it("mini-tesauro de proteção: radicais que o filtro pega = lista fechada, nunca em texto", () => {
+    const PROTECAO_SO_RADICAL = new Set(["vadia"]);
+    const content = new Set(bankStrings().map((s) => normTxt(s)));
+    for (const stems of Object.values(BANK.SEMANTIC_FIELDS) as string[][])
+      for (const stem of stems) {
+        if (definitionIssue(stem) === null) continue;
+        expect(
+          PROTECAO_SO_RADICAL.has(stem),
+          `radical novo pego pelo filtro: ${stem}`,
+        ).toBe(true);
+        for (const t of content)
+          expect(` ${t}`.includes(` ${normTxt(stem)}`), `${t} ~ ${stem}`).toBe(
+            false,
+          );
+      }
   });
 
   it("acervo de teste carregado (seeds v2+v3)", () => {
