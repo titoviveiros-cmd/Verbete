@@ -11,14 +11,10 @@ export const PARENTS_PAGE_PATH = "/pais";
 export const REPORTS_PAGE_PATH = "/denuncias";
 
 /**
- * Nome legal do desenvolvedor (responsável pelo jogo e pelos dados), IGUAL ao
- * da conta do Play Console. PENDENTE: confirmar com o dono.
- *
- * O marcador começa com "<PENDENTE" de propósito: é o LEGAL_PENDING_MARK do
- * PR #63, cuja verificação do bundle (scripts/verify-web-bundle.mjs) REPROVA
- * qualquer build de produção que leve esse texto. Ao integrar com o #63,
- * trocar esta constante por DEVELOPER_LEGAL_NAME de src/lib/legal.ts (fonte
- * única) — nunca apagar só o "<".
+ * Nome legal do desenvolvedor (responsável pelo jogo e pelos dados). Decisão
+ * do dono (16/11/2026): titular da conta pessoal do Play Console + nome
+ * público. MESMO texto de DEVELOPER_LEGAL_NAME (src/lib/legal.ts, PR #63): um
+ * teste reprova se, na árvore integrada, os dois forem diferentes.
  */
 export const PARENTS_DEVELOPER_NAME =
-  "<PENDENTE: nome legal do desenvolvedor, igual ao da conta do Play Console>";
+  "Tito Augusto Ramos de Viveiros (nome público: Tito Viveiros)";

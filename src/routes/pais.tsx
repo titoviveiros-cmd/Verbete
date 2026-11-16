@@ -14,8 +14,8 @@ import { READING_VIEWPORT } from "@/lib/viewport";
 //  * "Não há chat" vale para a interface; a RPC antiga ainda aceita mensagem
 //    pela API até o PR #60 (B3) entrar, e a reação aceita texto curto pela
 //    API até o PR #66 (B1) — publicar SÓ depois do #60 e do #66;
-//  * o nome legal do desenvolvedor é PENDENTE (lib/parents-page.ts) e a trava
-//    de build do PR #63 reprova o marcador no bundle de produção;
+//  * o nome legal do desenvolvedor foi decidido pelo dono em 16/11/2026
+//    (lib/parents-page.ts; igual a DEVELOPER_LEGAL_NAME do PR #63);
 //  * a página /denuncias é do PR #65: o link só aparece se a rota existir no
 //    build; sem ela, fica o texto com o caminho dentro do jogo.
 //  * 12/11 (L3): texto ajustado ao que os PRs #66 (filtro no servidor), #69
