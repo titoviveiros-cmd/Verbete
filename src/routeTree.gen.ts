@@ -21,6 +21,7 @@ import { Route as RankingRouteImport } from './routes/ranking'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TransparenciaRouteImport } from './routes/transparencia'
 import { Route as AdminDailyChoicesRouteImport } from './routes/admin.daily-choices'
 import { Route as AdminOpsRouteImport } from './routes/admin.ops'
 import { Route as AdminReportsRouteImport } from './routes/admin.reports'
@@ -88,6 +89,11 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TransparenciaRoute = TransparenciaRouteImport.update({
+  id: '/transparencia',
+  path: '/transparencia',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDailyChoicesRoute = AdminDailyChoicesRouteImport.update({
   id: '/admin/daily-choices',
   path: '/admin/daily-choices',
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transparencia': typeof TransparenciaRoute
   '/admin/daily-choices': typeof AdminDailyChoicesRoute
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transparencia': typeof TransparenciaRoute
   '/admin/daily-choices': typeof AdminDailyChoicesRoute
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transparencia': typeof TransparenciaRoute
   '/admin/daily-choices': typeof AdminDailyChoicesRoute
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/transparencia'
     | '/admin/daily-choices'
     | '/admin/ops'
     | '/admin/reports'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/transparencia'
     | '/admin/daily-choices'
     | '/admin/ops'
     | '/admin/reports'
@@ -235,6 +246,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/transparencia'
     | '/admin/daily-choices'
     | '/admin/ops'
     | '/admin/reports'
@@ -256,6 +268,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  TransparenciaRoute: typeof TransparenciaRoute
   AdminDailyChoicesRoute: typeof AdminDailyChoicesRoute
   AdminOpsRoute: typeof AdminOpsRoute
   AdminReportsRoute: typeof AdminReportsRoute
@@ -350,6 +363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/transparencia': {
+      id: '/transparencia'
+      path: '/transparencia'
+      fullPath: '/transparencia'
+      preLoaderRoute: typeof TransparenciaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/daily-choices': {
       id: '/admin/daily-choices'
       path: '/admin/daily-choices'
@@ -408,6 +428,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  TransparenciaRoute: TransparenciaRoute,
   AdminDailyChoicesRoute: AdminDailyChoicesRoute,
   AdminOpsRoute: AdminOpsRoute,
   AdminReportsRoute: AdminReportsRoute,
