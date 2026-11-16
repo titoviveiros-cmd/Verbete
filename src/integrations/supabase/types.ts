@@ -140,7 +140,15 @@ export type Database = {
           report_id?: string | null;
           user_id?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "banned_players_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: false;
+            referencedRelation: "reports";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       daily_attempts: {
         Row: {
@@ -501,7 +509,15 @@ export type Database = {
           text?: string;
           user_id?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "moderation_appeals_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: true;
+            referencedRelation: "reports";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       ops_alerts: {
         Row: {
