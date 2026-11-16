@@ -9,6 +9,12 @@ import { Onboarding } from "@/components/Onboarding";
 // texto ao jogador pode PROMETER a avaliação de proximidade como certa: o
 // bônus 🧠 só é descrito como condicional ("quando ... estiver ativa").
 
+// Textos com a IA externa LIGADA (o modo sem IA: legal-sem-ia.test.tsx).
+vi.mock("../../../supabase/functions/_shared/external-ai.ts", () => ({
+  EXTERNAL_AI_MODE: "ligada",
+  isExternalAiOff: (m?: string) => m === "desligada",
+}));
+
 vi.mock("@/lib/player-id", () => ({
   getStored: () => "",
   setStored: vi.fn(),

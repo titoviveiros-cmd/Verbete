@@ -19,6 +19,10 @@
 //     (logic.ts/gatherCandidates); se ainda faltar, saem menos definições e o
 //     client cai nas reservas vetadas → templates locais → bot não envia.
 // A v1 (bot-definitions) segue em produção; ganhou só o filtro de forma.
+//  6. SEM IA EXTERNA (10/11/2026): com BOTS_OFFLINE_GENERATOR ligado no
+//     ambiente, as reservas deixam de ser as 62 frases fixas e vêm do
+//     gerador local (bot-definitions/offline.ts: moldes por classe e
+//     categoria, sem rede). Desligado (padrão) = exatamente como antes.
 import {
   createClient,
   type SupabaseClient,
@@ -56,6 +60,15 @@ import {
 import { aiConfigError, resolveAiProvider } from "../_shared/ai-provider.ts";
 import { buildMessages, choosePersonas } from "./prompts.ts";
 import { pickReserves } from "./reserves.ts";
+import {
+  claimOfflineBatch,
+  generateOfflineDefinitions,
+  laneSlotFor,
+  OFFLINE_RESERVE_EXTRA,
+  offlineGeneratorEnabled,
+  offlineServeBatch,
+  keepClaimed,
+} from "../bot-definitions/offline.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,6 +86,8 @@ const GATE_TIMEOUT_MS = 3500;
 const TOTAL_BUDGET_MS = 9500;
 /** Pede algumas candidatas a mais: filtros e juiz podem descartar. */
 const EXTRA_CANDIDATES = 3;
+/** Reservas do gerador sem IA por pedido (= as 12 fixas de sempre). */
+const RESERVE_COUNT = 12;
 
 // Contenção da IA (app_config.ai_mode; docs/contencao-ia.md): cache por isolate.
 const readAiMode = createAiModeReader({
@@ -80,6 +95,8 @@ const readAiMode = createAiModeReader({
   forced: () => forcedSuspensionFrom((k) => Deno.env.get(k)),
 });
 const logSuspended = createSuspendedLogger();
+// Gerador sem IA externa: escolha EXPLÍCITA por ambiente (padrão desligado).
+const offlineGen = offlineGeneratorEnabled((k) => Deno.env.get(k));
 
 async function logEvent(admin: SupabaseClient, ev: OpsEvent) {
   try {
@@ -115,7 +132,7 @@ Deno.serve(async (req) => {
     const askRoomId = isUuid(body?.room_id) ? body.room_id : "";
     // Reservas SEMPRE do servidor: textos do client nunca passam pelo juiz
     // (senão a edge viraria um oráculo da verdade durante a escrita).
-    const fallbacksIn = pickReserves(12);
+    let fallbacksIn = pickReserves(12);
 
     let roomQuery = admin
       .from("rooms")
@@ -156,9 +173,16 @@ Deno.serve(async (req) => {
     let word = "";
     let meaning = "";
     let category = "";
+    let classe = "";
+    let sinonimos: string[] = [];
     const { data: w1 } = await admin
       .from("words")
-      .select("word, meaning, category")
+      // classe/sinônimos só servem ao gerador sem IA (desligado = consulta igual)
+      .select(
+        offlineGen
+          ? "word, meaning, category, classe, sinonimos"
+          : "word, meaning, category",
+      )
       .eq("id", wordId)
       .maybeSingle();
     const w =
@@ -179,6 +203,11 @@ Deno.serve(async (req) => {
       category = String((w as { category?: unknown }).category ?? "")
         .slice(0, 40)
         .toLowerCase();
+      classe = String((w as { classe?: unknown }).classe ?? "").slice(0, 40);
+      const sin = (w as { sinonimos?: unknown }).sinonimos;
+      sinonimos = Array.isArray(sin)
+        ? sin.filter((x): x is string => typeof x === "string").slice(0, 20)
+        : [];
     }
     if (!word)
       return json(
@@ -227,19 +256,102 @@ Deno.serve(async (req) => {
     const servedNorms: string[] = (served ?? []).map(
       (r: { norm_text: string }) => r.norm_text,
     );
+    // Sem IA externa: as reservas vêm do gerador local, já longe da verdade e
+    // do que a partida/rodada usou; se faltar, as fixas completam a fila.
+    if (offlineGen) {
+      fallbacksIn = [
+        ...generateOfflineDefinitions({
+          word,
+          meaning,
+          category,
+          classe,
+          sinonimos,
+          // partida = evitada (relaxável se o banco acabar); rodada = sempre
+          avoid: previous,
+          avoidRound: servedNorms,
+          // G3: faixa por tipo de chamada (count 1 = 🤖; sala de 1 bot cai junto)
+          lane: count === 1 ? "robo" : "bots",
+          // G3 pior caso (11/11 noite): sub-faixa do jogador no 🤖 (hash do
+          // token da sessão; o valor não é gravado nem registrado)
+          laneSlot:
+            count === 1
+              ? laneSlotFor(bearerToken(req.headers.get("authorization")))
+              : undefined,
+          // só o necessário (+3 de folga para os filtros): a edge devolve
+          // count + OFFLINE_RESERVE_EXTRA; as fixas completam a fila de 12
+          count: Math.min(RESERVE_COUNT, count + OFFLINE_RESERVE_EXTRA + 3),
+          seed: `${roomId}:${round}:${crypto.randomUUID()}`,
+        }),
+        ...fallbacksIn,
+      ].slice(0, RESERVE_COUNT);
+    }
 
     if (suspended) {
       await logSuspended("bot-definitions-v2", suspendedEventIO(admin));
       // mesmo formato da resposta normal (o APK instalado lê definitions e
       // fallbacks): sem candidata da IA, o cliente usa as reservas vetadas
+      const vetted = vetReserves(fallbacksIn, {
+        word,
+        meaning,
+        previous,
+        servedNorms,
+      });
+      // Gerador sem IA (G3, 11/11): devolve só count + OFFLINE_RESERVE_EXTRA
+      // reservas e grava TODAS na memória da rodada. Antes gravava só as
+      // `count` primeiras e devolvia 12 — o 🤖 (count 1) sorteia entre as
+      // `fallbacks` e em 91% das vezes escolhia um texto fora da memória
+      // (repetia cédula de bot/💡 da mesma rodada). Memória RELIDA antes de
+      // gravar (pedidos simultâneos de bots, 🤖 e 💡). Mesmos campos.
+      if (offlineGen) {
+        // G3 opção C (12/11): reserva ATÔMICA (função offline_claim_defs: o
+        // banco serializa sala+rodada e recusa o igual/parecido com o que a
+        // rodada já gravou, inclusive por chamadas simultâneas; a perdedora
+        // pega a próxima candidata). null = função ausente ou erro → o
+        // caminho de antes (releitura + upsert + keepClaimed), logo abaixo.
+        let batch = await claimOfflineBatch(
+          admin,
+          vetted,
+          count + OFFLINE_RESERVE_EXTRA,
+          roomId,
+          round,
+        );
+        if (batch === null) {
+          const { data: servedNow } = await admin
+            .from("ai_served_defs")
+            .select("norm_text")
+            .eq("room_id", roomId)
+            .eq("round", round);
+          batch = offlineServeBatch(
+            vetted,
+            count + OFFLINE_RESERVE_EXTRA,
+            [
+              ...servedNorms,
+              ...(servedNow ?? []).map((r: { norm_text: string }) => r.norm_text),
+            ],
+          );
+          if (batch.length > 0) {
+            // ON CONFLICT DO NOTHING + select = só as linhas que ESTA chamada
+            // gravou: texto igual servido por uma chamada simultânea sai daqui
+            const { data: claimed } = await admin
+              .from("ai_served_defs")
+              .upsert(servedRows(batch, roomId, round), {
+                onConflict: "room_id,round,norm_text",
+                ignoreDuplicates: true,
+              })
+              .select("norm_text");
+            batch = keepClaimed(batch, claimed);
+          }
+        }
+        return json({
+          definitions: [],
+          fallbacks: batch,
+          personas: choosePersonas(count, body?.personas),
+          gate: "skipped",
+        });
+      }
       return json({
         definitions: [],
-        fallbacks: vetReserves(fallbacksIn, {
-          word,
-          meaning,
-          previous,
-          servedNorms,
-        }),
+        fallbacks: vetted,
         personas: choosePersonas(count, body?.personas),
         gate: "skipped",
       });

@@ -51,7 +51,11 @@ describe("aceite dos Termos — versão e persistência", () => {
     expect(m, "data dos Termos não encontrada").not.toBeNull();
     const [, d, mes, y] = m!;
     const mm = String(MESES.indexOf(mes!.toLowerCase()) + 1).padStart(2, "0");
-    expect(TERMS_VERSION).toBe(`${y}-${mm}-${d!.padStart(2, "0")}`);
+    // A data literal é a dos Termos COM IA. No modo sem IA externa a versão é
+    // NO_AI_TERMS_VERSION, exibida pela mesma página (legal-sem-ia.test.tsx).
+    const { AI_TERMS_VERSION, NO_AI_LEGAL } = await import("../legal");
+    expect(AI_TERMS_VERSION).toBe(`${y}-${mm}-${d!.padStart(2, "0")}`);
+    expect(TERMS_VERSION).toBe(NO_AI_LEGAL?.termsVersion ?? AI_TERMS_VERSION);
   });
 
   it("aceitar grava versão e data DA IDENTIDADE — só um resumo do UID, sem token nem UID", async () => {
@@ -338,7 +342,7 @@ describe("aceite dos Termos — nenhum caminho cria conteúdo sem ele", () => {
     ).toHaveLength(3);
     // entrar na sala confere de novo colado na gravação (sala e banimento demoram)
     expect(lib).toMatch(
-      /await assertTermsAccepted\(\);\n\s*let effectiveId = playerId;\n\s*let \{ error: rpcErr \} = await callRejoin\(playerId\);/,
+      /await assertTermsAccepted\(\);\n\s*let effectiveId = playerId;\n\s*let \{ data: rpcData, error: rpcErr \} = await callRejoin\(playerId\);/,
     );
     // a volta automática do host espera a identidade e o aceite dela
     const sala = readFileSync(

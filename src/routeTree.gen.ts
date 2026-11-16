@@ -12,14 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DailyRouteImport } from './routes/daily'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
+import { Route as DenunciasRouteImport } from './routes/denuncias'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PaisRouteImport } from './routes/pais'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as RankingRouteImport } from './routes/ranking'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TransparenciaRouteImport } from './routes/transparencia'
 import { Route as AdminDailyChoicesRouteImport } from './routes/admin.daily-choices'
 import { Route as AdminOpsRouteImport } from './routes/admin.ops'
 import { Route as AdminReportsRouteImport } from './routes/admin.reports'
@@ -42,6 +45,11 @@ const DeleteAccountRoute = DeleteAccountRouteImport.update({
   path: '/delete-account',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DenunciasRoute = DenunciasRouteImport.update({
+  id: '/denuncias',
+  path: '/denuncias',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DownloadRoute = DownloadRouteImport.update({
   id: '/download',
   path: '/download',
@@ -50,6 +58,11 @@ const DownloadRoute = DownloadRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaisRoute = PaisRouteImport.update({
+  id: '/pais',
+  path: '/pais',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -80,6 +93,11 @@ const SupportRoute = SupportRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransparenciaRoute = TransparenciaRouteImport.update({
+  id: '/transparencia',
+  path: '/transparencia',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminDailyChoicesRoute = AdminDailyChoicesRouteImport.update({
@@ -117,14 +135,17 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/daily': typeof DailyRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transparencia': typeof TransparenciaRoute
   '/admin/daily-choices': typeof AdminDailyChoicesRoute
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -136,14 +157,17 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/daily': typeof DailyRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transparencia': typeof TransparenciaRoute
   '/admin/daily-choices': typeof AdminDailyChoicesRoute
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -156,14 +180,17 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/daily': typeof DailyRoute
   '/delete-account': typeof DeleteAccountRoute
+  '/denuncias': typeof DenunciasRoute
   '/download': typeof DownloadRoute
   '/login': typeof LoginRoute
+  '/pais': typeof PaisRoute
   '/privacy': typeof PrivacyRoute
   '/profile': typeof ProfileRoute
   '/ranking': typeof RankingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/transparencia': typeof TransparenciaRoute
   '/admin/daily-choices': typeof AdminDailyChoicesRoute
   '/admin/ops': typeof AdminOpsRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -177,14 +204,17 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/delete-account'
+    | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/transparencia'
     | '/admin/daily-choices'
     | '/admin/ops'
     | '/admin/reports'
@@ -196,14 +226,17 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/delete-account'
+    | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/transparencia'
     | '/admin/daily-choices'
     | '/admin/ops'
     | '/admin/reports'
@@ -215,14 +248,17 @@ export interface FileRouteTypes {
     | '/'
     | '/daily'
     | '/delete-account'
+    | '/denuncias'
     | '/download'
     | '/login'
+    | '/pais'
     | '/privacy'
     | '/profile'
     | '/ranking'
     | '/sitemap.xml'
     | '/support'
     | '/terms'
+    | '/transparencia'
     | '/admin/daily-choices'
     | '/admin/ops'
     | '/admin/reports'
@@ -235,14 +271,17 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DailyRoute: typeof DailyRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
+  DenunciasRoute: typeof DenunciasRoute
   DownloadRoute: typeof DownloadRoute
   LoginRoute: typeof LoginRoute
+  PaisRoute: typeof PaisRoute
   PrivacyRoute: typeof PrivacyRoute
   ProfileRoute: typeof ProfileRoute
   RankingRoute: typeof RankingRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  TransparenciaRoute: typeof TransparenciaRoute
   AdminDailyChoicesRoute: typeof AdminDailyChoicesRoute
   AdminOpsRoute: typeof AdminOpsRoute
   AdminReportsRoute: typeof AdminReportsRoute
@@ -274,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeleteAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/denuncias': {
+      id: '/denuncias'
+      path: '/denuncias'
+      fullPath: '/denuncias'
+      preLoaderRoute: typeof DenunciasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/download': {
       id: '/download'
       path: '/download'
@@ -286,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pais': {
+      id: '/pais'
+      path: '/pais'
+      fullPath: '/pais'
+      preLoaderRoute: typeof PaisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -328,6 +381,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transparencia': {
+      id: '/transparencia'
+      path: '/transparencia'
+      fullPath: '/transparencia'
+      preLoaderRoute: typeof TransparenciaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/daily-choices': {
@@ -379,14 +439,17 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DailyRoute: DailyRoute,
   DeleteAccountRoute: DeleteAccountRoute,
+  DenunciasRoute: DenunciasRoute,
   DownloadRoute: DownloadRoute,
   LoginRoute: LoginRoute,
+  PaisRoute: PaisRoute,
   PrivacyRoute: PrivacyRoute,
   ProfileRoute: ProfileRoute,
   RankingRoute: RankingRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  TransparenciaRoute: TransparenciaRoute,
   AdminDailyChoicesRoute: AdminDailyChoicesRoute,
   AdminOpsRoute: AdminOpsRoute,
   AdminReportsRoute: AdminReportsRoute,
