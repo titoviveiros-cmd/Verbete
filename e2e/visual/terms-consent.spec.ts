@@ -31,8 +31,22 @@ import {
   serializeTermsRecord,
   withAcceptance,
 } from "../../src/lib/terms-record";
+import { ageDeclarationStorageEntry } from "../../src/lib/age-record";
 
-test.use({ storageState: { cookies: [], origins: [] } });
+// Sem aceite dos Termos, mas com o ano já declarado (ECA Digital B5): este
+// spec mede o aceite; o AgeGate tem teste próprio (src/components/__tests__/age-gate.test.tsx).
+test.use({
+  storageState: {
+    cookies: [],
+    origins: [
+      {
+        origin: new URL(process.env.E2E_BASE_URL ?? "http://localhost:5173")
+          .origin,
+        localStorage: [ageDeclarationStorageEntry(1990)],
+      },
+    ],
+  },
+});
 
 const ALERT = "Para continuar, aceite os Termos de Uso.";
 const KEY = "verbete:terms-accepted";

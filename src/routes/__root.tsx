@@ -28,6 +28,7 @@ import { THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AchievementToaster } from "@/components/AchievementToaster";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { AgeGate } from "@/components/AgeGate";
 import { RemoteGate } from "@/components/RemoteGate";
 import { Toaster } from "@/components/ui/sonner";
 import { shouldBlockEditEvent } from "@/lib/paste-guard";
@@ -350,6 +351,8 @@ function RootComponent() {
             </RemoteGate>
           </main>
         </ErrorBoundary>
+        {/* ECA Digital B5: selo 13+ e ano de nascimento (só no aparelho). */}
+        <AgeGate />
         <AchievementToaster />
         <Toaster position="top-center" richColors closeButton />
       </MotionConfig>
