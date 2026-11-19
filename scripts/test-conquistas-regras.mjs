@@ -94,7 +94,8 @@ await exec(`
     challenge_hour timestamptz UNIQUE, word_id uuid);
   CREATE TABLE public.daily_attempts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL,
     challenge_date date, challenge_hour timestamptz NOT NULL, guess text, is_correct boolean, score int,
-    time_seconds int, similarity int, mode text NOT NULL DEFAULT 'juiz', UNIQUE (user_id, challenge_hour));
+    time_seconds int, similarity int, mode text NOT NULL DEFAULT 'juiz', created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (user_id, challenge_hour));
   CREATE FUNCTION public.get_or_create_daily_challenge(p_date date DEFAULT CURRENT_DATE) RETURNS jsonb LANGUAGE sql AS $$
     INSERT INTO public.daily_challenges (challenge_date, challenge_hour, word_id)
     VALUES (current_date, date_trunc('hour', now()), (SELECT id FROM public.words LIMIT 1))
@@ -555,9 +556,92 @@ await t(
   },
 );
 
+// ------------------------------------------------------------------ progresso DEPOIS da migration (o rollback não pode perder)
+console.log("progresso depois da migration");
+// participação real: a linha em daily_attempts (como daily_choice_finish/submit) + a sequência
+const jogarComRegistro = async (u, iso, pontos = 10) => {
+  await q(
+    `INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, score, mode) VALUES ($1, ($2::timestamptz)::date, $2::timestamptz, $3, 'escolha')`,
+    [u, H(iso), pontos],
+  );
+  return jogar(u, iso, pontos);
+};
+// u1 (backup em horas: 2/7, última hora 05/11 15:00Z) joga 16:00Z e 17:00Z
+await jogarComRegistro(U(1), "2026-11-05T16:00Z");
+await jogarComRegistro(U(1), "2026-11-05T17:00Z");
+// u31: conta nova depois da migration (fora do backup): 3 horas seguidas
+for (const h of ["2026-11-06T10:00Z", "2026-11-06T11:00Z", "2026-11-06T12:00Z"])
+  await jogarComRegistro(U(31), h);
+// partidas depois da migration: XP, pontuação, estatísticas e conquistas novas
+const pU1 = await partida(U(1), { score: 31, coord: 1, votos: [5], acertos: 1 });
+const COLS_PROGRESSO =
+  "user_id,games_played,games_won,total_score,best_match_score,rounds_coordinated,total_truth_hits,total_fooled,win_streak,best_win_streak,xp,level";
+const progressoAntesRb = await q(
+  `SELECT ${COLS_PROGRESSO} FROM public.user_stats ORDER BY user_id`,
+);
+const conquistasAntesRb = await q(
+  `SELECT user_id, achievement_code, unlocked_at FROM public.user_achievements ORDER BY 1, 2`,
+);
+const tentativasAntesRb = await q(
+  `SELECT user_id, challenge_hour, score, mode FROM public.daily_attempts ORDER BY 1, 2`,
+);
+
 // ------------------------------------------------------------------ rollback
 console.log("rollback");
 await exec(RB);
+await t(
+  "rollback preserva XP, pontuação, estatísticas de partida, conquistas e tentativas (inclusive as de depois da migration)",
+  async () => {
+    eq([pU1.xp_gained > 0, pU1.unlocked.includes("big_score")], [true, true], "partida nova: XP e conquista");
+    eq(
+      await q(`SELECT ${COLS_PROGRESSO} FROM public.user_stats ORDER BY user_id`),
+      progressoAntesRb,
+      "progresso",
+    );
+    eq(
+      await q(
+        `SELECT user_id, achievement_code, unlocked_at FROM public.user_achievements ORDER BY 1, 2`,
+      ),
+      conquistasAntesRb,
+      "conquistas",
+    );
+    eq(
+      await q(
+        `SELECT user_id, challenge_hour, score, mode FROM public.daily_attempts ORDER BY 1, 2`,
+      ),
+      tentativasAntesRb,
+      "tentativas",
+    );
+  },
+);
+await t(
+  "rollback: sequência em horas continua o Diário jogado depois (backup + horas novas); quem não jogou volta ao backup",
+  async () => {
+    const s1 = await stats(U(1));
+    eq(
+      [s1.current_streak, s1.best_streak, s1.lpd, new Date(s1.last_played_hour).toISOString()],
+      [4, 7, "2026-11-05", "2026-11-05T17:00:00.000Z"],
+      "u1 = backup 2 + 16h + 17h",
+    );
+    const s2 = await stats(U(2));
+    eq([s2.current_streak, s2.best_streak], [3, 12], "u2 = backup exato");
+    const s31 = await stats(U(31));
+    eq([s31.current_streak, s31.best_streak], [3, 3], "u31 (conta nova) em horas");
+    eq(
+      (await q(`SELECT to_regclass('public.conquistas_streak_horas_bkp') r`))[0].r,
+      null,
+      "backup removido",
+    );
+  },
+);
+await t(
+  "depois do rollback, a função antiga segue a sequência sem quebra (hora seguinte = +1)",
+  async () => {
+    const r = await jogarComRegistro(U(1), "2026-11-05T18:00Z");
+    eq(r.current_streak, 5, "u1 18h");
+    eq((await stats(U(1))).best_streak, 7, "melhor");
+  },
+);
 await t(
   "rollback devolve os 3 corpos de produção, a descrição e os contadores; mantém conquistas",
   async () => {
@@ -580,8 +664,6 @@ await t(
       "Engane 5 ou mais jogadores numa única partida.",
       "desc",
     );
-    const s1 = await stats(U(1));
-    eq([s1.current_streak, s1.best_streak], [2, 7], "u1 restaurado");
     eq(
       (await conquistas(U(23))).includes("bluff_master"),
       true,

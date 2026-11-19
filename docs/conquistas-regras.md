@@ -78,7 +78,9 @@ big_score, bluff_master, social_butterfly, partidas_10, acertos_100, bluffs_100 
 | social_butterfly                                                                               | —                                                     | depende do §3                                                            |
 | Antes de aplicar: rodar uma contagem **só de leitura** (quantos ganhariam cada uma) e decidir. |
 
-## 6. Testes (isolados) — `node scripts/test-conquistas-regras.mjs --pglite <pasta>` → 22/22
+## 6. Testes
+
+### 6a. Isolados — `node scripts/test-conquistas-regras.mjs --pglite <pasta>` → 25/25
 
 Mesmo dia (várias jogadas), virada do dia em Brasília (02:00Z × 03:00Z), dia perdido, limites
 exatos (3º, 7º, 30º dia; 10 acertos; 5 rodadas; 30 pontos; 5 votos numa única definição × 4+4),
@@ -87,8 +89,26 @@ pontuação/XP/estatísticas iguais às da função original, conversão pelo hi
 permissões preservadas e rollback (corpos de produção byte a byte, descrição e contadores
 restaurados, conquistas mantidas). Mutações pegas: fuso em UTC, sem `ON CONFLICT`, Mestre do Blefe
 pelo total da partida. Limite: PGlite tem 1 conexão; corrida real só no Postgres do CI.
-Ajuste em teste existente: `scripts/test-daily-choice.mjs` fixa o md5 do corpo da pontuação do juiz
+Ciclo do rollback: migration → Diário e partida **depois** dela → rollback → conferência (XP,
+pontuação, estatísticas, conquistas e tentativas idênticos; sequência em horas continuada) → jogada
+com a função antiga (+1 sem quebra). Mutação pega: o rollback antigo (só restaurava o backup) falha 2.
+
+### 6b. Postgres real (CI) — `scripts/test-conquistas-corrida.mjs` (em `run-integration.mjs`)
+
+- Corrida: 2 conexões, a 2ª **bloqueada** enquanto a 1ª segura a transação (simultaneidade
+  comprovada); escolha × escolha, escolha × juiz, rajada de 8 conexões e Em Chamas sob corrida →
+  1 linha, 0 erros, só uma chamada relata a conquista.
+- Controle: o mesmo arranjo derruba uma concessão **sem** `ON CONFLICT` (unique_violation 23505) e
+  passa com ela — a janela de corrida é real e o teste a enxerga.
+- Rollback ensaiado dentro de uma transação desfeita no fim: progresso preservado, sequência em horas
+  continuada, corpo de produção da pontuação devolvido (md5 `e41b8c87`) e o banco do CI intacto depois.
+- Achado: nas funções reais do Diário, a trava da linha de `user_stats` (UPDATE) já serializa duas
+  jogadas do mesmo usuário antes da concessão; o `ON CONFLICT` é a segunda barreira.
+
+Ajustes em testes existentes: `scripts/test-daily-choice.mjs` fixa o md5 do corpo da pontuação do juiz
 (`e41b8c87`); com esta migration o corpo muda (só sequência e concessões) → `a6242f5b`.
+`test-daily-guard.mjs` (12) e `test-daily-choice.mjs` (11/17, 10/13): cenários "jogou na hora
+anterior" → "jogou no dia anterior" (mesmas asserções); o PGlite carrega os corpos vigentes.
 
 ## 7. Implantação (janela SEPARADA da observação do B4)
 
@@ -97,3 +117,6 @@ Ajuste em teste existente: `scripts/test-daily-choice.mjs` fixa o md5 do corpo d
    mexe nas duas funções do Diário). 5. Smoke: Diário juiz/escolha numa conta de teste, partida com
    bots, perfil. 6. Retroativo (§5) em passo próprio, com contagem prévia e autorização.
    Rollback: `supabase/rollback/conquistas_regras.sql` + `migration repair --status reverted 20261119120000`.
+   O rollback devolve os corpos e a descrição; a sequência volta ao backup **mais** o Diário jogado
+   depois (recontado em horas pela regra antiga); XP, pontuação, estatísticas de partida e conquistas
+   não são tocados. Condição: só depois de concluída e homologada a observação de 24 h do B4.

@@ -207,7 +207,7 @@ UPDATE public.user_stats s SET current_streak = 0, best_streak = 0, updated_at =
 `;
 
 const rollback = `-- ROLLBACK de 20261119120000_conquistas_regras.sql: devolve os 3 corpos de antes (byte a byte),
--- a descrição do Maior Enganador e os contadores de sequência (do backup). Conquistas concedidas
+-- a descrição do Maior Enganador e os contadores de sequência (backup + Diário jogado depois, em horas). Conquistas concedidas
 -- depois da migration NÃO são removidas (foram conquistadas pelas regras vigentes).
 -- Depois: supabase migration repair --status reverted 20261119120000
 
@@ -220,11 +220,59 @@ ${orig.match}
 UPDATE public.achievements SET description = '${DESC_ME_ANTES}'
  WHERE code = 'maior_enganador' AND description = '${DESC_ME_DEPOIS}';
 
-UPDATE public.user_stats s
-   SET current_streak = b.current_streak, best_streak = b.best_streak,
-       last_played_date = b.last_played_date, last_played_hour = b.last_played_hour, updated_at = now()
-  FROM public.conquistas_streak_horas_bkp b
- WHERE s.user_id = b.user_id;
+-- Sequência de volta às HORAS sem perder o que foi jogado DEPOIS da migration:
+-- * quem não jogou o Diário desde a migration volta exatamente ao backup;
+-- * quem jogou (juiz ou escolha: toda participação grava daily_attempts) tem a sequência em
+--   horas REJOGADA a partir do backup, com a regra antiga (hora seguinte +1; mesma hora mantém;
+--   senão 1), sobre as horas posteriores à última do backup.
+-- Só current_streak/best_streak/last_played_*: pontuação, XP, estatísticas de partida e
+-- conquistas não são tocados.
+DO $rb$
+DECLARE
+  v_corte timestamptz := (SELECT min(salvo_em) FROM public.conquistas_streak_horas_bkp);
+  r record;
+  v_h timestamptz;
+  v_cur integer;
+  v_best integer;
+  v_last timestamptz;
+BEGIN
+  UPDATE public.user_stats s
+     SET current_streak = b.current_streak, best_streak = b.best_streak,
+         last_played_date = b.last_played_date, last_played_hour = b.last_played_hour, updated_at = now()
+    FROM public.conquistas_streak_horas_bkp b
+   WHERE s.user_id = b.user_id;
+
+  FOR r IN
+    SELECT s.user_id, b.current_streak, b.best_streak, b.last_played_hour
+      FROM public.user_stats s
+      LEFT JOIN public.conquistas_streak_horas_bkp b ON b.user_id = s.user_id
+     WHERE EXISTS (SELECT 1 FROM public.daily_attempts a
+                    WHERE a.user_id = s.user_id AND a.created_at >= COALESCE(v_corte, '-infinity'))
+  LOOP
+    v_cur := COALESCE(r.current_streak, 0);
+    v_best := COALESCE(r.best_streak, 0);
+    v_last := r.last_played_hour;
+    FOR v_h IN
+      SELECT DISTINCT a.challenge_hour FROM public.daily_attempts a
+       WHERE a.user_id = r.user_id AND a.challenge_hour > COALESCE(r.last_played_hour, '-infinity')
+       ORDER BY 1
+    LOOP
+      IF v_last = v_h - INTERVAL '1 hour' THEN
+        v_cur := v_cur + 1;
+      ELSIF v_last = v_h THEN
+        NULL;
+      ELSE
+        v_cur := 1;
+      END IF;
+      v_best := GREATEST(v_best, v_cur);
+      v_last := v_h;
+    END LOOP;
+    UPDATE public.user_stats
+       SET current_streak = v_cur, best_streak = v_best, last_played_hour = v_last,
+           last_played_date = (v_last AT TIME ZONE 'UTC')::date, updated_at = now()
+     WHERE user_id = r.user_id AND v_last IS NOT NULL;
+  END LOOP;
+END $rb$;
 DROP TABLE IF EXISTS public.conquistas_streak_horas_bkp;
 `;
 
