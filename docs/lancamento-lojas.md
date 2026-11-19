@@ -44,3 +44,22 @@ Android (vc9, aparelho do dono, instalado pela Play no Alpha):
 
 iOS (quando houver TestFlight): os mesmos 5, trocando o item 4 por "Entrar com e-mail" e conferindo que o botão do
 Google **não** aparece.
+
+## 5. Capturas de loja (rascunho para aprovação do dono)
+
+Geradas das telas reais com o backend simulado dos testes visuais (7 telas: Home, Diário, sala, escrita,
+votação, revelação, placar), rodapé de produção `v2.1.5`:
+
+```
+VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_PUBLISHABLE_KEY=e2e-visual-mock VITE_RELEASE_CHANNEL=production \
+VISUAL_VIEWPORTS=440x956 VISUAL_DPR=3 SHOTS_DIR=<pasta> VISUAL_SCREENS=home,diario,lobby,writing,voting,reveal,scoreboard \
+npx playwright test e2e/visual/screens.spec.ts --project=visual-screens
+```
+
+`440x956` × 3 = **1320×2868** (Apple 6,9"); `360x640` × 3 = **1080×1920** (Play 9:16). Ressalva: os textos das
+definições de exemplo (fixtures) estão sem acento ("bajulacao", "danca") — trocar o exemplo antes de publicar.
+
+## 6. Achado do Simulador (iOS)
+
+A faixa do indicador de início (rodapé do iPhone) fica fora do escurecimento dos modais (efeito do
+`contentInset: "always"`). Cosmético; conferir no TestFlight antes de mexer (mudança visual = prévia do dono).

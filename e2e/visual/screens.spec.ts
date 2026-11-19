@@ -54,10 +54,16 @@ const ALL_VIEWPORTS = [
 ] as const;
 
 const wanted = process.env.VISUAL_VIEWPORTS ?? "390x844";
-const VIEWPORTS =
+// Fora da lista, um tamanho explícito (ex.: capturas de loja 440x956) também vale.
+const VIEWPORTS: ReadonlyArray<readonly [number, number]> =
   wanted === "all"
     ? ALL_VIEWPORTS
-    : ALL_VIEWPORTS.filter(([w, h]) => wanted.split(",").includes(`${w}x${h}`));
+    : wanted
+        .split(",")
+        .map((v) => v.split("x").map(Number) as [number, number]);
+// Capturas de loja em alta densidade (ex.: VISUAL_DPR=3 → 440x956 = 1320×2868).
+if (process.env.VISUAL_DPR)
+  test.use({ deviceScaleFactor: Number(process.env.VISUAL_DPR) });
 const ONLY = process.env.VISUAL_SCREENS?.split(",");
 const SHOTS_DIR = process.env.SHOTS_DIR;
 // VISUAL_AXE=1: auditoria WCAG 2.1 AA (axe-core) em cada tela simulada.
