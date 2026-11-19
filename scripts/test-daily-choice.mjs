@@ -277,9 +277,11 @@ try {
       eq(depois, estadoAntes, "user_stats mudou com a migration");
       eq((await db.q(`SELECT mode, score FROM public.daily_attempts WHERE guess = 'palpite'`))[0], { mode: "juiz", score: 77 });
     } else {
-      // banco do CI: a pontuação do juiz é a MESMA da produção (md5 conferido em 08/11/2026)
+      // banco do CI: a pontuação do juiz é a MESMA da produção. md5 conferido em 08/11/2026 (e41b8c87);
+      // 20261119120000_conquistas_regras muda SÓ a sequência (horas → dias) e torna as concessões
+      // idempotentes — pontuação intocada (scripts/test-conquistas-regras.mjs) → corpo novo a6242f5b.
       const m = (await db.q(`SELECT md5(prosrc) AS m FROM pg_proc WHERE proname = 'submit_daily_attempt_scored'`))[0].m;
-      ok(m.startsWith("e41b8c87"), `md5 ${m.slice(0, 8)} ≠ e41b8c87`);
+      ok(m.startsWith("a6242f5b"), `md5 ${m.slice(0, 8)} ≠ a6242f5b`);
     }
     eq((await db.q(`SELECT public.daily_mode() AS m`))[0].m, modoAntes ?? "juiz");
   });
