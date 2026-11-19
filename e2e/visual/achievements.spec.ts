@@ -156,15 +156,18 @@ test.describe("celular (toque)", () => {
     await expect(cartao).toContainText("Ainda não conquistada");
     await expect(cartao).toContainText("Coordene 5 rodadas.");
     await dentroDaTela(page);
-    // legível: opacidade efetiva 1 (não herdou a do ícone)
-    expect(
-      await cartao.evaluate((el) => {
-        let o = 1;
-        for (let n: Element | null = el; n; n = n.parentElement)
-          o *= Number(getComputedStyle(n).opacity);
-        return o;
-      }),
-    ).toBe(1);
+    // legível: opacidade efetiva 1 (não herdou a do ícone). Espera a animação de entrada
+    // (fade-in) terminar — no CI, mais lento, ela ainda estava em 0,85 na 1ª leitura.
+    await expect
+      .poll(() =>
+        cartao.evaluate((el) => {
+          let o = 1;
+          for (let n: Element | null = el; n; n = n.parentElement)
+            o *= Number(getComputedStyle(n).opacity);
+          return o;
+        }),
+      )
+      .toBe(1);
     await page.screenshot({
       path: "test-results/conquistas-celular-bloqueada.png",
     });
