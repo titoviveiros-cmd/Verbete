@@ -48,13 +48,19 @@ const SUITES = [
 
 // Nenhuma suíte pode deixar o pg_cron do banco LOCAL diferente do início (20/11/2026:
 // test-ugc-filtro pausa os jobs durante a suíte). Foto antes, conferência no fim.
+// Compara NOME@AGENDA dos jobs ativos, não o jobid: suítes que reaplicam migration/rollback
+// recriam jobs com o mesmo nome e id novo (CI de 20/11: job 6 → 12, mesmo job).
 const localDb = process.env.DB_URL && !/supabase\.co/.test(process.env.DB_URL);
 const cronAtivos = async () => {
   const { default: pg } = await import("pg");
   const c = new pg.Client({ connectionString: process.env.DB_URL });
   await c.connect();
   try {
-    return (await c.query("SELECT coalesce(string_agg(jobid::text, ',' ORDER BY jobid), '') j FROM cron.job WHERE active")).rows[0].j;
+    return (
+      await c.query(
+        "SELECT coalesce(string_agg(coalesce(jobname, '#' || jobid) || '@' || schedule, ', ' ORDER BY coalesce(jobname, '#' || jobid)), '') j FROM cron.job WHERE active",
+      )
+    ).rows[0].j;
   } finally {
     await c.end();
   }
