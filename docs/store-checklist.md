@@ -1,5 +1,7 @@
 # Checklist de publicação — Google Play (Fase 6)
 
+> **HISTÓRICO (20/11/2026):** substituído por `docs/lancamento-lojas.md`, que tem o estado atual e o checklist final.
+
 > Estado do repo (atualizado em 2026-11-05, base `0c6476b`): applicationId
 > `app.verbete.game`, versionCode 8 / versionName 2.1.4
 > (`android/app/build.gradle`); permissões INTERNET e VIBRATE. Desde

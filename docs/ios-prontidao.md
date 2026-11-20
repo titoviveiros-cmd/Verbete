@@ -1,6 +1,6 @@
 # iOS — prontidão para TestFlight e App Store (19/11/2026)
 
-Branch `feat/ios-prontidao` (base master `de554e4`). Nada enviado à Apple, nada assinado.
+Integrado à master pelo PR #79 (`a66fec7`, 20/11/2026). Nada enviado à Apple, nada assinado. Checklist final: `docs/lancamento-lojas.md`.
 Requisitos conferidos em fontes oficiais da Apple em 19/11/2026 (links no fim).
 
 ## 1. O que já está pronto (no repositório)
