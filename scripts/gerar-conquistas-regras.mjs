@@ -140,6 +140,25 @@ m = trocar(
   1,
   "match: metas",
 );
+// 20/11/2026 (auditoria P1): o dedup era por (usuário, sala). A revanche ("Nova partida",
+// mesmo código) e um código reaproveitado por sala nova voltavam deduped, sem XP, histórico,
+// estatísticas nem conquistas. rooms.finished_at é refeito a cada fim (gatilho
+// rooms_track_finished_at) — a mesma identidade de partida do match_shares.
+m = trocar(
+  m,
+  "  -- Dedup definitivo por (user, sala)\n  IF EXISTS (\n    SELECT 1 FROM public.match_history\n    WHERE user_id = auth.uid() AND room_code = p_room_code\n  ) THEN\n",
+  `  -- Dedup por PARTIDA (user, sala, fim desta partida). O registro desta partida tem
+  -- played_at >= rooms.finished_at; os de partidas anteriores com o mesmo código, não.
+  -- finished_at nulo (sala antiga) = qualquer registro da sala deduplica (regra antiga).
+  IF EXISTS (
+    SELECT 1 FROM public.match_history
+    WHERE user_id = auth.uid() AND room_code = p_room_code
+      AND played_at >= COALESCE(v_room.finished_at, '-infinity'::timestamptz)
+  ) THEN
+`,
+  1,
+  "match: dedup por partida",
+);
 novo.match = m;
 
 // ------------------------------------------------------------------ migration
@@ -159,6 +178,8 @@ const migration = `-- ==========================================================
 --    (10 acertos), Coordenador Nato (5 rodadas), Pontuação Massiva (30+ pontos numa partida),
 --    Mestre do Blefe (5+ votos numa única definição falsa). Borboleta Social: só proposta
 --    (exige armazenamento novo; ver docs).
+--    + (20/11) dedup por PARTIDA (sala + rooms.finished_at), não mais por sala: a revanche
+--    ("Nova partida", mesmo código) e códigos reaproveitados voltam a render XP/histórico.
 -- 4) Maior Enganador: descrição alinhada ao critério (votos, não jogadores distintos).
 -- 5) Conversão dos contadores de sequência (horas → dias), recalculados do histórico de
 --    daily_attempts; valores antigos guardados em public.conquistas_streak_horas_bkp (rollback).

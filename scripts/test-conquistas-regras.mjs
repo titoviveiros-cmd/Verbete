@@ -101,13 +101,15 @@ await exec(`
     VALUES (current_date, date_trunc('hour', now()), (SELECT id FROM public.words LIMIT 1))
     ON CONFLICT (challenge_hour) DO NOTHING RETURNING '{}'::jsonb $$;
   INSERT INTO public.words (word, meaning) VALUES ('teste', 'definição');
-  CREATE TABLE public.rooms (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE, status text, finish_reason text);
+  CREATE TABLE public.rooms (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), code text UNIQUE, status text, finish_reason text,
+    finished_at timestamptz);
   CREATE TABLE public.players (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), room_id uuid, user_id uuid,
     is_bot boolean NOT NULL DEFAULT false, score int NOT NULL DEFAULT 0, coordinator_count int NOT NULL DEFAULT 0);
   CREATE TABLE public.definitions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), room_id uuid, player_id uuid, is_truth boolean);
   CREATE TABLE public.votes (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), room_id uuid, voter_id uuid, definition_id uuid);
   CREATE TABLE public.match_history (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, room_code text,
-    final_score int, position int, players_count int, created_at timestamptz DEFAULT now());
+    final_score int, position int, players_count int, created_at timestamptz DEFAULT now(),
+    played_at timestamptz NOT NULL DEFAULT now());
   CREATE FUNCTION public.is_room_participant(uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT true $$;
   ${XP}
   ${ORIG.scored}
@@ -384,7 +386,7 @@ async function partida(
   const code = `S${String(++sala).padStart(3, "0")}`;
   const room = (
     await q(
-      `INSERT INTO public.rooms (code, status) VALUES ($1,'finished') RETURNING id`,
+      `INSERT INTO public.rooms (code, status, finished_at) VALUES ($1,'finished', clock_timestamp()) RETURNING id`,
       [code],
     )
   )[0].id;
@@ -523,6 +525,61 @@ await t(
     );
   },
 );
+// 20/11/2026 (auditoria P1): dedup por PARTIDA, não por sala
+const registrar = async (u, code) => {
+  await exec(`SELECT set_config('t.uid', '${u}', false)`);
+  return (await q(`SELECT public.record_match_result($1) r`, [code]))[0].r;
+};
+const historico = async (u) =>
+  (
+    await q(
+      `SELECT count(*)::int n FROM public.match_history WHERE user_id = $1`,
+      [u],
+    )
+  )[0].n;
+await t(
+  "revanche (mesmo código, nova partida) rende de novo; repetir a revanche deduplica",
+  async () => {
+    const u = U(60);
+    const r1 = await partida(u, { score: 10 });
+    const code = `S${String(sala).padStart(3, "0")}`;
+    // reset_room volta a sala ao lobby (gatilho zera finished_at); o fim novo refaz finished_at
+    await q(
+      `UPDATE public.rooms SET status = 'lobby', finished_at = NULL WHERE code = $1`,
+      [code],
+    );
+    await q(
+      `UPDATE public.rooms SET status = 'finished', finished_at = clock_timestamp() WHERE code = $1`,
+      [code],
+    );
+    const r2 = await registrar(u, code);
+    const r3 = await registrar(u, code);
+    eq(
+      [
+        !!r1.deduped,
+        !!r2.deduped,
+        r2.xp_gained > 0,
+        !!r3.deduped,
+        await historico(u),
+      ],
+      [false, false, true, true, 2],
+      "revanche",
+    );
+  },
+);
+await t(
+  "sala antiga sem finished_at: segue a regra antiga (1 registro por sala)",
+  async () => {
+    const u = U(61);
+    await partida(u, { score: 10 });
+    const code = `S${String(sala).padStart(3, "0")}`;
+    await q(`UPDATE public.rooms SET finished_at = NULL WHERE code = $1`, [
+      code,
+    ]);
+    const r = await registrar(u, code);
+    eq([!!r.deduped, await historico(u)], [true, 1], "legado");
+  },
+);
 await t(
   "pontuação/XP/estatísticas da partida iguais às da função ORIGINAL",
   async () => {
@@ -573,7 +630,12 @@ await jogarComRegistro(U(1), "2026-11-05T17:00Z");
 for (const h of ["2026-11-06T10:00Z", "2026-11-06T11:00Z", "2026-11-06T12:00Z"])
   await jogarComRegistro(U(31), h);
 // partidas depois da migration: XP, pontuação, estatísticas e conquistas novas
-const pU1 = await partida(U(1), { score: 31, coord: 1, votos: [5], acertos: 1 });
+const pU1 = await partida(U(1), {
+  score: 31,
+  coord: 1,
+  votos: [5],
+  acertos: 1,
+});
 const COLS_PROGRESSO =
   "user_id,games_played,games_won,total_score,best_match_score,rounds_coordinated,total_truth_hits,total_fooled,win_streak,best_win_streak,xp,level";
 const progressoAntesRb = await q(
@@ -592,9 +654,15 @@ await exec(RB);
 await t(
   "rollback preserva XP, pontuação, estatísticas de partida, conquistas e tentativas (inclusive as de depois da migration)",
   async () => {
-    eq([pU1.xp_gained > 0, pU1.unlocked.includes("big_score")], [true, true], "partida nova: XP e conquista");
     eq(
-      await q(`SELECT ${COLS_PROGRESSO} FROM public.user_stats ORDER BY user_id`),
+      [pU1.xp_gained > 0, pU1.unlocked.includes("big_score")],
+      [true, true],
+      "partida nova: XP e conquista",
+    );
+    eq(
+      await q(
+        `SELECT ${COLS_PROGRESSO} FROM public.user_stats ORDER BY user_id`,
+      ),
       progressoAntesRb,
       "progresso",
     );
@@ -619,16 +687,26 @@ await t(
   async () => {
     const s1 = await stats(U(1));
     eq(
-      [s1.current_streak, s1.best_streak, s1.lpd, new Date(s1.last_played_hour).toISOString()],
+      [
+        s1.current_streak,
+        s1.best_streak,
+        s1.lpd,
+        new Date(s1.last_played_hour).toISOString(),
+      ],
       [4, 7, "2026-11-05", "2026-11-05T17:00:00.000Z"],
       "u1 = backup 2 + 16h + 17h",
     );
     const s2 = await stats(U(2));
     eq([s2.current_streak, s2.best_streak], [3, 12], "u2 = backup exato");
     const s31 = await stats(U(31));
-    eq([s31.current_streak, s31.best_streak], [3, 3], "u31 (conta nova) em horas");
     eq(
-      (await q(`SELECT to_regclass('public.conquistas_streak_horas_bkp') r`))[0].r,
+      [s31.current_streak, s31.best_streak],
+      [3, 3],
+      "u31 (conta nova) em horas",
+    );
+    eq(
+      (await q(`SELECT to_regclass('public.conquistas_streak_horas_bkp') r`))[0]
+        .r,
       null,
       "backup removido",
     );

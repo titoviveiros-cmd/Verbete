@@ -120,3 +120,12 @@ anterior" → "jogou no dia anterior" (mesmas asserções); o PGlite carrega os 
    O rollback devolve os corpos e a descrição; a sequência volta ao backup **mais** o Diário jogado
    depois (recontado em horas pela regra antiga); XP, pontuação, estatísticas de partida e conquistas
    não são tocados. Condição: só depois de concluída e homologada a observação de 24 h do B4.
+
+## Revanche e código reaproveitado (20/11/2026)
+
+Auditoria P1: `record_match_result` deduplicava por (usuário, código da sala). A "Nova partida" (mesmo código) e uma
+sala nova que recebesse um código já usado voltavam `deduped`, sem XP, histórico, estatísticas nem conquistas.
+Agora o dedup é por **partida**: `played_at >= rooms.finished_at` (refeito a cada fim pelo gatilho
+`rooms_track_finished_at`, a mesma identidade de partida do `match_shares`). Sala antiga sem `finished_at` segue a regra
+antiga. Testes: `scripts/test-conquistas-regras.mjs` (revanche rende; repetir deduplica; legado) — mutante sem a
+condição reprova.
