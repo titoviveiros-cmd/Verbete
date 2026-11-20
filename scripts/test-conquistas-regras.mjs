@@ -1,4 +1,4 @@
-// Testes da migration 20261119120000_conquistas_regras.sql (19/11/2026), em banco ISOLADO.
+// Testes da migration 20261122120000_conquistas_regras.sql (19/11/2026), em banco ISOLADO.
 //   node scripts/test-conquistas-regras.mjs --pglite <pasta do @electric-sql/pglite>
 // Monta um esquema mínimo, aplica as funções ORIGINAIS (produção), cria dados, aplica a
 // migration, confere regras/limites/idempotência/preservação e por fim o rollback.
@@ -47,7 +47,7 @@ const eq = (a, b, msg) => {
     );
 };
 
-const MIG = rd("supabase/migrations/20261119120000_conquistas_regras.sql");
+const MIG = rd("supabase/migrations/20261122120000_conquistas_regras.sql");
 const RB = rd("supabase/rollback/conquistas_regras.sql");
 const ORIG = {
   scored: fnBlock(

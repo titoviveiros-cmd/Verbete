@@ -1,7 +1,7 @@
--- ROLLBACK de 20261119120000_conquistas_regras.sql: devolve os 3 corpos de antes (byte a byte),
+-- ROLLBACK de 20261122120000_conquistas_regras.sql: devolve os 3 corpos de antes (byte a byte),
 -- a descrição do Maior Enganador e os contadores de sequência (backup + Diário jogado depois, em horas). Conquistas concedidas
 -- depois da migration NÃO são removidas (foram conquistadas pelas regras vigentes).
--- Depois: supabase migration repair --status reverted 20261119120000
+-- Depois: supabase migration repair --status reverted 20261122120000
 
 CREATE OR REPLACE FUNCTION public.submit_daily_attempt_scored(p_user_id uuid, p_guess text, p_time_seconds integer, p_similarity integer)
  RETURNS jsonb

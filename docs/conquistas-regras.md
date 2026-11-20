@@ -1,6 +1,6 @@
 # Conquistas — regras alinhadas ao catálogo (proposta, 19/11/2026)
 
-Branch `feat/conquistas-regras` (local). Migration `supabase/migrations/20261119120000_conquistas_regras.sql`
+Branch `feat/conquistas-regras` (local). Migration `supabase/migrations/20261122120000_conquistas_regras.sql`
 (**preparada, não aplicada**), rollback `supabase/rollback/conquistas_regras.sql`, gerador
 `scripts/gerar-conquistas-regras.mjs` (parte dos corpos reais de produção — o md5 do corpo original
 extraído de `submit_daily_attempt_scored` confere com o fixado de produção, `e41b8c87`), testes
@@ -113,10 +113,10 @@ anterior" → "jogou no dia anterior" (mesmas asserções); o PGlite carrega os 
 ## 7. Implantação (janela SEPARADA da observação do B4)
 
 1. PR com CI (integração em Postgres real, inclusive corrida). 2. Backup cifrado + restauração.
-2. Dry-run = só `20261119120000`. 4. Aplicar fora das 24 h de observação do B4 (a migration
+2. Dry-run = só `20261122120000`. 4. Aplicar fora das 24 h de observação do B4 (a migration
    mexe nas duas funções do Diário). 5. Smoke: Diário juiz/escolha numa conta de teste, partida com
    bots, perfil. 6. Retroativo (§5) em passo próprio, com contagem prévia e autorização.
-   Rollback: `supabase/rollback/conquistas_regras.sql` + `migration repair --status reverted 20261119120000`.
+   Rollback: `supabase/rollback/conquistas_regras.sql` + `migration repair --status reverted 20261122120000`.
    O rollback devolve os corpos e a descrição; a sequência volta ao backup **mais** o Diário jogado
    depois (recontado em horas pela regra antiga); XP, pontuação, estatísticas de partida e conquistas
    não são tocados. Condição: só depois de concluída e homologada a observação de 24 h do B4.

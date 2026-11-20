@@ -1,4 +1,4 @@
-// Conquistas (20261119120000_conquistas_regras) no POSTGRES REAL do CI (19/11/2026):
+// Conquistas (20261122120000_conquistas_regras) no POSTGRES REAL do CI (19/11/2026):
 //  A) CORRIDA: duas (ou mais) conexões independentes concedendo a MESMA conquista ao mesmo
 //     usuário ao mesmo tempo → uma única linha, nenhuma chamada com erro, só uma relata.
 //     A simultaneidade é provada: a conexão B fica BLOQUEADA enquanto A segura a transação.

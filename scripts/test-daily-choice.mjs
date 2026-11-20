@@ -16,8 +16,8 @@ import { createHash, randomUUID } from "node:crypto";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const rd = (p) => readFileSync(join(ROOT, p), "utf8");
 const D1 = rd("supabase/migrations/20261108120000_diario_d1_escolha.sql");
-// Corpos vigentes do Diário (sequência em dias, Brasília): 20261119120000_conquistas_regras.
-const CONQ = rd("supabase/migrations/20261119120000_conquistas_regras.sql");
+// Corpos vigentes do Diário (sequência em dias, Brasília): 20261122120000_conquistas_regras.
+const CONQ = rd("supabase/migrations/20261122120000_conquistas_regras.sql");
 const D1_ROLLBACK = rd("supabase/rollback/diario_d1_escolha.sql");
 
 const args = process.argv.slice(2);
@@ -198,7 +198,7 @@ const novoUsuario = async () => {
  * existe (o gatilho handle_new_user a cria junto com o usuário), então é upsert: um INSERT
  * puro colidia com user_stats_pkey (CI 42500287456). Não toca nenhuma função do D1.
  */
-// diasAtras: último dia jogado no calendário de Brasília (a sequência conta DIAS desde 20261119120000).
+// diasAtras: último dia jogado no calendário de Brasília (a sequência conta DIAS desde 20261122120000).
 const definirStats = (u, { streak = 0, best = 0, horasAtras = null, diasAtras = null, total = 0 } = {}) =>
   db.q(
     `INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, last_played_date, total_score)
@@ -284,7 +284,7 @@ try {
       eq((await db.q(`SELECT mode, score FROM public.daily_attempts WHERE guess = 'palpite'`))[0], { mode: "juiz", score: 77 });
     } else {
       // banco do CI: a pontuação do juiz é a MESMA da produção. md5 conferido em 08/11/2026 (e41b8c87);
-      // 20261119120000_conquistas_regras muda SÓ a sequência (horas → dias) e torna as concessões
+      // 20261122120000_conquistas_regras muda SÓ a sequência (horas → dias) e torna as concessões
       // idempotentes — pontuação intocada (scripts/test-conquistas-regras.mjs) → corpo novo a6242f5b.
       const m = (await db.q(`SELECT md5(prosrc) AS m FROM pg_proc WHERE proname = 'submit_daily_attempt_scored'`))[0].m;
       ok(m.startsWith("a6242f5b"), `md5 ${m.slice(0, 8)} ≠ a6242f5b`);

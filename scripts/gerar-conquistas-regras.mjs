@@ -2,7 +2,7 @@
 // REAIS das funções em produção (copiados das migrations), aplicando só as mudanças
 // planejadas — cada substituição é conferida (falha se não casar o número exato de vezes).
 //   node scripts/gerar-conquistas-regras.mjs
-// Saídas: supabase/migrations/20261119120000_conquistas_regras.sql
+// Saídas: supabase/migrations/20261122120000_conquistas_regras.sql
 //         supabase/rollback/conquistas_regras.sql
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -227,10 +227,10 @@ UPDATE public.user_stats s SET current_streak = 0, best_streak = 0, updated_at =
    AND NOT EXISTS (SELECT 1 FROM public.daily_attempts a WHERE a.user_id = s.user_id);
 `;
 
-const rollback = `-- ROLLBACK de 20261119120000_conquistas_regras.sql: devolve os 3 corpos de antes (byte a byte),
+const rollback = `-- ROLLBACK de 20261122120000_conquistas_regras.sql: devolve os 3 corpos de antes (byte a byte),
 -- a descrição do Maior Enganador e os contadores de sequência (backup + Diário jogado depois, em horas). Conquistas concedidas
 -- depois da migration NÃO são removidas (foram conquistadas pelas regras vigentes).
--- Depois: supabase migration repair --status reverted 20261119120000
+-- Depois: supabase migration repair --status reverted 20261122120000
 
 ${orig.scored}
 
@@ -303,7 +303,7 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   writeFileSync(
-    join(ROOT, "supabase/migrations/20261119120000_conquistas_regras.sql"),
+    join(ROOT, "supabase/migrations/20261122120000_conquistas_regras.sql"),
     migration,
   );
   writeFileSync(
