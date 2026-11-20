@@ -28,7 +28,7 @@ Legenda: **T** = impedimento técnico (resolvível no repositório) · **E** = e
 | A5 | Declarações (Data safety, classificação, público-alvo, exclusão de conta) | E | "Tudo em dia" (Console, 19/11) |
 | A6 | **12 testadores × 14 dias** (conta pessoal) | E | **2/12 em 19/11** (20/11: não verificado, painel não carregou) — caminho crítico |
 | A7 | Pedir acesso à produção (questionário do teste fechado) | E | depois de A6 |
-| A8 | Capturas da ficha ≤ 2:1 | T | **preparadas** 1080×1920 (9:16) com acentos; as de `resources/store/` (1170×2532, 2,16:1) não servem |
+| A8 | Capturas da ficha ≤ 2:1 | T | **preparadas** 1080×1920 (9:16), aguardam aprovação; as de `resources/store/` (1170×2532, 2,16:1) não servem |
 | A9 | Texto da ficha: "4 a 12 jogadores" (não "2 a 12") | E | conferir no Console |
 | A10 | B4 homologado (24 h) antes da produção | E | 21/11 11:00 |
 
@@ -46,7 +46,7 @@ Legenda: **T** = impedimento técnico (resolvível no repositório) · **E** = e
 | I8 | Assinar e enviar ao TestFlight pelo CI (passo novo no `ios.yml`) | T | só depois de I7 (não dá para testar antes) |
 | I9 | TestFlight interno no iPhone do dono (roteiro §3) | E | depois de I8 |
 | I10 | Classificação etária (questionário novo, 13+) + App Privacy | E | depois de I6 |
-| I11 | Capturas 6,9" 1320×2868 | T | **preparadas** com acentos |
+| I11 | Capturas 6,9" 1320×2868 | T | **preparadas**, aguardam aprovação |
 | I12 | Contas só-Google não entram no iOS (sem "Esqueci a senha") | T | risco aceito até "Entrar com a Apple"; ver `ios-prontidao.md` |
 
 ### Comum
@@ -61,7 +61,10 @@ Legenda: **T** = impedimento técnico (resolvível no repositório) · **E** = e
 ## 2. Capturas de loja (rascunho para aprovação do dono)
 
 Telas reais com o backend simulado dos testes visuais (7 telas: Home, Diário, sala, escrita, votação, revelação,
-placar), rodapé de produção `v2.1.5`, definições de exemplo **com acentuação correta** (corrigidas em 20/11):
+placar), rodapé de produção `v2.1.5`. As definições aparecem **em minúsculas e sem acento** porque é assim que o app
+exibe (o servidor grava `lower(unaccent(…))`, `supabase/migrations/20261113090000_autorizacao_fase3.sql`, e a tela de
+escrita avisa "tudo será exibido em letras minúsculas e sem acentos"): acentuar os exemplos deixaria a captura
+infiel. A Home espera a animação de entrada terminar antes da captura (antes saía só o fundo):
 
 ```
 VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_PUBLISHABLE_KEY=e2e-visual-mock VITE_RELEASE_CHANNEL=production \

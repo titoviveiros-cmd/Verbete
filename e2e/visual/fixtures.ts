@@ -131,14 +131,14 @@ const DEFS: D[] = [
     id: d(103),
     round: 1,
     player_id: LARA,
-    text: "peixe pequeno de água doce",
+    text: "peixe pequeno de agua doce",
     letter: "E",
   },
   {
     id: d(104),
     round: 1,
     player_id: ZE,
-    text: "chapéu de palha dos vaqueiros",
+    text: "chapeu de palha dos vaqueiros",
     letter: "B",
   },
   {
@@ -152,7 +152,7 @@ const DEFS: D[] = [
     id: d(106),
     round: 1,
     player_id: TIO,
-    text: "dança de roda do interior paulista",
+    text: "danca de roda do interior paulista",
     letter: "D",
   },
   // Rodada 2 — coordenador Dudu
@@ -167,7 +167,7 @@ const DEFS: D[] = [
     id: d(202),
     round: 2,
     player_id: BIA,
-    text: "doce de abóbora com cravo",
+    text: "doce de abobora com cravo",
     letter: "A",
   },
   {
@@ -203,7 +203,7 @@ const DEFS: D[] = [
     id: d(301),
     round: 3,
     player_id: "__truth__",
-    text: "cumprimento exagerado, cheio de mesuras; bajulação",
+    text: "cumprimento exagerado, cheio de mesuras; bajulacao",
     letter: "B",
   },
   {
@@ -217,7 +217,7 @@ const DEFS: D[] = [
     id: d(303),
     round: 3,
     player_id: BIA,
-    text: "pequeno tambor de couro usado nas festas juninas do sertão",
+    text: "pequeno tambor de couro usado nas festas juninas do sertao",
     letter: "C",
   },
   {
@@ -231,14 +231,14 @@ const DEFS: D[] = [
     id: d(305),
     round: 3,
     player_id: NINA,
-    text: "elogio cheio de reverências para agradar alguém importante",
+    text: "elogio cheio de reverencias para agradar alguem importante",
     letter: "E",
   },
   {
     id: d(306),
     round: 3,
     player_id: DUDU,
-    text: "passo de dança em que se bate o pé três vezes no chão",
+    text: "passo de danca em que se bate o pe tres vezes no chao",
     letter: "F",
   },
 ];
@@ -538,14 +538,14 @@ export function dailyBackend(state: "play" | "result"): MockBackend {
           ? {
               played: true,
               attempt: {
-                guess: "recompensa dada a quem traz uma boa notícia",
+                guess: "recompensa dada a quem traz uma boa noticia",
                 is_correct: true,
                 score: 78,
                 time_seconds: 22,
                 similarity: 93,
                 challenge_hour: "2026-10-18T15:00:00Z",
               },
-              truth: "prêmio ou recompensa que se dá a quem traz boas novas",
+              truth: "premio ou recompensa que se da a quem traz boas novas",
               word: "alvíssaras",
             }
           : { played: false },

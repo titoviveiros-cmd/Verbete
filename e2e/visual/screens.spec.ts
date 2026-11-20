@@ -96,6 +96,26 @@ const room = (
   ready,
 });
 
+// A Home entra com animações (framer-motion) que partem de opacity 0. toBeVisible
+// considera visível um elemento transparente, e um tempo fixo não basta em máquina
+// lenta (20/11/2026: captura de loja saiu só com o fundo). Espera todo elemento
+// animado (fora os decorativos aria-hidden, que pulsam sem parar) chegar a opacity 1.
+async function entradaConcluida(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            [...document.querySelectorAll<HTMLElement>('[style*="opacity"]')]
+              .filter((el) => !el.closest("[aria-hidden]"))
+              .filter((el) => Number(getComputedStyle(el).opacity) < 0.99)
+              .length,
+        ),
+      { message: "animação de entrada da Home não terminou", timeout: 10_000 },
+    )
+    .toBe(0);
+}
+
 const SCREENS: Screen[] = [
   {
     name: "home",
@@ -105,7 +125,8 @@ const SCREENS: Screen[] = [
       await expect(
         page.getByRole("heading", { name: "Verbete" }),
       ).toBeVisible();
-      await page.waitForTimeout(1500);
+      await entradaConcluida(page);
+      await page.waitForTimeout(300);
     },
   },
   {
@@ -116,7 +137,8 @@ const SCREENS: Screen[] = [
       await expect(
         page.getByRole("heading", { name: "Verbete" }),
       ).toBeVisible();
-      await page.waitForTimeout(2200);
+      await entradaConcluida(page);
+      await page.waitForTimeout(300);
     },
   },
   {
