@@ -39,14 +39,18 @@ for (const [text, expected] of UGC_CASES) {
 // 20/11/2026: o rollback no fim desta suíte derruba gatilhos de 5 tabelas DENTRO da transação
 // (lock exclusivo); um job do pg_cron mexendo nessas tabelas no mesmo minuto dava "deadlock
 // detected" (CI da master de 20/11, 2 vezes). Só no banco LOCAL de teste: pausa os jobs na suíte.
+// A pausa é a 1ª camada; a 2ª (abaixo) é repetir o rollback num SAVEPOINT se der deadlock.
 let pausados = [];
 if (!ssl) {
   try {
-    pausados = (
-      await db.query("UPDATE cron.job SET active = false WHERE active RETURNING jobid")
-    ).rows.map((r) => r.jobid);
-  } catch {
-    /* sem pg_cron: nada a pausar */
+    const ativos = (await db.query("SELECT jobid FROM cron.job WHERE active ORDER BY jobid")).rows.map((r) => r.jobid);
+    for (const id of ativos) {
+      await db.query("SELECT cron.alter_job($1, active := false)", [id]);
+      pausados.push(id);
+    }
+    console.log(`pg_cron: ${pausados.length} job(s) pausado(s) durante a suíte`);
+  } catch (e) {
+    console.log(`pg_cron: pausa não aplicada (${e.message}) — segue com a repetição em SAVEPOINT`);
   }
 }
 
@@ -262,7 +266,22 @@ try {
   check("funções internas fechadas para anon/authenticated", open.n === 0, `${open.n} abertas`);
 
   // Rollback (dentro da transação desfeita): o texto volta a passar.
-  await db.query(readFileSync("supabase/rollback/ugc_filtro_servidor.sql", "utf8"));
+  // DDL em 5 tabelas: se um job em andamento disputar os locks (deadlock 40P01), volta ao
+  // SAVEPOINT e repete (até 3x) — a transação externa segue válida.
+  const rollbackSql = readFileSync("supabase/rollback/ugc_filtro_servidor.sql", "utf8");
+  for (let i = 1; ; i++) {
+    await db.query("SAVEPOINT ugc_rb");
+    try {
+      await db.query(rollbackSql);
+      await db.query("RELEASE SAVEPOINT ugc_rb");
+      break;
+    } catch (e) {
+      await db.query("ROLLBACK TO SAVEPOINT ugc_rb");
+      if (e.code !== "40P01" || i >= 3) throw e;
+      console.log(`rollback: deadlock na tentativa ${i}, repetindo`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
   const rb = await submit("me chama no zapzap 11987654321");
   const rbCfg = await cfg({ categories: ["texto livre"] });
   const gone = await row(
@@ -281,7 +300,7 @@ try {
   // Restaura EXATAMENTE os jobs pausados e confere; falha aqui reprova a suíte (não silencia).
   if (pausados.length) {
     try {
-      await db.query("UPDATE cron.job SET active = true WHERE jobid = ANY($1)", [pausados]);
+      for (const id of pausados) await db.query("SELECT cron.alter_job($1, active := true)", [id]);
       const ativos = (
         await db.query("SELECT jobid FROM cron.job WHERE active AND jobid = ANY($1)", [pausados])
       ).rows.length;
