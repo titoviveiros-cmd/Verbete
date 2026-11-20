@@ -43,7 +43,7 @@ Legenda: **T** = impedimento técnico (resolvível no repositório) · **E** = e
 | I5 | Exclusão de conta no app, inclusive convidado (5.1.1(v)) | T | ok |
 | I6 | **Conta Apple Developer** (US$ 99/ano, pessoa física) | E | **decisão de custo do dono** — bloqueia I7–I11 |
 | I7 | App no App Store Connect + chave da API (3 segredos no GitHub + Team ID) | E | depois de I6 |
-| I8 | Assinar e enviar ao TestFlight pelo CI (passo novo no `ios.yml`) | T | só depois de I7 (não dá para testar antes) |
+| I8 | Assinar e enviar ao TestFlight pelo CI | T | **preparado**: `.github/workflows/ios-testflight.yml` (inerte sem os 4 segredos; só manual); envio real só depois de I7 |
 | I9 | TestFlight interno no iPhone do dono (roteiro §3) | E | depois de I8 |
 | I10 | Classificação etária (questionário novo, 13+) + App Privacy | E | depois de I6 |
 | I11 | Capturas 6,9" 1320×2868 | T | **preparadas**, aguardam aprovação |

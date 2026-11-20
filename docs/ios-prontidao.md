@@ -25,9 +25,10 @@ Requisitos conferidos em fontes oficiais da Apple em 19/11/2026 (links no fim).
 1. **Conta Apple Developer (pessoa física)**: US$ 99/ano (valor em R$ só aparece no pagamento), conta Apple com
    2FA, nome civil (vira o "vendedor" na loja), endereço. Sem D-U-N-S. **Decisão de custo do dono.**
 2. Com a conta: criar o app no App Store Connect (`app.verbete.game`), gerar **chave da API do App Store Connect**
-   (papel App Manager) e cadastrar 3 segredos no GitHub (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64`) + o
-   Team ID. Com isso o CI assina (assinatura automática com `-allowProvisioningUpdates`) e envia ao TestFlight
-   **sem Mac** — passo a ser acrescentado ao `ios.yml` só depois da conta existir.
+   (papel **Admin**: a assinatura na nuvem precisa criar certificado de distribuição — INFERÊNCIA, conferir na
+   criação) e cadastrar 4 segredos no GitHub (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` = arquivo .p8 em base64, `APPLE_TEAM_ID`);
+   com isso o workflow **`ios-testflight.yml`** (já pronto, inerte sem os segredos) assina na nuvem da Apple
+   e envia ao TestFlight **sem Mac**: Actions → iOS TestFlight → Run workflow. Nunca testado contra a Apple (sem conta).
 3. Questionário de **classificação etária** (faixas novas 4+/9+/13+/16+/18+; perguntas de rede social desde
    set/2026; descritores novos até 12/01/2027) e o rótulo **App Privacy** (mesmos tipos do manifesto).
 4. TestFlight externo passa pela revisão beta da Apple (o interno não).
