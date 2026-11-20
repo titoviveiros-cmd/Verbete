@@ -7,11 +7,21 @@ let installed = false;
 
 const LAUNCH_HANDLED_KEY = "verbete:launch-url-handled";
 
+// Só rotas do jogo podem ser abertas por App Link. Sem esta lista, um link
+// https://<host do app>/_capacitor_http_interceptor_?… virava navegação de
+// documento na origem do app, e o proxy nativo do Capacitor buscava conteúdo
+// de terceiros servido COMO o app (GHSA-rvm3-566m-v7fv; 20/11/2026). A
+// atualização do Capacitor fecha a falha na raiz; esta lista é a 2ª camada.
+const APP_LINK_PATH =
+  /^\/(?:|daily|ranking|profile|login|privacy|terms|support|delete-account|pais|transparencia|download|denuncias|room\/[A-Za-z0-9-]{1,32}|r\/[A-Za-z0-9_-]{1,128})$/;
+
 /** Caminho interno (pathname+search) de um App Link do próprio app, ou null. */
 export function appPathFromLink(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.host !== new URL(APP_URL).host) return null;
+    if (u.protocol !== "https:" || u.host !== new URL(APP_URL).host)
+      return null;
+    if (!APP_LINK_PATH.test(u.pathname)) return null;
     return u.pathname + u.search;
   } catch {
     return null;
