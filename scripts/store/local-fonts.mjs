@@ -1,4 +1,4 @@
-// Fontes LOCAIS para as capturas de loja (21/11/2026): Fredoka e Nunito, os mesmos
+// Fontes LOCAIS para as capturas de loja (20/11/2026): Fredoka e Nunito, os mesmos
 // arquivos do Google Fonts empacotados pelo @fontsource 5.3.0 (SIL OFL 1.1 — licenças
 // em fonts/OFL-*.txt). Nenhuma requisição a fonts.googleapis.com / fonts.gstatic.com.
 import { readFileSync } from "node:fs";

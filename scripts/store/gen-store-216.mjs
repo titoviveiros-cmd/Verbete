@@ -23,7 +23,7 @@ const C = {
   creme: "#fbf3e3", tinta: "#241640", tintaSuave: "#5b4b7d", magenta: "#d61f74",
   roxo: "#6d28d9", turquesa: "#0b7166", ouro: "#b07d0e",
 };
-// Fontes LOCAIS embutidas (data:), sem Google Fonts — ver local-fonts.mjs (21/11/2026).
+// Fontes LOCAIS embutidas (data:), sem Google Fonts — ver local-fonts.mjs (20/11/2026).
 const FONTS = `<style>${fontFaceCss()}</style>`;
 const page = (w, h, body, bg = C.creme) => `<!doctype html><html><head><meta charset="utf-8">${FONTS}
 <style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:${w}px;height:${h}px;overflow:hidden;background:${bg}}

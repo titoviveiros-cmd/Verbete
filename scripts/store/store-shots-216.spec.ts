@@ -36,7 +36,7 @@ const externos: string[] = [];
 const FONTES_LOCAIS = "https://fonts.gstatic.com/local/";
 
 async function prepare(page: Page, storage: Record<string, string>) {
-  // Trava de rede (21/11/2026): só localhost/127.0.0.1 (app + Supabase simulado) sai do
+  // Trava de rede (20/11/2026): só localhost/127.0.0.1 (app + Supabase simulado) sai do
   // navegador. As fontes do Google viram arquivos LOCAIS (scripts/store/fonts, OFL);
   // qualquer outro host — inclusive um Supabase de verdade — é abortado e registrado.
   // Registrada depois do mock: para hosts locais devolve a vez (fallback) aos handlers dele.
