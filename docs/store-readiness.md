@@ -1,4 +1,7 @@
 # Verbete — Prontidão de loja
+
+> **HISTÓRICO (20/11/2026):** substituído por `docs/lancamento-lojas.md`, que tem o estado atual e o checklist final.
+
 > Auditoria Master Release · 2026-10-02 · HEAD `e811635` (código de app: `17bb348`/`bb08c58`) · produção web `17bb348` · SOMENTE LEITURA (nenhum código de produto alterado)
 
 ## Claims × Realidade

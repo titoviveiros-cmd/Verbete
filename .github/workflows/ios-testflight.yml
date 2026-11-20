@@ -1,0 +1,143 @@
+name: iOS TestFlight
+
+# Envio ao TestFlight SEM Mac (20/11/2026). Fica INERTE até o dono criar a conta Apple
+# Developer e cadastrar os segredos (docs/ios-prontidao.md §2):
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64 (chave da API do App Store Connect, em base64)
+#   APPLE_TEAM_ID (Team ID de 10 caracteres)
+# - Só envia quando disparado À MÃO (workflow_dispatch) E com os 4 segredos presentes.
+# - Em pull_request só roda a conferência dos segredos (prova que, sem eles, nada é enviado).
+# - Assinatura automática na nuvem da Apple (-allowProvisioningUpdates + chave da API):
+#   nenhum certificado nem perfil fica no repositório.
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "CFBundleVersion (vazio = versionCode do android/app/build.gradle; cada envio precisa de número novo)"
+        required: false
+        default: ""
+  pull_request:
+    paths:
+      - ".github/workflows/ios-testflight.yml"
+
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  segredos:
+    runs-on: ubuntu-latest
+    outputs:
+      prontos: ${{ steps.c.outputs.prontos }}
+    steps:
+      - id: c
+        env:
+          A: ${{ secrets.ASC_KEY_ID }}
+          B: ${{ secrets.ASC_ISSUER_ID }}
+          C: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          D: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          faltam=""
+          [ -n "$A" ] || faltam="$faltam ASC_KEY_ID"
+          [ -n "$B" ] || faltam="$faltam ASC_ISSUER_ID"
+          [ -n "$C" ] || faltam="$faltam ASC_KEY_P8_BASE64"
+          [ -n "$D" ] || faltam="$faltam APPLE_TEAM_ID"
+          if [ -n "$faltam" ]; then
+            echo "::notice::TestFlight inerte — segredos ausentes:$faltam. Nada será enviado."
+            echo "prontos=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prontos=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  enviar:
+    needs: segredos
+    if: github.event_name == 'workflow_dispatch' && needs.segredos.outputs.prontos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Alinhar npm com o lockfile
+        run: npm install -g npm@11
+
+      - run: npm ci
+
+      - name: Xcode (o mais novo do runner) e exigência ≥ 26
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC/Contents/Developer"; fi
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$MAJOR" -lt 26 ]; then echo "::error::Xcode $MAJOR < 26"; exit 1; fi
+
+      - name: Bundle web offline (produção) + sync
+        run: |
+          npx vite build --mode capacitor
+          npx cap sync ios
+        env:
+          VITE_RELEASE_CHANNEL: production
+
+      - name: Chave da API (só no disco temporário do runner)
+        env:
+          P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          KID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          echo "$P8" | base64 --decode > "$RUNNER_TEMP/asc/AuthKey_$KID.p8"
+          chmod 600 "$RUNNER_TEMP/asc/AuthKey_$KID.p8"
+
+      - name: Número do build
+        id: bn
+        run: |
+          N="${{ github.event.inputs.build_number }}"
+          [ -n "$N" ] || N=$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gradle)
+          echo "n=$N" >> "$GITHUB_OUTPUT"
+          echo "CFBundleVersion = $N"
+
+      - name: Arquivar (assinatura automática)
+        working-directory: ios/App
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ steps.bn.outputs.n }}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_$KID.p8" \
+            -authenticationKeyID "$KID" -authenticationKeyIssuerID "$ISS" \
+            archive | tail -40
+          test "${PIPESTATUS[0]}" = 0
+
+      - name: Exportar e enviar ao App Store Connect (TestFlight)
+        env:
+          KID: ${{ secrets.ASC_KEY_ID }}
+          ISS: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_$KID.p8" \
+            -authenticationKeyID "$KID" -authenticationKeyIssuerID "$ISS" | tail -40
+          test "${PIPESTATUS[0]}" = 0
+
+      - name: Apagar a chave
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"
