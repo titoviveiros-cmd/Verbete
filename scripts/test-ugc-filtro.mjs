@@ -36,6 +36,20 @@ for (const [text, expected] of UGC_CASES) {
   check(`ugc_text_issue ${JSON.stringify(text)} → ${expected}`, got === expected, `veio ${got}`);
 }
 
+// 20/11/2026: o rollback no fim desta suíte derruba gatilhos de 5 tabelas DENTRO da transação
+// (lock exclusivo); um job do pg_cron mexendo nessas tabelas no mesmo minuto dava "deadlock
+// detected" (CI da master de 20/11, 2 vezes). Só no banco LOCAL de teste: pausa os jobs na suíte.
+let pausados = [];
+if (!ssl) {
+  try {
+    pausados = (
+      await db.query("UPDATE cron.job SET active = false WHERE active RETURNING jobid")
+    ).rows.map((r) => r.jobid);
+  } catch {
+    /* sem pg_cron: nada a pausar */
+  }
+}
+
 await db.query("BEGIN");
 try {
   const tag = Math.random().toString(36).slice(2, 7);
@@ -264,6 +278,10 @@ try {
   check("suíte rodou até o fim", false, e.message);
 } finally {
   await db.query("ROLLBACK").catch(() => {});
+  if (pausados.length)
+    await db
+      .query("UPDATE cron.job SET active = true WHERE jobid = ANY($1)", [pausados])
+      .catch(() => {});
   await db.end();
 }
 console.log(`\n${total - fails}/${total} verificações OK`);
