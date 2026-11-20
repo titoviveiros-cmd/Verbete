@@ -294,7 +294,10 @@ console.log("\n— Assinar ANTES de entrar (jogador otimista): recusado e liga s
     states.push(s);
     if (s === "SUBSCRIBED" && !subscribedAt) subscribedAt = Date.now();
   });
-  for (let i = 0; i < 20 && !states.includes("CHANNEL_ERROR"); i++) await sleep(250);
+  // A recusa do canal privado chega ~5,0 s depois do pedido (medido no CI: 5,005 s em todas as
+  // recusas da suíte). Esperar só 5 s (20 × 250 ms) fazia o resultado depender de milissegundos.
+  // Mesma janela do subscribe() acima (12 s); a asserção não muda.
+  for (let i = 0; i < 48 && !states.includes("CHANNEL_ERROR"); i++) await sleep(250);
   const deniedFirst = states.includes("CHANNEL_ERROR") && !subscribedAt;
   const j = await J.c.rpc("rejoin_room", { p_code: room.code, p_player_id: `pf_j_${tag}`, p_nickname: "Jade", p_avatar: "j", p_color: "#555" });
   const t0 = Date.now();
