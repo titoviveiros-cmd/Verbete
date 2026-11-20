@@ -16,6 +16,7 @@ import { expectOk } from "@/lib/server-fn-transport";
 import { AvatarGrid } from "@/components/AvatarGrid";
 import { setStored } from "@/lib/player-id";
 import { TermsConsent } from "@/components/TermsConsent";
+import { AchievementGrid } from "@/components/AchievementGrid";
 import { useTermsGate } from "@/hooks/use-terms-gate";
 import { assertTermsAccepted } from "@/lib/terms-consent";
 import { nicknameIssueMessage } from "@/lib/text-filter";
@@ -396,26 +397,7 @@ function ProfilePage() {
           ({unlocked.size}/{achievements.length})
         </span>
       </h2>
-      <div className="grid grid-cols-5 gap-2">
-        {achievements.map((a) => {
-          const got = unlocked.has(a.code);
-          return (
-            <div
-              key={a.code}
-              title={`${a.name} — ${a.description}`}
-              className={
-                "sticker py-2 text-center transition " +
-                (got ? "" : "opacity-30 grayscale")
-              }
-            >
-              <div className="text-2xl">{a.emoji}</div>
-              <div className="text-[9px] font-display leading-tight mt-1 truncate">
-                {a.name}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <AchievementGrid achievements={achievements} unlocked={unlocked} />
 
       <h2 className="font-display text-lg mt-2">Últimas partidas</h2>
       {history.length === 0 ? (
