@@ -26,13 +26,31 @@ import {
   truncatedTexts,
 } from "../../e2e/visual/occlusion";
 import { roomBackendSemIa } from "./store-fixtures-sem-ia";
+import { FONT_FILES, fontBytes, fontFaceCss } from "./local-fonts.mjs";
 
 const RAW = resolve(process.cwd(), "resources/store/play-2.1.6/_raw");
 mkdirSync(RAW, { recursive: true });
 
+// Requisições a hosts externos tentadas pela página (bloqueadas): tem de terminar vazia.
+const externos: string[] = [];
+const FONTES_LOCAIS = "https://fonts.gstatic.com/local/";
+
 async function prepare(page: Page, storage: Record<string, string>) {
-  // Trava de segurança: nada pode chegar a um Supabase de verdade.
-  await page.route(/supabase\.co/, (r) => r.abort());
+  // Trava de rede (21/11/2026): só localhost/127.0.0.1 (app + Supabase simulado) sai do
+  // navegador. As fontes do Google viram arquivos LOCAIS (scripts/store/fonts, OFL);
+  // qualquer outro host — inclusive um Supabase de verdade — é abortado e registrado.
+  // Registrada depois do mock: para hosts locais devolve a vez (fallback) aos handlers dele.
+  externos.length = 0;
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (["localhost", "127.0.0.1"].includes(url.hostname)) return route.fallback();
+    if (url.hostname === "fonts.googleapis.com")
+      return route.fulfill({ status: 200, contentType: "text/css", body: fontFaceCss(FONTES_LOCAIS) });
+    if (url.href.startsWith(FONTES_LOCAIS) && FONT_FILES.includes(url.pathname.split("/").pop()!))
+      return route.fulfill({ status: 200, contentType: "font/woff2", body: fontBytes(url.pathname.split("/").pop()!) });
+    externos.push(url.origin);
+    return route.abort();
+  });
   await page.addInitScript(
     (entries) => {
       for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
@@ -329,6 +347,15 @@ for (const s of SHOTS) {
     page.on("pageerror", (e) => errors.push(e.message));
     const log = await s.run(page);
     await page.evaluate(() => document.fonts.ready);
+    expect(
+      await page.evaluate(() =>
+        ["Fredoka", "Nunito"].map((fam) =>
+          [...document.fonts].some((f) => f.family.replace(/['"]/g, "") === fam && f.status === "loaded"),
+        ),
+      ),
+      "fontes locais Fredoka/Nunito carregadas",
+    ).toEqual([true, true]);
+    expect(externos, "requisição a host externo").toEqual([]);
     if (!s.file.startsWith("01-blefe"))
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
     await page.waitForTimeout(600);

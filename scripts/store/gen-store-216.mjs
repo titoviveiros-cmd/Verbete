@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { readPng, stats, writeRgbPng } from "./png-tools.mjs";
+import { fontFaceCss } from "./local-fonts.mjs";
 
 const ROOT = process.cwd();
 const RAW = resolve(ROOT, "resources/store/play-2.1.6/_raw");
@@ -22,7 +23,8 @@ const C = {
   creme: "#fbf3e3", tinta: "#241640", tintaSuave: "#5b4b7d", magenta: "#d61f74",
   roxo: "#6d28d9", turquesa: "#0b7166", ouro: "#b07d0e",
 };
-const FONTS = `<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">`;
+// Fontes LOCAIS embutidas (data:), sem Google Fonts — ver local-fonts.mjs (21/11/2026).
+const FONTS = `<style>${fontFaceCss()}</style>`;
 const page = (w, h, body, bg = C.creme) => `<!doctype html><html><head><meta charset="utf-8">${FONTS}
 <style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:${w}px;height:${h}px;overflow:hidden;background:${bg}}
 body{position:relative;font-family:'Nunito',sans-serif}</style></head><body>${body}</body></html>`;
@@ -60,14 +62,22 @@ function shotHtml(title, sub, accent, dataUri) {
 const browser = await chromium.launch();
 async function render(html, w, h, file) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+  // Trava de rede: a página só usa data: (capturas e fontes embutidas). Qualquer http(s) = erro.
+  const externos = [];
+  await ctx.route("**/*", (r) => (externos.push(r.request().url().slice(0, 80)), r.abort()));
   const pg = await ctx.newPage();
   await pg.setContent(html, { waitUntil: "networkidle" });
   await pg.evaluate(() => document.fonts.ready);
-  const fontes = await pg.evaluate(() => [document.fonts.check("700 66px Fredoka"), document.fonts.check("800 34px Nunito")]);
-  if (!fontes.every(Boolean)) throw new Error(`fontes da legenda não carregaram: ${fontes}`);
+  const fontes = await pg.evaluate(() =>
+    ["Fredoka", "Nunito"].map((fam) =>
+      [...document.fonts].some((f) => f.family.replace(/['"]/g, "") === fam && f.status === "loaded"),
+    ),
+  );
+  if (!fontes.every(Boolean)) throw new Error(`fontes locais da legenda não carregaram: ${fontes}`);
   await pg.waitForTimeout(300);
   await pg.screenshot({ path: file });
   await ctx.close();
+  if (externos.length) throw new Error(`requisição externa na renderização: ${externos}`);
 }
 const uri = (f) => `data:image/png;base64,${readFileSync(f).toString("base64")}`;
 
