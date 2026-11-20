@@ -17,7 +17,8 @@ import { randomUUID } from "node:crypto";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIG = readFileSync(join(ROOT, "supabase/migrations/20261105150000_daily_guard_v2.sql"), "utf8");
 const ROLLBACK = readFileSync(join(ROOT, "supabase/rollback/daily_guard_v2.sql"), "utf8");
-const SCORING_SRC = readFileSync(join(ROOT, "supabase/migrations/20260608161016_4a498957-8605-4dfc-a9cd-494245ccb841.sql"), "utf8");
+// corpo vigente da pontuação (sequência em dias, Brasília): 20261122120000_conquistas_regras
+const SCORING_SRC = readFileSync(join(ROOT, "supabase/migrations/20261122120000_conquistas_regras.sql"), "utf8");
 
 const args = process.argv.slice(2);
 const pglitePath = args.includes("--pglite") ? args[args.indexOf("--pglite") + 1] : null;
@@ -457,10 +458,13 @@ await t("12. pontuação, bônus e streak IDÊNTICOS ao submit_daily_attempt_sco
   const via = await novoUsuario();
   const direto = await novoUsuario();
   for (const u of [via, direto])
-    await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, total_score)
-                VALUES ($1, 6, 6, date_trunc('hour', now()) - interval '1 hour', 500)
+    // jogou no DIA anterior (Brasília): a sequência conta dias desde 20261122120000
+    await db.q(`INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, last_played_date, total_score)
+                VALUES ($1, 6, 6, date_trunc('hour', now()) - interval '1 day',
+                  (date_trunc('hour', now()) AT TIME ZONE 'America/Sao_Paulo')::date - 1, 500)
                 ON CONFLICT (user_id) DO UPDATE SET current_streak = 6, best_streak = 6,
-                  last_played_hour = EXCLUDED.last_played_hour, total_score = 500`, [u]);
+                  last_played_hour = EXCLUDED.last_played_hour, last_played_date = EXCLUDED.last_played_date,
+                  total_score = 500`, [u]);
   const c = await claim(via);
   const r1 = (await finishOk(via, c.claim_id, HORA, 87, "mesmo palpite", 33)).result;
   const r2 = (await db.q(`SELECT public.submit_daily_attempt_scored($1, 'mesmo palpite', 33, 87) AS r`, [direto]))[0].r;

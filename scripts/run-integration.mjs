@@ -44,6 +44,7 @@ const SUITES = [
   "test-rollback.mjs",
   "test-denuncia-recurso.mjs", // ECA Digital: decisão fundamentada, recurso 1 por denúncia, tabela fechada ao cliente (11/11/2026)
   "test-probe-local.mjs",
+  "test-conquistas-corrida.mjs", // conquistas: corrida real entre conexões (1 concessão, 0 erros, controle sem ON CONFLICT) + rollback ensaiado em transação (19/11/2026)
 ];
 
 const results = [];
