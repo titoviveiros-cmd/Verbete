@@ -167,7 +167,17 @@ try {
 console.log("\n— Ferramentas do runbook de produção (mesmos comandos que o dono vai rodar)");
 const node = (args) =>
   spawnSync(process.execPath, args, { encoding: "utf8", env: process.env });
-let t = node(["scripts/sql-apply.mjs", "supabase/rollback/m1_compat_old_client.sql"]);
+// 21/11/2026: no banco LOCAL do CI o tick do pg_cron (todo minuto) às vezes segura um lock na
+// virada do minuto e o ensaio sai por "lock timeout" (PR #86, 22:09:02 — o mesmo instante do
+// deadlock do test-ugc-filtro). A ferramenta fez o certo (não gravou nada); o teste repete o
+// ENSAIO até 3 vezes só nesse caso. Qualquer outro erro reprova na 1ª.
+let t;
+for (let tentativa = 1; tentativa <= 3; tentativa++) {
+  t = node(["scripts/sql-apply.mjs", "supabase/rollback/m1_compat_old_client.sql"]);
+  if (t.status === 0 || !/lock timeout/i.test(`${t.stdout}${t.stderr}`)) break;
+  console.log(`ensaio do sql-apply: lock timeout (tentativa ${tentativa}) — repete em 5 s`);
+  await new Promise((r) => setTimeout(r, 5000));
+}
 const policyAfterRehearsal = await one(
   `SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'players' AND policyname = 'players public insert'`,
 );
