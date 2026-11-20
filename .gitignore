@@ -3,7 +3,8 @@ dist/
 .output/
 .vinxi/
 .wrangler/
-ios/
+# iOS: o projeto nativo É versionado desde 19/11/2026 (como o Android);
+# artefatos e cópias geradas ficam de fora por ios/.gitignore.
 .env
 .env.local
 *.log
