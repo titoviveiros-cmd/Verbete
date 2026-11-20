@@ -103,3 +103,34 @@ describe("no navegador (não nativo)", () => {
     expect(app.getLaunchUrl).not.toHaveBeenCalled();
   });
 });
+
+// GHSA-rvm3-566m-v7fv (20/11/2026): App Link só abre rota do jogo. Caminho
+// interno do Capacitor (proxy HTTP / arquivos) nunca vira navegação de documento.
+describe("App Link só para rotas do jogo", () => {
+  it.each([
+    "https://jogo.verbete.workers.dev/_capacitor_http_interceptor_?u=https%3A%2F%2Fexemplo.invalido%2Fx.html",
+    "https://jogo.verbete.workers.dev/_capacitor_https_interceptor_?u=x",
+    "https://jogo.verbete.workers.dev/_capacitor_file_/data/x.html",
+    "https://jogo.verbete.workers.dev/%5Fcapacitor_http_interceptor_?u=x",
+    "https://jogo.verbete.workers.dev/room/1234/../../_capacitor_http_interceptor_?u=x",
+    "https://jogo.verbete.workers.dev/admin.words",
+    "http://jogo.verbete.workers.dev/?join=1234",
+  ])("recusa %s", async (url) => {
+    app.getLaunchUrl.mockResolvedValue({ url });
+    await freshInstall();
+    expect(loc.href).toBe("https://localhost/");
+    listeners.appUrlOpen?.({ url });
+    expect(loc.href).toBe("https://localhost/");
+  });
+
+  it.each([
+    ["https://jogo.verbete.workers.dev/?join=1234", "/?join=1234"],
+    ["https://jogo.verbete.workers.dev/room/4827", "/room/4827"],
+    ["https://jogo.verbete.workers.dev/r/abc_DEF-123", "/r/abc_DEF-123"],
+    ["https://jogo.verbete.workers.dev/daily", "/daily"],
+    ["https://jogo.verbete.workers.dev/delete-account", "/delete-account"],
+  ])("abre %s", async (url, path) => {
+    const { appPathFromLink } = await freshInstall();
+    expect(appPathFromLink(url)).toBe(path);
+  });
+});
