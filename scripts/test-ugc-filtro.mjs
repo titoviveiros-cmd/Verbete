@@ -278,10 +278,18 @@ try {
   check("suíte rodou até o fim", false, e.message);
 } finally {
   await db.query("ROLLBACK").catch(() => {});
-  if (pausados.length)
-    await db
-      .query("UPDATE cron.job SET active = true WHERE jobid = ANY($1)", [pausados])
-      .catch(() => {});
+  // Restaura EXATAMENTE os jobs pausados e confere; falha aqui reprova a suíte (não silencia).
+  if (pausados.length) {
+    try {
+      await db.query("UPDATE cron.job SET active = true WHERE jobid = ANY($1)", [pausados]);
+      const ativos = (
+        await db.query("SELECT jobid FROM cron.job WHERE active AND jobid = ANY($1)", [pausados])
+      ).rows.length;
+      check("pg_cron restaurado (os mesmos jobs ativos de antes)", ativos === pausados.length, `${ativos}/${pausados.length}`);
+    } catch (e) {
+      check("pg_cron restaurado (os mesmos jobs ativos de antes)", false, e.message);
+    }
+  }
   await db.end();
 }
 console.log(`\n${total - fails}/${total} verificações OK`);

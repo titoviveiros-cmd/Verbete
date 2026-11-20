@@ -74,7 +74,18 @@ jobs:
       - name: Instala dependências
         run: npm ci
       - name: Sobe Supabase local (aplica migrations do zero)
-        run: npx supabase start
+        # 20/11/2026: numa VM nova o 1º start falhou com "failed to bind host port
+        # 0.0.0.0:54322: address already in use" (run 44790100877). Até 3 tentativas,
+        # mostrando quem ocupa a porta e limpando entre elas.
+        run: |
+          for i in 1 2 3; do
+            if npx supabase start; then exit 0; fi
+            echo "::warning::supabase start falhou (tentativa $i); portas 5432x:"
+            sudo ss -ltnp | grep ':5432[0-9]' || true
+            npx supabase stop --no-backup || true
+            sleep 15
+          done
+          exit 1
       - name: Suíte de integração (identidade + rodada E2E)
         run: |
           STATUS=$(npx supabase status -o env)
