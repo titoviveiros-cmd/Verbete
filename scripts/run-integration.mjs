@@ -48,7 +48,7 @@ const SUITES = [
 
 // Nenhuma suíte pode deixar o pg_cron do banco LOCAL diferente do início (20/11/2026:
 // test-ugc-filtro pausa os jobs durante a suíte). Foto antes, conferência no fim.
-// Compara nome, agenda, banco, usuário, estado e comando de TODOS os jobs (21/11: antes só os
+// Compara nome, agenda, banco, usuário, estado e comando de TODOS os jobs (20/11: antes só os
 // ativos), não o jobid: suítes que reaplicam migration/rollback
 // recriam jobs com o mesmo nome e id novo (CI de 20/11: job 6 → 12, mesmo job).
 const localDb =
