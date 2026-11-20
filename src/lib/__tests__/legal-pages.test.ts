@@ -6,6 +6,7 @@ import {
   ANDROID_PACKAGE,
   CONTACT_EMAIL,
   DELETE_ACCOUNT_PATH,
+  NO_AI_LEGAL,
   contactMailto,
 } from "@/lib/legal";
 import { TERMS_VERSION } from "@/lib/terms-record";
@@ -279,21 +280,25 @@ describe("provedor de IA — ponto único (AI_PROVIDER)", () => {
       mistral: "Mistral AI",
       "openai-compatible": "provedor genérico (sem texto legal)",
     };
-    expect(AI_PROVIDERS_DISCLOSED.map((id) => NOME[id])).toEqual([
-      AI_PROVIDER.name,
-    ]);
+    // Modo sem IA externa (NO_AI_LEGAL): nenhum provedor com texto legal.
+    expect(AI_PROVIDERS_DISCLOSED.map((id) => NOME[id])).toEqual(
+      NO_AI_LEGAL ? [] : [AI_PROVIDER.name],
+    );
   });
 
   it("o texto acompanha o provedor que o código chama", () => {
+    // Sem IA externa o adaptador do Gemini fica no código, DORMENTE: a lista
+    // vazia acima (AI_PROVIDERS_DISCLOSED) suspende qualquer chamada.
     expect(providerInCode()).toEqual([AI_PROVIDER.name]);
   });
 
   it("trocar o provedor exige revisar os Termos (TERMS_VERSION)", () => {
     // Os Termos citam AI_PROVIDER: novo provedor = novo texto aceito. Ao
     // trocar, mudar a data de /terms (TERMS_VERSION) e este par juntos.
+    // Sem IA externa: a versão é a dos Termos sem IA (legal-sem-ia.test.tsx).
     expect({ provider: AI_PROVIDER.name, terms: TERMS_VERSION }).toEqual({
       provider: "Google Gemini",
-      terms: "2026-10-27",
+      terms: NO_AI_LEGAL ? NO_AI_LEGAL.termsVersion : "2026-10-27",
     });
   });
 

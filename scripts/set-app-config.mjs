@@ -4,7 +4,11 @@
 // valor validado; mostra antes/depois com URLs mascaradas (webhook é segredo).
 // Uso: DB_URL=... node scripts/set-app-config.mjs <chave> <valor>
 //      DB_URL=... node scripts/set-app-config.mjs <chave> --delete
+// Trava dos 168 (scripts/lib/sem-ia-prontidao.mjs): ai_mode=suspenso exige
+// daily_mode='escolha' + ≥ 168 aprovados jogáveis; daily_mode=escolha exige
+// ≥ 168. Falha FECHADA. Contenção de emergência: ai_mode suspenso --emergencia.
 import pg from "pg";
+import { travaAppConfig } from "./lib/sem-ia-prontidao.mjs";
 
 const RULES = {
   ops_alert_webhook_url: (v) => /^https:\/\/\S+$/.test(v),
@@ -19,8 +23,9 @@ const RULES = {
   daily_mode: (v) => v === "juiz" || v === "escolha" || v === "pausa",
 };
 
-const [key, value] = process.argv.slice(2);
+const [key, value, ...flags] = process.argv.slice(2);
 const del = value === "--delete";
+const emergencia = flags.includes("--emergencia");
 if (!process.env.DB_URL || !key || value === undefined) {
   console.error("uso: DB_URL=... node scripts/set-app-config.mjs <chave> <valor|--delete>");
   process.exit(2);
@@ -40,8 +45,37 @@ const db = new pg.Client({
   connectionString: process.env.DB_URL,
   ssl: /supabase\.co/.test(process.env.DB_URL) ? { rejectUnauthorized: false } : false,
 });
+// Trava dos 168 ANTES de qualquer escrita (falha fechada; só a gravação de
+// valor passa por ela — --delete de ai_mode/daily_mode é rollback).
+async function travaOk() {
+  if (del) return true;
+  const trava = await travaAppConfig({ key, value, emergencia, query: (sql) => db.query(sql) });
+  if (trava.prontidao) {
+    console.log(
+      `prontidão: aprovados jogáveis=${trava.prontidao.aprovadoJogavel ?? "?"} · daily_mode=${trava.prontidao.dailyMode ?? "?"}`,
+    );
+  }
+  if (trava.aviso) console.warn(`⚠️  ${trava.aviso}`);
+  if (trava.ok) return true;
+  console.error(
+    `⛔ ${trava.erro}\nNada foi gravado.` +
+      (key === "ai_mode" ? " Contenção de emergência: ai_mode suspenso --emergencia" : ""),
+  );
+  return false;
+}
+
 await db.connect();
 try {
+  if (!(await travaOk())) {
+    process.exitCode = 3;
+  } else {
+    await gravar();
+  }
+} finally {
+  await db.end();
+}
+
+async function gravar() {
   const before = (await db.query(`SELECT value FROM public.app_config WHERE key = $1`, [key])).rows[0]?.value;
   if (del) {
     await db.query(`DELETE FROM public.app_config WHERE key = $1`, [key]);
@@ -54,6 +88,4 @@ try {
   }
   const after = (await db.query(`SELECT value FROM public.app_config WHERE key = $1`, [key])).rows[0]?.value;
   console.log(`✅ ${key}: ${mask(before)} → ${mask(after)}`);
-} finally {
-  await db.end();
 }

@@ -2,6 +2,14 @@
 // docs/provedor-ia.md). Só fetch SIMULADO: nenhuma chamada real a provedor.
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Estes testes cobrem o adaptador/contenção com a IA externa LIGADA. O corte
+// do modo sem IA (EXTERNAL_AI_MODE = "desligada") está em
+// src/components/__tests__/legal-sem-ia.test.tsx.
+vi.mock("../../../supabase/functions/_shared/external-ai.ts", () => ({
+  EXTERNAL_AI_MODE: "ligada",
+  isExternalAiOff: (m?: string) => m === "desligada",
+}));
 import {
   callChat,
   chatBody,
