@@ -191,6 +191,22 @@ console.log("\n— choose_word");
       short(r),
     );
   }
+  // P1 21/11: palavra não publicada (rascunho) não vira palavra da rodada
+  const draft = (
+    await db.query(
+      `INSERT INTO public.words (word, meaning, rarity, status, review_notes)
+         VALUES ('zzrascunho' || floor(random() * 1e9)::text, 'significado em revisão', 3, 'draft', 'nota interna')
+       RETURNING id`,
+    )
+  ).rows[0].id;
+  const rd = await call(C, "choose_word", { ...args, p_word_id: draft });
+  check(
+    "coordenador com palavra em rascunho → word_unavailable, sala intacta",
+    rd?.reason === "word_unavailable" &&
+      (await st(rid)).status === "choosing" &&
+      (await st(rid)).current_word_id === null,
+    short(rd),
+  );
   const r = await call(C, "choose_word", args);
   check(
     "coordenador escolhe → ok",
@@ -219,6 +235,17 @@ await db.query(
   `INSERT INTO public.definitions (room_id, round, player_id, text) VALUES ($1, 1, $2, 'peixe pequeno de rio')`,
   [rid, P.B],
 );
+{
+  // P1 21/11: o id da escrita, comparado com as cédulas da votação, entregava a verdade
+  const sync = await call(G, "get_round_sync", { p_room_id: rid });
+  const prog = Array.isArray(sync?.definitions) ? sync.definitions : [];
+  check(
+    "get_round_sync na escrita: progresso por jogador, SEM id de definição",
+    prog.length === 3 &&
+      prog.every((d) => d.id === null && d.player_id && d.text === ""),
+    short(prog.map((d) => ({ id: d.id, p: !!d.player_id }))),
+  );
+}
 {
   const nope = await call(G, "start_shuffling", { p_room_id: GHOST });
   for (const who of [anon, O, K]) {
@@ -300,6 +327,15 @@ await db.query(
       (await st(rid)).status === "reveal" &&
       sc.score === 4,
     `erros=${errs.length} rounds=${n.n} host=${sc.score} ${errs[0]?.error?.message ?? ""}`,
+  );
+}
+{
+  // P1 21/11: a revelação mostra o verbete, mas não a anotação interna da revisão
+  const wr = await call(G, "get_word_reveal", { p_room_id: rid });
+  check(
+    "get_word_reveal na revelação: verbete sim, review_notes não",
+    !!wr?.meaning && !("review_notes" in (wr ?? {})),
+    short(Object.keys(wr ?? {})),
   );
 }
 

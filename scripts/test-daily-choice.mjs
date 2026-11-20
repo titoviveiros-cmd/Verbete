@@ -16,6 +16,8 @@ import { createHash, randomUUID } from "node:crypto";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const rd = (p) => readFileSync(join(ROOT, p), "utf8");
 const D1 = rd("supabase/migrations/20261108120000_diario_d1_escolha.sql");
+// Corpos vigentes do Diário (sequência em dias, Brasília): 20261119120000_conquistas_regras.
+const CONQ = rd("supabase/migrations/20261119120000_conquistas_regras.sql");
 const D1_ROLLBACK = rd("supabase/rollback/diario_d1_escolha.sql");
 
 const args = process.argv.slice(2);
@@ -99,8 +101,7 @@ function fnBlock(src, start, endMark) {
 let md5Antes = null;
 let estadoAntes = null;
 if (!modePg) {
-  const SCORING = fnBlock(rd("supabase/migrations/20260608161016_4a498957-8605-4dfc-a9cd-494245ccb841.sql"),
-    "CREATE OR REPLACE FUNCTION public.submit_daily_attempt_scored", "$function$;");
+  const SCORING = fnBlock(CONQ, "CREATE OR REPLACE FUNCTION public.submit_daily_attempt_scored", "$function$;");
   const CHALLENGE = fnBlock(rd("supabase/migrations/20260520092654_55294501-70f9-44a5-bf55-59c2cc5ebad8.sql"),
     "CREATE OR REPLACE FUNCTION public.get_or_create_daily_challenge", "$function$;");
   const REVIEW = fnBlock(rd("supabase/migrations/20260520093449_2ae8b890-935f-4b0c-9f1d-6bc2b62f8f1b.sql"),
@@ -170,6 +171,8 @@ if (!modePg) {
   estadoAntes = await db.q(`SELECT md5(string_agg(t::text, '|' ORDER BY t::text)) AS m FROM (
       SELECT user_id, current_streak, best_streak, last_played_hour, total_score FROM public.user_stats) t`);
   await db.exec(D1);
+  // no CI esta migration vem DEPOIS da D1 e substitui a participação (sequência em dias)
+  await db.exec(fnBlock(CONQ, "CREATE OR REPLACE FUNCTION public.daily_record_participation", "END $$;"));
 }
 
 console.log(`Diário D1 (modo escolha) — modo ${modePg ? "pg (Postgres real)" : "PGlite (offline, 1 conexão)"}`);
@@ -195,13 +198,16 @@ const novoUsuario = async () => {
  * existe (o gatilho handle_new_user a cria junto com o usuário), então é upsert: um INSERT
  * puro colidia com user_stats_pkey (CI 42500287456). Não toca nenhuma função do D1.
  */
-const definirStats = (u, { streak = 0, best = 0, horasAtras = null, total = 0 } = {}) =>
+// diasAtras: último dia jogado no calendário de Brasília (a sequência conta DIAS desde 20261119120000).
+const definirStats = (u, { streak = 0, best = 0, horasAtras = null, diasAtras = null, total = 0 } = {}) =>
   db.q(
-    `INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, total_score)
-     VALUES ($1, $2, $3, CASE WHEN $4::int IS NULL THEN NULL ELSE $5::timestamptz - make_interval(hours => $4::int) END, $6)
+    `INSERT INTO public.user_stats (user_id, current_streak, best_streak, last_played_hour, last_played_date, total_score)
+     VALUES ($1, $2, $3, CASE WHEN $4::int IS NULL THEN NULL ELSE $5::timestamptz - make_interval(hours => $4::int) END,
+       CASE WHEN $7::int IS NULL THEN NULL ELSE ($5::timestamptz AT TIME ZONE 'America/Sao_Paulo')::date - $7::int END, $6)
      ON CONFLICT (user_id) DO UPDATE SET current_streak = EXCLUDED.current_streak, best_streak = EXCLUDED.best_streak,
-       last_played_hour = EXCLUDED.last_played_hour, total_score = EXCLUDED.total_score, updated_at = now()`,
-    [u, streak, best, horasAtras, HORA, total],
+       last_played_hour = EXCLUDED.last_played_hour, last_played_date = EXCLUDED.last_played_date,
+       total_score = EXCLUDED.total_score, updated_at = now()`,
+    [u, streak, best, horasAtras, HORA, total, diasAtras],
   );
 const setModo = (m) =>
   db.q(`INSERT INTO public.app_config (key, value) VALUES ('daily_mode', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [m]);
@@ -277,9 +283,11 @@ try {
       eq(depois, estadoAntes, "user_stats mudou com a migration");
       eq((await db.q(`SELECT mode, score FROM public.daily_attempts WHERE guess = 'palpite'`))[0], { mode: "juiz", score: 77 });
     } else {
-      // banco do CI: a pontuação do juiz é a MESMA da produção (md5 conferido em 08/11/2026)
+      // banco do CI: a pontuação do juiz é a MESMA da produção. md5 conferido em 08/11/2026 (e41b8c87);
+      // 20261119120000_conquistas_regras muda SÓ a sequência (horas → dias) e torna as concessões
+      // idempotentes — pontuação intocada (scripts/test-conquistas-regras.mjs) → corpo novo a6242f5b.
       const m = (await db.q(`SELECT md5(prosrc) AS m FROM pg_proc WHERE proname = 'submit_daily_attempt_scored'`))[0].m;
-      ok(m.startsWith("e41b8c87"), `md5 ${m.slice(0, 8)} ≠ e41b8c87`);
+      ok(m.startsWith("a6242f5b"), `md5 ${m.slice(0, 8)} ≠ a6242f5b`);
     }
     eq((await db.q(`SELECT public.daily_mode() AS m`))[0].m, modoAntes ?? "juiz");
   });
@@ -420,7 +428,7 @@ try {
 
   await t("11/17. erro = 0 pontos e CONTA como participação (sequência +1)", async () => {
     const u = await novoUsuario();
-    await definirStats(u, { streak: 4, best: 4, horasAtras: 1, total: 100 });
+    await definirStats(u, { streak: 4, best: 4, diasAtras: 1, total: 100 });
     await start(u);
     const s = await sessao(u);
     const r = await finish(u, (s.correct_pos + 1) % 4);
@@ -604,23 +612,23 @@ try {
   });
 
   await t("10/13. sequência e conquistas com MISTURA de modos (juiz → escolha → juiz)", async () => {
-    // juiz na hora anterior → escolha agora: +1, streak_3
+    // juiz no dia anterior (Brasília) → escolha agora: +1, streak_3
     const a = await novoUsuario();
-    await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, mode) VALUES ($1, ($2::timestamptz - interval '1 hour')::date, $2::timestamptz - interval '1 hour', 'p', 0, 'juiz')`, [a, HORA]);
-    await definirStats(a, { streak: 2, best: 2, horasAtras: 1 });
+    await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, mode) VALUES ($1, ($2::timestamptz - interval '1 day')::date, $2::timestamptz - interval '1 day', 'p', 0, 'juiz')`, [a, HORA]);
+    await definirStats(a, { streak: 2, best: 2, diasAtras: 1 });
     await db.q(`INSERT INTO public.user_achievements (user_id, achievement_code) VALUES ($1, 'first_daily')`, [a]);
     await start(a);
     const ra = await finish(a, (await sessao(a)).correct_pos);
     eq([ra.result.current_streak, ra.result.unlocked], [3, ["streak_3"]]);
-    // escolha na hora anterior → juiz agora: +1
+    // escolha no dia anterior → juiz agora: +1
     const b = await novoUsuario();
-    await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, mode) VALUES ($1, ($2::timestamptz - interval '1 hour')::date, $2::timestamptz - interval '1 hour', 'p', 10, 'escolha')`, [b, HORA]);
-    await definirStats(b, { streak: 6, best: 6, horasAtras: 1 });
+    await db.q(`INSERT INTO public.daily_attempts (user_id, challenge_date, challenge_hour, guess, score, mode) VALUES ($1, ($2::timestamptz - interval '1 day')::date, $2::timestamptz - interval '1 day', 'p', 10, 'escolha')`, [b, HORA]);
+    await definirStats(b, { streak: 6, best: 6, diasAtras: 1 });
     const rb = (await db.q(`SELECT public.submit_daily_attempt_scored($1, 'x', 10, 95) AS r`, [b]))[0].r;
     eq([rb.current_streak, rb.unlocked.sort()], [7, ["first_daily", "streak_3", "streak_7"]]);
-    // hora pulada → volta a 1
+    // dia pulado → volta a 1
     const c = await novoUsuario();
-    await definirStats(c, { streak: 9, best: 9, horasAtras: 3 });
+    await definirStats(c, { streak: 9, best: 9, diasAtras: 2 });
     await start(c);
     const rc = await finish(c, 0);
     eq([rc.result.current_streak, (await stats(c)).best_streak], [1, 9]);
