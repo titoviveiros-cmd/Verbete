@@ -40,9 +40,17 @@ for (const [text, expected] of UGC_CASES) {
 // (lock exclusivo); um job do pg_cron mexendo nessas tabelas no mesmo minuto dava "deadlock
 // detected" (CI da master de 20/11, 2 vezes). Só no banco LOCAL de teste: pausa os jobs na suíte.
 // A pausa é a 1ª camada; a 2ª (abaixo) é repetir o rollback num SAVEPOINT se der deadlock.
+// Só um banco LOCAL de verdade (host 127.0.0.1/localhost), nunca um remoto.
+const bancoLocal = !ssl && /@(127\.0\.0\.1|localhost)(:|\/)/.test(DB_URL ?? "");
+// Foto COMPLETA do pg_cron antes da pausa (todos os jobs, ativos ou não, com nome, agenda,
+// comando, banco, usuário, nó e estado): depois da restauração tem de ser idêntica.
+const FOTO_CRON =
+  "SELECT coalesce(json_agg(j ORDER BY j.jobid)::text, '[]') f FROM (SELECT jobid, jobname, schedule, command, database, username, nodename, nodeport, active FROM cron.job) j";
+let fotoCron = null;
 let pausados = [];
-if (!ssl) {
+if (bancoLocal) {
   try {
+    fotoCron = (await db.query(FOTO_CRON)).rows[0].f;
     const ativos = (await db.query("SELECT jobid FROM cron.job WHERE active ORDER BY jobid")).rows.map((r) => r.jobid);
     for (const id of ativos) {
       await db.query("SELECT cron.alter_job($1, active := false)", [id]);
@@ -305,6 +313,12 @@ try {
         await db.query("SELECT jobid FROM cron.job WHERE active AND jobid = ANY($1)", [pausados])
       ).rows.length;
       check("pg_cron restaurado (os mesmos jobs ativos de antes)", ativos === pausados.length, `${ativos}/${pausados.length}`);
+      const depois = (await db.query(FOTO_CRON)).rows[0].f;
+      check(
+        "pg_cron idêntico ao de antes (nome, agenda, comando, banco, usuário, nó e estado de TODOS os jobs)",
+        depois === fotoCron,
+        `antes ${fotoCron?.length} car., depois ${depois.length} car.`,
+      );
     } catch (e) {
       check("pg_cron restaurado (os mesmos jobs ativos de antes)", false, e.message);
     }
