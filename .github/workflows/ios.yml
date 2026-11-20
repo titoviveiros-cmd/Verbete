@@ -1,0 +1,137 @@
+name: iOS
+
+# Prontidão iOS (19/11/2026). A máquina de dev é Windows (sem Xcode); o runner
+# macOS tem. Repositório público → minutos de macOS sem custo.
+# - Sempre: bundle web offline → cap sync ios → conferência do Info.plist e do
+#   manifesto de privacidade → build SEM ASSINATURA para aparelho (iphoneos) e
+#   para o Simulador → abre o app no Simulador e tira uma captura.
+# - NÃO assina, NÃO envia ao App Store Connect: isso exige a conta Apple
+#   Developer do dono (certificado + perfil + chave da API) — ver
+#   docs/ios-prontidao.md.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "ios/**"
+      - "capacitor.config.ts"
+      - "src/**"
+      - "package*.json"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "capacitor.config.ts"
+      - "package*.json"
+      - "src/lib/login-providers.ts"
+      - "src/routes/login.tsx"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ios-build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Alinhar npm com o lockfile
+        run: npm install -g npm@11
+
+      - run: npm ci
+
+      # App Store exige Xcode 26+ / SDK iOS 26 desde 28/04/2026.
+      - name: Xcode (o mais novo do runner) e exigência ≥ 26
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC/Contents/Developer"; fi
+          xcodebuild -version
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$MAJOR" -lt 26 ]; then echo "::error::Xcode $MAJOR < 26 (App Store exige 26+)"; exit 1; fi
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Bundle web offline (modo capacitor)
+        run: npx vite build --mode capacitor
+        env:
+          VITE_RELEASE_CHANNEL: internal
+
+      - name: Capacitor sync
+        run: npx cap sync ios
+
+      - name: Conferir Info.plist e manifesto de privacidade
+        run: |
+          set -e
+          P=ios/App/App/Info.plist
+          M=ios/App/App/PrivacyInfo.xcprivacy
+          plutil -lint "$P" "$M"
+          test "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw "$P")" = "app.verbete.game"
+          test "$(plutil -extract ITSAppUsesNonExemptEncryption raw "$P")" = "false"
+          test "$(plutil -extract NSPrivacyTracking raw "$M")" = "false"
+          grep -q "TARGETED_DEVICE_FAMILY = 1;" ios/App/App.xcodeproj/project.pbxproj
+          # versão do iOS = versão do Android (fonte única: android/app/build.gradle)
+          VN=$(sed -nE 's/.*versionName "([^"]+)".*/\1/p' android/app/build.gradle)
+          VC=$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' android/app/build.gradle)
+          grep -q "MARKETING_VERSION = $VN;" ios/App/App.xcodeproj/project.pbxproj || { echo "::error::MARKETING_VERSION ≠ $VN"; exit 1; }
+          grep -q "CURRENT_PROJECT_VERSION = $VC;" ios/App/App.xcodeproj/project.pbxproj || { echo "::error::CURRENT_PROJECT_VERSION ≠ $VC"; exit 1; }
+
+      - name: Build para aparelho (sem assinatura)
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO build | tail -40
+          test "${PIPESTATUS[0]}" = 0
+
+      - name: Build para o Simulador
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO build | tail -40
+          test "${PIPESTATUS[0]}" = 0
+
+      - name: Conferir o pacote gerado
+        run: |
+          set -e
+          APP=ios/App/build/device/Build/Products/Release-iphoneos/App.app
+          test -f "$APP/PrivacyInfo.xcprivacy"
+          test -f "$APP/public/index.html"
+          plutil -p "$APP/Info.plist" | grep -E "CFBundleShortVersionString|CFBundleVersion|UIDeviceFamily|MinimumOSVersion|DTSDKName" -A2
+          # só iPhone
+          test "$(plutil -extract UIDeviceFamily json -o - "$APP/Info.plist")" = "[1]"
+          # sem server.url remoto (diretriz 2.5.2: o código vai no pacote)
+          ! grep -q '"server"' "$APP/capacitor.config.json"
+
+      - name: Abrir no Simulador e capturar a tela
+        run: |
+          set -e
+          UDID=$(xcrun simctl list devices available -j | node -e '
+            const d=JSON.parse(require("fs").readFileSync(0,"utf8")).devices;
+            const all=Object.entries(d).filter(([k])=>k.includes("iOS")).flatMap(([,v])=>v);
+            const pick=all.find(x=>/Pro Max/.test(x.name))||all.find(x=>/iPhone/.test(x.name));
+            if(!pick)process.exit(1);console.log(pick.udid);console.error(pick.name);')
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" ios/App/build/sim/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$UDID" app.verbete.game
+          sleep 25
+          # app ainda vivo depois de 25 s (não fechou na abertura)
+          xcrun simctl spawn "$UDID" launchctl list | grep -q "app.verbete.game"
+          mkdir -p ios-evidencias
+          xcrun simctl io "$UDID" screenshot ios-evidencias/home-simulador.png
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: verbete-ios-evidencias
+          path: ios-evidencias/
+          retention-days: 14
+          if-no-files-found: ignore
