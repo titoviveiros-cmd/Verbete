@@ -46,11 +46,47 @@ const SUITES = [
   "test-probe-local.mjs",
 ];
 
+// Nenhuma suíte pode deixar o pg_cron do banco LOCAL diferente do início (20/11/2026:
+// test-ugc-filtro pausa os jobs durante a suíte). Foto antes, conferência no fim.
+// Compara nome, agenda, banco, usuário, estado e comando de TODOS os jobs (20/11: antes só os
+// ativos), não o jobid: suítes que reaplicam migration/rollback
+// recriam jobs com o mesmo nome e id novo (CI de 20/11: job 6 → 12, mesmo job).
+const localDb =
+  process.env.DB_URL &&
+  !/supabase\.co/.test(process.env.DB_URL) &&
+  /@(127\.0\.0\.1|localhost)(:|\/)/.test(process.env.DB_URL);
+const cronAtivos = async () => {
+  const { default: pg } = await import("pg");
+  const c = new pg.Client({ connectionString: process.env.DB_URL });
+  await c.connect();
+  try {
+    return (
+      await c.query(
+        // Todos os jobs (ativos ou não): nome@agenda, banco/usuário, estado e md5 do comando.
+        "SELECT coalesce(string_agg(coalesce(jobname, '#' || jobid) || '@' || schedule || ' ' || database || '/' || username || ' ' || CASE WHEN active THEN 'ativo' ELSE 'inativo' END || ' cmd:' || left(md5(command), 8), ', ' ORDER BY coalesce(jobname, '#' || jobid)), '') j FROM cron.job",
+      )
+    ).rows[0].j;
+  } finally {
+    await c.end();
+  }
+};
+let cronAntes = null;
+if (localDb) cronAntes = await cronAtivos().catch(() => null);
+
 const results = [];
 for (const s of SUITES) {
   console.log(`\n━━━━━━━━ ${s} ━━━━━━━━`);
   const r = spawnSync(process.execPath, [`scripts/${s}`], { stdio: "inherit", env: process.env });
   results.push({ s, ok: r.status === 0 });
+}
+if (cronAntes !== null) {
+  const depois = await cronAtivos().catch((e) => `erro: ${e.message}`);
+  const n = cronAntes ? cronAntes.split(", ").length : 0;
+  results.push({
+    s: `pg_cron igual ao início (${n} job(s): nome, agenda, banco, usuário, estado e comando)`,
+    ok: depois === cronAntes,
+  });
+  if (depois !== cronAntes) console.log(`❌ pg_cron mudou: antes [${cronAntes}] depois [${depois}]`);
 }
 console.log("\n━━━━━━━━ RESUMO ━━━━━━━━");
 for (const { s, ok } of results) console.log(`${ok ? "✅" : "❌"} ${s}`);

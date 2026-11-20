@@ -36,6 +36,32 @@ for (const [text, expected] of UGC_CASES) {
   check(`ugc_text_issue ${JSON.stringify(text)} → ${expected}`, got === expected, `veio ${got}`);
 }
 
+// 20/11/2026: o rollback no fim desta suíte derruba gatilhos de 5 tabelas DENTRO da transação
+// (lock exclusivo); um job do pg_cron mexendo nessas tabelas no mesmo minuto dava "deadlock
+// detected" (CI da master de 20/11, 2 vezes). Só no banco LOCAL de teste: pausa os jobs na suíte.
+// A pausa é a 1ª camada; a 2ª (abaixo) é repetir o rollback num SAVEPOINT se der deadlock.
+// Só um banco LOCAL de verdade (host 127.0.0.1/localhost), nunca um remoto.
+const bancoLocal = !ssl && /@(127\.0\.0\.1|localhost)(:|\/)/.test(DB_URL ?? "");
+// Foto COMPLETA do pg_cron antes da pausa (todos os jobs, ativos ou não, com nome, agenda,
+// comando, banco, usuário, nó e estado): depois da restauração tem de ser idêntica.
+const FOTO_CRON =
+  "SELECT coalesce(json_agg(j ORDER BY j.jobid)::text, '[]') f FROM (SELECT jobid, jobname, schedule, command, database, username, nodename, nodeport, active FROM cron.job) j";
+let fotoCron = null;
+let pausados = [];
+if (bancoLocal) {
+  try {
+    fotoCron = (await db.query(FOTO_CRON)).rows[0].f;
+    const ativos = (await db.query("SELECT jobid FROM cron.job WHERE active ORDER BY jobid")).rows.map((r) => r.jobid);
+    for (const id of ativos) {
+      await db.query("SELECT cron.alter_job($1, active := false)", [id]);
+      pausados.push(id);
+    }
+    console.log(`pg_cron: ${pausados.length} job(s) pausado(s) durante a suíte`);
+  } catch (e) {
+    console.log(`pg_cron: pausa não aplicada (${e.message}) — segue com a repetição em SAVEPOINT`);
+  }
+}
+
 await db.query("BEGIN");
 try {
   const tag = Math.random().toString(36).slice(2, 7);
@@ -248,7 +274,22 @@ try {
   check("funções internas fechadas para anon/authenticated", open.n === 0, `${open.n} abertas`);
 
   // Rollback (dentro da transação desfeita): o texto volta a passar.
-  await db.query(readFileSync("supabase/rollback/ugc_filtro_servidor.sql", "utf8"));
+  // DDL em 5 tabelas: se um job em andamento disputar os locks (deadlock 40P01), volta ao
+  // SAVEPOINT e repete (até 3x) — a transação externa segue válida.
+  const rollbackSql = readFileSync("supabase/rollback/ugc_filtro_servidor.sql", "utf8");
+  for (let i = 1; ; i++) {
+    await db.query("SAVEPOINT ugc_rb");
+    try {
+      await db.query(rollbackSql);
+      await db.query("RELEASE SAVEPOINT ugc_rb");
+      break;
+    } catch (e) {
+      await db.query("ROLLBACK TO SAVEPOINT ugc_rb");
+      if (e.code !== "40P01" || i >= 3) throw e;
+      console.log(`rollback: deadlock na tentativa ${i}, repetindo`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
   const rb = await submit("me chama no zapzap 11987654321");
   const rbCfg = await cfg({ categories: ["texto livre"] });
   const gone = await row(
@@ -264,6 +305,24 @@ try {
   check("suíte rodou até o fim", false, e.message);
 } finally {
   await db.query("ROLLBACK").catch(() => {});
+  // Restaura EXATAMENTE os jobs pausados e confere; falha aqui reprova a suíte (não silencia).
+  if (pausados.length) {
+    try {
+      for (const id of pausados) await db.query("SELECT cron.alter_job($1, active := true)", [id]);
+      const ativos = (
+        await db.query("SELECT jobid FROM cron.job WHERE active AND jobid = ANY($1)", [pausados])
+      ).rows.length;
+      check("pg_cron restaurado (os mesmos jobs ativos de antes)", ativos === pausados.length, `${ativos}/${pausados.length}`);
+      const depois = (await db.query(FOTO_CRON)).rows[0].f;
+      check(
+        "pg_cron idêntico ao de antes (nome, agenda, comando, banco, usuário, nó e estado de TODOS os jobs)",
+        depois === fotoCron,
+        `antes ${fotoCron?.length} car., depois ${depois.length} car.`,
+      );
+    } catch (e) {
+      check("pg_cron restaurado (os mesmos jobs ativos de antes)", false, e.message);
+    }
+  }
   await db.end();
 }
 console.log(`\n${total - fails}/${total} verificações OK`);
