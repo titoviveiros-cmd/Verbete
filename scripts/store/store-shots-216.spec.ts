@@ -118,13 +118,17 @@ async function perfil(page: Page) {
   b.user = { id: USER_ID, name: "Bia", email: "" };
   // Coerente com a fixture (23 partidas, 9 vitórias, sequência 5, melhor 12) e com as
   // conquistas abaixo: 1.450 XP = nível 4 (xp_to_level: floor(sqrt(xp/100)) + 1);
-  // 31 acertos (≥ 10 → Caçador da Verdade), 27 enganados (< 100), recorde 18 (< 30).
+  // 9 acertos (< 10): antes da migration do #78 a produção NÃO concede Caçador da Verdade
+  // (truth_seeker) — a regra só entra no #78 —, então a captura não pode mostrá-la conquistada
+  // nem com o critério visivelmente cumprido. 27 enganados (< 100), recorde 18 (< 30).
+  // Só conquistas que as funções de produção concedem hoje: first_win, partidas_10
+  // (record_match_result) e first_daily, streak_3, streak_7 (Diário; sequência atual 5, recorde 12).
   Object.assign(b.tables["user_stats"][0] as Record<string, unknown>, {
     xp: 1450,
     level: 4,
     total_score: 214,
     best_match_score: 18,
-    total_truth_hits: 31,
+    total_truth_hits: 9,
     total_fooled: 27,
   });
   b.tables["profiles"] = [
@@ -139,7 +143,6 @@ async function perfil(page: Page) {
     "partidas_10",
     "streak_3",
     "streak_7",
-    "truth_seeker",
   ].map((c) => ({ user_id: USER_ID, achievement_code: c }));
   // Últimas partidas (fictícias, coerentes com as estatísticas: a vitória de 13 pts é a do pódio 07).
   b.tables["match_history"] = [
@@ -324,9 +327,10 @@ const SHOTS: Array<{
       });
       console.log("enquadre 08:", JSON.stringify(enquadre));
       await page.waitForTimeout(400);
-      const alvo = page.getByRole("button", { name: "Semana Perfeita: conquistada" });
+      // Cartão aberto numa regra que a produção já aplica (partidas jogadas), não na sequência (o #78 muda horas → dias).
+      const alvo = page.getByRole("button", { name: "Veterano: conquistada" });
       await alvo.click();
-      await expect(page.locator("[role=dialog][data-state=open]")).toContainText("Jogue 7 dias seguidos.");
+      await expect(page.locator("[role=dialog][data-state=open]")).toContainText("Jogue 10 partidas multiplayer.");
       await page.waitForTimeout(900);
       return log;
     },

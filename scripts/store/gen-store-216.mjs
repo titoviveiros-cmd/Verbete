@@ -37,12 +37,12 @@ const SHOTS = [
   ["04-home", "04-home", "O jogo do <b>blefe</b> com palavras", "Conta opcional · 4 a 12 jogadores", C.magenta],
   ["05-multiplayer", "05-multiplayer", "Jogue com a <b>galera</b>", "De 4 a 12 jogadores, com bots se faltar gente", C.roxo],
   ["06-revelacao", "06-revelacao", "A verdade <b>aparece</b>", "Veja quem acertou e quem caiu no seu blefe", C.turquesa],
-  ["07-placar", "07-placar", "Quem engana <b>mais</b> vence", "Pontos por acertar e por enganar", C.ouro],
+  ["07-placar", "07-placar", "Pontue com <b>acertos</b> e blefes", "Pontos por acertar e por enganar", C.ouro],
   ["08-conquistas", "08-conquistas", "Colecione <b>conquistas</b>", "Toque em uma para ver como desbloquear", C.magenta],
 ];
 const ALTS = [
   ["01-blefe-enviada", "alt-01-blefe-enviada", "Invente uma <b>definição</b>", "Convença a mesa de que é a verdade", C.roxo],
-  ["07-placar-rodada", "alt-07-placar-rodada", "Quem engana <b>mais</b> vence", "Pontos por acertar e por enganar", C.ouro],
+  ["07-placar-rodada", "alt-07-placar-rodada", "Pontue com <b>acertos</b> e blefes", "Pontos por acertar e por enganar", C.ouro],
   ["08-perfil-topo", "alt-08-perfil-topo", "Suba de <b>nível</b>", "XP e estatísticas no seu perfil", C.magenta],
 ];
 
@@ -81,11 +81,18 @@ async function render(html, w, h, file) {
 }
 const uri = (f) => `data:image/png;base64,${readFileSync(f).toString("base64")}`;
 
+// SOMENTE="07-placar,08-conquistas" regera só essas (e as alternativas de mesmo prefixo);
+// as demais capturas do pacote ficam intactas. Prancha e manifesto sempre refeitos.
+const SOMENTE = process.env.SOMENTE?.split(",").map((s) => s.trim()).filter(Boolean);
+// casa pelo número ("07-", "08-"), que é o mesmo nas alternativas da mesma tela
+const quer = (out) => !SOMENTE || SOMENTE.some((p) => out.slice(0, 3) === p.slice(0, 3));
 for (const [out, raw, t, s, a] of SHOTS) {
+  if (!quer(out)) continue;
   await render(shotHtml(t, s, a, uri(`${RAW}/${raw}.png`)), 1080, 1920, `${WORK}/${out}.png`);
   writeRgbPng(`${PACOTE}/screenshots/${out}.png`, readPng(`${WORK}/${out}.png`));
 }
 for (const [out, raw, t, s, a] of ALTS) {
+  if (!quer(out)) continue;
   await render(shotHtml(t, s, a, uri(`${RAW}/${raw}.png`)), 1080, 1920, `${WORK}/alt-${out}.png`);
   writeRgbPng(`${PACOTE}/alternativas/${out}.png`, readPng(`${WORK}/alt-${out}.png`));
 }
